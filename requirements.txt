@@ -1,0 +1,10 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+pydantic==2.10.3
+Pillow==11.0.0
+ImageHash==4.3.1
+pillow-heif==0.20.0
+streamlit==1.40.2
+requests==2.32.3
+pandas==2.2.3
