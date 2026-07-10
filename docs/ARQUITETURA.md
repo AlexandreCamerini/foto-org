@@ -1,0 +1,71 @@
+# Arquitetura e decisões
+
+Complementa o CLAUDE.md (invariantes, stack, módulos). Aqui: schema, fluxo
+de dados, riscos e decisões registradas.
+
+## Fluxo de dados
+
+scan (read-only) → catálogo SQLite → extração de metadados → evidências →
+sugestões (com confiança e versão da lógica) → revisão humana → plano de
+operação → dry-run → execução (cópia verificada) → audit log.
+
+UI (PySide6, main thread) ⇄ ViewModels ⇄ Repositories/Services ⇄ Workers
+(QThreadPool) — todo I/O e CPU pesada nos workers.
+
+## Schema inicial (Alembic, migração 0001)
+
+- `sources` — pasta/volume raiz, apelido, ativo, disponível, ignorar_padrões.
+- `scan_sessions` — fonte, início/fim, status (rodando/pausado/concluído),
+  checkpoint, contadores (arquivos, erros, bytes), versão do scanner.
+- `media_files` — id, source_id, caminho, volume, pasta, nome, extensão,
+  tamanho, inode, ctime, mtime, data_capturada, tz_estimado, make, model,
+  lente, orientação, largura, altura, gps_lat, gps_lon, hash_rapido,
+  hash_sha256 (nullable), status_revisão, erro_leitura, indexado_em.
+- `metadata_entries` — media_id, namespace (exif/iptc/xmp/fs), chave, valor
+  (dados brutos relevantes; nada de listas em texto com vírgula).
+- `locations` — geocoding resolvido (país, região, cidade, local, fonte do
+  dado, cache key) referenciado por `media_files.location_id`.
+- `trips` / `events` — agrupamentos com período, local dominante, método.
+- `people`, `face_embeddings` (blob criptografado), `face_occurrences`
+  (media_id, person_id?, bbox, estado: detectado/possível/confirmado).
+- `tags`, `media_tags`.
+- `evidence` — media_id, campo alvo (data/país/cidade/evento/categoria/…),
+  origem (exif/gps/pasta/nome/vizinhança/visão/usuário), valor, confiança
+  (enum + score), justificativa, versão_lógica, criado_em.
+- `suggestions` — media_id, destino_sugerido (por template), confiança
+  final, status (pendente/aprovada/rejeitada/editada), evidências vinculadas.
+- `duplicate_groups` / `duplicate_members` — nível (exato/conteúdo/visual),
+  papel (principal/versão/ignorado).
+- `operation_plans` / `operation_items` — operação, origem, destino,
+  conflito, status, hash pré/pós.
+- `audit_log` — quem/quando/o quê/resultado, id de operação.
+- `application_settings` — chave/valor tipado.
+
+Índices: media_files(hash_rapido), (source_id, caminho) unique,
+(data_capturada), (mtime, tamanho); evidence(media_id); suggestions(status).
+
+## Decisões registradas
+
+| # | Decisão | Racional |
+|---|---------|----------|
+| 1 | Reiniciar em PySide6, abandonando FastAPI+Streamlit | Streamlit não sustenta grade virtualizada de dezenas de milhares de thumbs nem workers pausáveis; app é local, cliente/servidor era complexidade sem ganho. |
+| 2 | Portar (não reescrever) scanner RAW/HEIC, phash e gap de viagem do legado | Lógica já validada em uso real (commits ffa956d, df98cdc, bc459af). |
+| 3 | exiftool em batch com fallback puro-Python | exiftool é o padrão-ouro (IPTC/XMP/RAW), mas não pode ser dependência dura num app desktop. |
+| 4 | xxhash como hash rápido, SHA-256 completo sob demanda | MD5 do legado nem é rápido nem é o hash criptográfico exigido para verificação de cópia. |
+| 5 | Geocoding offline por padrão | Privacidade primeiro; serviço externo vira provider opt-in com cache. |
+| 6 | Confiança como enum+score por evidência, agregada por regra documentada | Prompt proíbe soma arbitrária (o score aditivo do legado morre aqui). |
+| 7 | Criptografia de embeddings via chave no Keychain (macOS) | Melhor prática viável num app local; limitação (quem tem a sessão do usuário acessa) documentada em PRIVACIDADE.md. |
+
+## Riscos principais
+
+1. **Integridade das fotos** — mitigado por read-only estrutural: módulo
+   `operations/` é o único com permissão de escrita fora do catálogo, e só
+   copia com verificação de hash.
+2. **Escala (100k+ fotos)** — indexação incremental, transações em lote,
+   WAL, thumbs em cache de disco, virtualização na UI, benchmark desde M1.
+3. **Volumes externos desconectados** — fonte marcada indisponível; scan e
+   operações pausam com checkpoint, nunca falham parcialmente sem registro.
+4. **Metadados ruins/ausentes** — cada campo tem origem e confiança; nunca
+   inventar localização; corrompidos registrados e pulados.
+5. **Scope creep (visão, rostos, serviços externos)** — congelados atrás de
+   Protocols com stub até o núcleo (M0–M5) estar estável.
