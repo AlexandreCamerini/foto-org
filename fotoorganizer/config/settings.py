@@ -44,6 +44,8 @@ class ScannerSettings:
 class PrivacySettings:
     # Nenhum dado sai da máquina enquanto isto for False (invariante 4).
     servicos_externos: bool = False
+    # Reconhecimento facial: opcional e desativado por padrão (invariante 6).
+    reconhecimento_facial: bool = False
 
 
 @dataclass(frozen=True)
