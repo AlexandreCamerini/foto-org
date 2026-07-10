@@ -32,17 +32,21 @@ uma foto original.
 Requisitos: macOS, Python 3.12+.
 
 ```bash
+# Setup (uma vez)
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev]"
 
-# Interface gráfica
-python -m fotoorganizer
+# Interface gráfica — sem precisar ativar o venv
+.venv/bin/python -m fotoorganizer
 
 # CLI (varredura headless e benchmark)
-python -m fotoorganizer scan ~/Pictures/MinhasFotos
-python -m fotoorganizer bench -n 1000
+.venv/bin/python -m fotoorganizer scan ~/Pictures/MinhasFotos
+.venv/bin/python -m fotoorganizer bench -n 1000
 ```
+
+> No macOS o comando `python` (sem o 3) não existe fora do venv. Ou use
+> sempre o caminho `.venv/bin/python`, ou ative o ambiente antes
+> (`source .venv/bin/activate`) e aí `python -m fotoorganizer` funciona.
 
 Dados do app: `~/Library/Application Support/FotoOrganizer/` (catálogo
 SQLite, config.toml, logs) e `~/Library/Caches/FotoOrganizer/`
