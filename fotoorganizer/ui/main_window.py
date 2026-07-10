@@ -39,6 +39,7 @@ from fotoorganizer.scanner import CatalogScanner
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.ui.duplicates_view import DuplicatesView
 from fotoorganizer.ui.filter_bar import FilterBar
+from fotoorganizer.ui.operations_view import OperationsView
 from fotoorganizer.ui.inspector import Inspector
 from fotoorganizer.ui.media_model import MediaIdRole, MediaListModel
 from fotoorganizer.ui.review_view import ReviewView
@@ -79,10 +80,14 @@ class MainWindow(QMainWindow):
         )
         self.duplicates.mensagem.connect(self.statusBar().showMessage)
 
+        self.operations = OperationsView(session_factory)
+        self.operations.mensagem.connect(self.statusBar().showMessage)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(biblioteca, "Biblioteca")
         self.tabs.addTab(self.review, "Revisão")
         self.tabs.addTab(self.duplicates, "Duplicatas")
+        self.tabs.addTab(self.operations, "Operações")
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.sidebar)
