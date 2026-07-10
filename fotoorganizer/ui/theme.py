@@ -72,5 +72,84 @@ QScrollBar::handle:vertical {{
     border-radius: 4px;
     min-height: 24px;
 }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 10px;
+    margin: 2px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {BORDER};
+    border-radius: 4px;
+    min-width: 24px;
+}}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
+
+QListView {{
+    background-color: {BG_WINDOW};
+    border: none;
+    outline: none;
+}}
+QListView::item {{
+    color: {TEXT_SECONDARY};
+    border: 2px solid transparent;
+    border-radius: 6px;
+    padding: 2px;
+}}
+QListView::item:selected {{
+    border-color: {ACCENT};
+    background-color: transparent;
+    color: {TEXT_PRIMARY};
+}}
+
+QWidget#painelLateral QListWidget {{
+    background-color: {BG_PANEL};
+    border: none;
+    outline: none;
+}}
+QWidget#painelLateral QListWidget::item {{
+    padding: 6px 12px;
+    border: none;
+}}
+QWidget#painelLateral QListWidget::item:selected {{
+    background-color: {BG_CARD};
+    color: {TEXT_PRIMARY};
+    border-left: 2px solid {ACCENT};
+}}
+
+QLineEdit {{
+    background-color: {BG_CARD};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    padding: 5px 8px;
+}}
+QLineEdit:focus {{ border-color: {ACCENT}; }}
+
+QComboBox {{
+    background-color: {BG_CARD};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-width: 90px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {BG_CARD};
+    border: 1px solid {BORDER};
+    selection-background-color: {ACCENT};
+}}
+
+QSlider::groove:horizontal {{
+    height: 3px;
+    background: {BORDER};
+    border-radius: 1px;
+}}
+QSlider::handle:horizontal {{
+    width: 12px;
+    height: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+    background: {TEXT_SECONDARY};
+}}
+QSlider::handle:horizontal:hover {{ background: {ACCENT}; }}
+
+QScrollArea {{ border: none; }}
 """

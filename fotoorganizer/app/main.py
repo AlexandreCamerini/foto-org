@@ -21,9 +21,15 @@ def main() -> int:
     setup_logging(settings.log_dir)
     write_config_template(default_config_file())
 
-    from fotoorganizer.database import upgrade_to_head
+    from fotoorganizer.database import (
+        create_db_engine,
+        create_session_factory,
+        upgrade_to_head,
+    )
 
     upgrade_to_head(settings.db_path)
+    engine = create_db_engine(settings.db_path)
+    session_factory = create_session_factory(engine)
 
     from PySide6.QtWidgets import QApplication
 
@@ -34,7 +40,7 @@ def main() -> int:
     app.setApplicationName("Foto Organizer")
     app.setStyleSheet(QSS)
 
-    window = MainWindow()
+    window = MainWindow(settings, session_factory)
     window.show()
     log.info("app iniciado; catálogo em %s", settings.db_path)
     return app.exec()

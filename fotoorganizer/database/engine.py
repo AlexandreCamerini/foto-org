@@ -13,6 +13,7 @@ def _set_sqlite_pragmas(dbapi_connection, _record) -> None:
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 
@@ -22,7 +23,11 @@ def db_url(db_path: Path) -> str:
 
 def create_db_engine(db_path: Path) -> Engine:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(db_url(db_path))
+    # check_same_thread=False: o scan roda fora da thread da UI; cada thread
+    # usa a própria Session, e o WAL + busy_timeout cuidam da concorrência.
+    engine = create_engine(
+        db_url(db_path), connect_args={"check_same_thread": False}
+    )
     event.listen(engine, "connect", _set_sqlite_pragmas)
     return engine
 
