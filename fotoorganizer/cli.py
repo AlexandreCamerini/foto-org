@@ -61,10 +61,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_bench(args: argparse.Namespace) -> int:
-    """Benchmark com fixtures sintéticas: indexação a frio e re-scan."""
-    from tests.fixtures import make_jpeg
+def _jpeg_sintetico(path: Path, seed: int) -> None:
+    from PIL import Image
 
+    cor = ((seed * 37) % 256, (seed * 73) % 256, (seed * 151) % 256)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (64, 48), cor).save(path)
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    """Benchmark com arquivos sintéticos: indexação a frio e re-scan."""
     with tempfile.TemporaryDirectory(prefix="fotobench-") as tmp:
         tmp_path = Path(tmp)
         fotos = tmp_path / "fotos"
@@ -73,7 +79,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         for i in range(args.quantidade):
             sub = fotos / f"pasta_{i % 10:02d}"
             sub.mkdir(exist_ok=True)
-            make_jpeg(sub / f"img_{i:05d}.jpg", seed=i)
+            _jpeg_sintetico(sub / f"img_{i:05d}.jpg", seed=i)
 
         scanner = _build_scanner(tmp_path / "bench.db")
 

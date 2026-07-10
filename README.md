@@ -29,24 +29,24 @@ uma foto original.
 
 ## Instalação e execução
 
-Requisitos: macOS, Python 3.12+.
+Requisitos: macOS, Python 3.12+ (`brew install python@3.12` se faltar).
 
 ```bash
-# Setup (uma vez)
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-
-# Interface gráfica — sem precisar ativar o venv
-.venv/bin/python -m fotoorganizer
-
-# CLI (varredura headless e benchmark)
-.venv/bin/python -m fotoorganizer scan ~/Pictures/MinhasFotos
-.venv/bin/python -m fotoorganizer bench -n 1000
+scripts/instalar.sh          # uma vez (use --llm p/ incluir o advisor Claude)
+scripts/executar.sh          # abre a interface gráfica
+scripts/atualizar.sh         # traz código novo + re-sincroniza dependências
 ```
 
-> No macOS o comando `python` (sem o 3) não existe fora do venv. Ou use
-> sempre o caminho `.venv/bin/python`, ou ative o ambiente antes
-> (`source .venv/bin/activate`) e aí `python -m fotoorganizer` funciona.
+A CLI usa o mesmo lançador:
+
+```bash
+scripts/executar.sh scan ~/Pictures/MinhasFotos   # varredura headless
+scripts/executar.sh bench -n 1000                 # benchmark de indexação
+```
+
+> Preferindo comandos diretos: `.venv/bin/python -m fotoorganizer` (no
+> macOS, `python` sem o 3 só existe dentro do venv — os scripts cuidam
+> disso por você).
 
 Dados do app: `~/Library/Application Support/FotoOrganizer/` (catálogo
 SQLite, config.toml, logs) e `~/Library/Caches/FotoOrganizer/`

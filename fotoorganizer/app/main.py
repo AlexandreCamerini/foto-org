@@ -13,6 +13,13 @@ log = logging.getLogger(__name__)
 
 
 def main() -> int:
+    # Com argumentos ("scan", "bench"), delega à CLI — vale tanto para
+    # `python -m fotoorganizer` quanto para o comando `fotoorganizer`.
+    if len(sys.argv) > 1:
+        from fotoorganizer.cli import main as cli_main
+
+        return cli_main()
+
     settings = load_settings()
     settings.ensure_dirs()
 
