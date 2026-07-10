@@ -22,6 +22,10 @@ dev = [
     "pytest>=8.0",
     "pytest-qt>=4.4",
 ]
+# Advisor de classificação via Claude (opt-in; docs/AGRUPAMENTO.md §3)
+llm = [
+    "anthropic>=0.116",
+]
 
 [project.scripts]
 fotoorganizer = "fotoorganizer.app.main:main"

@@ -15,6 +15,7 @@ foi descartado por isso).
 | Geocodificação reversa de GPS (serviço ext.) | Média  | 0.75 |
 | País/cidade extraído do nome da pasta        | Média  | 0.60 |
 | Local inferido de fotos vizinhas no tempo    | Média  | 0.55 |
+| Categoria/evento sugerido por LLM (metadados, opt-in) | Média | 0.55 |
 | Data do filesystem (sem EXIF)                | Baixa  | 0.40 |
 | Cena/local sugerido só por análise visual    | Baixa  | 0.30 |
 | Pessoa reconhecida automaticamente           | — sempre exige confirmação humana, nível derivado da similaridade |

@@ -2,6 +2,13 @@
 
 ## Compromissos
 
+- **Advisor LLM (opcional, desligado por padrão).** Com
+  `[privacidade] servicos_externos = true`, sessões que as regras locais
+  não classificam podem ser consultadas na API da Anthropic — enviando
+  APENAS metadados (nomes de pastas/arquivos, datas, contagem, nomes de
+  lugares já resolvidos), nunca a imagem. A credencial vem do ambiente
+  (Keychain/`ANTHROPIC_API_KEY`), jamais do código. Detalhes em
+  docs/AGRUPAMENTO.md §3.
 - **Tudo local por padrão.** Catálogo, miniaturas, logs e config vivem em
   `~/Library/Application Support/FotoOrganizer` e
   `~/Library/Caches/FotoOrganizer`. Nenhuma foto ou metadado sai da máquina

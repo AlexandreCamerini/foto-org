@@ -118,8 +118,30 @@ class MainWindow(QMainWindow):
     def _criar_engine(self) -> SuggestionEngine:
         """Factory usada pelo worker de sugestões (geocoder é lazy/pesado)."""
         return SuggestionEngine(
-            self._session_factory, LocationResolver(OfflineGeocoder())
+            self._session_factory,
+            LocationResolver(OfflineGeocoder()),
+            advisor=self._criar_advisor(),
         )
+
+    def _criar_advisor(self):
+        """Advisor LLM só com opt-in explícito (docs/AGRUPAMENTO.md §3);
+        sem opt-in ou sem SDK/credencial, nenhum dado sai da máquina."""
+        if not self._settings.privacidade.servicos_externos:
+            return None
+        try:
+            from fotoorganizer.classification.advisor import ClaudeAdvisor
+
+            advisor = ClaudeAdvisor()
+            self.statusBar().showMessage(
+                "Advisor LLM ATIVO: metadados de sessões sem classificação "
+                "serão enviados à API da Anthropic"
+            )
+            return advisor
+        except Exception as exc:  # SDK ausente/sem credencial: segue local
+            self.statusBar().showMessage(
+                f"Advisor LLM indisponível ({exc}) — seguindo 100% local"
+            )
+            return None
 
     def _criar_detector(self) -> DuplicateDetector:
         return DuplicateDetector(

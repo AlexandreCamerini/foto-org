@@ -43,15 +43,15 @@ def ambiente(migrated_engine):
         fonte = Source(caminho="/fotos")
         session.add(fonte)
         session.flush()
-        # Viagem à França: 3 com GPS, 1 sem GPS na mesma janela temporal.
-        for i in range(3):
+        # Viagem à França: 3 com GPS ao longo de 3 dias, 1 sem GPS no meio.
+        for i, dias in enumerate([0, 1, 3]):
             session.add(_media(
                 fonte.id, f"franca_{i}.jpg", "/fotos/desorganizadas",
-                data=base + timedelta(hours=i), gps=(43.95, 4.8083),
+                data=base + timedelta(days=dias), gps=(43.95, 4.8083),
             ))
         session.add(_media(
             fonte.id, "sem_gps.jpg", "/fotos/desorganizadas",
-            data=base + timedelta(hours=5),
+            data=base + timedelta(days=2),
         ))
         # Pasta nomeada por país, sem GPS, meses depois.
         session.add(_media(
@@ -97,8 +97,10 @@ def test_gps_gera_destino_com_alta_e_justificativas(ambiente):
     assert por_campo["data"].nivel == ConfidenceLevel.ALTA
     assert por_campo["pais"].origem == "geocoding_offline"
     assert "geocodificação offline" in por_campo["pais"].justificativa
-    assert por_campo["viagem"].origem == "agrupamento"
-    assert "4 fotos próximas" in por_campo["viagem"].justificativa
+    # Sessão qualificou como viagem pela estadia geocodificada (regra 5).
+    assert por_campo["viagem"].origem == "geocoding_offline"
+    assert "4 fotos entre" in por_campo["viagem"].justificativa
+    assert "ao longo de" in por_campo["viagem"].justificativa
 
 
 def test_vizinhanca_infere_pais_de_fotos_proximas(ambiente):
@@ -110,7 +112,7 @@ def test_vizinhanca_infere_pais_de_fotos_proximas(ambiente):
     assert pais.origem == "vizinhanca"
     assert pais.valor == "França"
     assert pais.nivel == ConfidenceLevel.MEDIA
-    assert "3 fotos da mesma viagem" in pais.justificativa
+    assert "mesma sessão têm GPS em França" in pais.justificativa
 
 
 def test_pasta_da_pais_com_media_confianca(ambiente):
@@ -180,3 +182,134 @@ def test_regeneracao_de_pendentes_nao_duplica(ambiente):
 
         total = session.scalar(select(func.count(Suggestion.id)))
         assert total == 6
+
+
+def test_aniversario_na_pasta_nao_vira_viagem(migrated_engine):
+    """O caso real: pasta 'Serena 15 Anos', fotos de poucas horas — deve
+    virar Eventos/2026/Serena 15 Anos, nunca 'Viagem de 09-05'."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2026, 5, 9, 17, 25)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(6):
+            session.add(_media(
+                fonte.id, f"IMG_{i:04d}.jpg", "/fotos/2026/Serena 15 Anos",
+                data=base + timedelta(minutes=30 * i),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+
+    sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
+    assert sugestao.destino_sugerido == "Eventos/2026/Serena 15 Anos"
+    campos = {e.campo: e for e in evidencias}
+    assert "viagem" not in campos
+    assert campos["evento"].valor == "Serena 15 Anos"
+    assert campos["evento"].origem == "pasta"
+    assert "indica um evento" in campos["evento"].justificativa
+    assert campos["categoria"].valor == "Eventos"
+
+
+def test_album_curto_vira_evento_nomeado(migrated_engine):
+    """Pasta 'Quizomba' (álbum sem keyword), sessão de horas → evento."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2026, 2, 17, 9, 27)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(4):
+            session.add(_media(
+                fonte.id, f"IMG_{i:04d}.jpg", "/fotos/2026/Quizomba",
+                data=base + timedelta(minutes=45 * i),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
+    assert sugestao.destino_sugerido == "Eventos/2026/Quizomba"
+    assert all(e.campo != "viagem" for e in evidencias)
+
+
+def test_pastas_tecnicas_sem_sinal_ficam_neutras(migrated_engine):
+    """Sessão de horas em pasta técnica: sem viagem, sem evento inventado."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 5, 24, 14, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"IMG_{i:04d}.jpg", "/fotos/2025_05_24/[Originals]",
+                data=base + timedelta(minutes=10 * i),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
+    campos = {e.campo for e in evidencias}
+    assert "viagem" not in campos and "evento" not in campos
+    assert sugestao.destino_sugerido == "2025"  # só o ano — não inventa
+
+
+def test_advisor_llm_apoia_sessao_neutra(migrated_engine):
+    """Sessão neutra + advisor: vira evento com origem 'llm' (média-baixa)."""
+    from fotoorganizer.classification.advisor import AdvisorResult, ClusterInfo
+
+    class FakeAdvisor:
+        def __init__(self):
+            self.clusters: list[ClusterInfo] = []
+
+        @property
+        def local(self):
+            return False
+
+        def classificar(self, cluster):
+            self.clusters.append(cluster)
+            return AdvisorResult(
+                categoria="Eventos", evento="Luau da firma",
+                justificativa="nomes de arquivo citam 'luau'",
+            )
+
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 5, 24, 14, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"luau_{i}.jpg", "/fotos/2025_05_24",
+                data=base + timedelta(minutes=10 * i),
+            ))
+        session.commit()
+
+    advisor = FakeAdvisor()
+    SuggestionEngine(factory, advisor=advisor).gerar()
+
+    # Só metadados foram oferecidos ao advisor.
+    (cluster,) = advisor.clusters
+    assert cluster.n_fotos == 3
+    assert cluster.pastas == ("/fotos/2025_05_24",)
+
+    sugestao, evidencias = _sugestao_de(factory, "luau_0.jpg")
+    evento = next(e for e in evidencias if e.campo == "evento")
+    assert evento.origem == "llm"
+    assert evento.nivel == ConfidenceLevel.MEDIA
+    assert "LLM (apenas metadados)" in evento.justificativa
+    assert sugestao.destino_sugerido == "Eventos/2025/Luau da firma"
+
+
+def test_advisor_nulo_nao_opina():
+    from fotoorganizer.classification.advisor import ClusterInfo, NullAdvisor
+
+    cluster = ClusterInfo(
+        pastas=("/x",), exemplos_arquivos=("a.jpg",),
+        inicio=datetime(2025, 1, 1), fim=datetime(2025, 1, 1), n_fotos=1,
+    )
+    advisor = NullAdvisor()
+    assert advisor.local is True
+    assert advisor.classificar(cluster) is None

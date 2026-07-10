@@ -15,7 +15,7 @@ import re
 import string
 import unicodedata
 
-TEMPLATE_PADRAO = "{categoria}/{ano} - {viagem}/{pais}/{regiao}/{cidade}"
+TEMPLATE_PADRAO = "{categoria}/{ano} - {viagem}/{evento}/{pais}/{regiao}/{cidade}"
 
 DESTINO_NAO_CLASSIFICADO = "Não classificado"
 

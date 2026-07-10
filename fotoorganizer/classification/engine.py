@@ -1,9 +1,11 @@
-"""Motor de evidências e sugestões.
+"""Motor de evidências e sugestões (modelo v4 — docs/AGRUPAMENTO.md).
 
-Para cada foto, colhe evidências estruturadas (origem, valor, confiança,
-justificativa), monta o destino pelo template e agrega a confiança pelo elo
-mais fraco. Decisões do usuário são preservadas: fotos com sugestão
-aprovada/rejeitada/editada não são regeneradas.
+Fotos são agrupadas em sessões temporais; cada sessão passa por uma
+cascata determinística (pasta de categoria → keyword de evento → país na
+pasta → deslocamento GPS → estadia geocodificada → nome de álbum) e, sem
+veredito, pelo advisor LLM opt-in. Cada inferência vira evidência com
+origem, confiança e justificativa; a confiança final é o elo mais fraco.
+Decisões do usuário são preservadas na regeneração.
 """
 
 from __future__ import annotations
@@ -11,20 +13,26 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from fotoorganizer.classification.advisor import ClassificationAdvisor, ClusterInfo
 from fotoorganizer.classification.confidence import (
     SCORES_REFERENCIA,
     elo_mais_fraco,
     nivel_para_score,
 )
+from fotoorganizer.classification.eventos import extrair_evento
 from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_destino
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
+from fotoorganizer.geolocation.folder_names import _normalizar
+from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import agrupar_viagens
+from fotoorganizer.grouping.temporal import ViagemDraft
 from fotoorganizer.models import (
+    Event,
     Evidence,
     MediaFile,
     Suggestion,
@@ -35,11 +43,15 @@ from fotoorganizer.models import (
 
 log = logging.getLogger(__name__)
 
-VERSAO_LOGICA = "3.0"
+VERSAO_LOGICA = "4.0"
 
-_CATEGORIAS_PASTA = {"viagens": "Viagens", "familia": "Família",
-                     "família": "Família", "eventos": "Eventos"}
-_MIN_FOTOS_VIAGEM = 2
+_CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",
+                     "familia": "Família", "família": "Família",
+                     "eventos": "Eventos", "evento": "Eventos"}
+_MIN_FOTOS_SESSAO = 2
+_DIST_VIAGEM_KM = 100.0
+_DURACAO_MIN_VIAGEM = timedelta(days=3)
+_DURACAO_MAX_EVENTO = timedelta(days=2)
 
 
 @dataclass(slots=True)
@@ -54,33 +66,59 @@ class _Draft:
         return SCORES_REFERENCIA[self.origem]
 
 
+@dataclass(slots=True)
+class _Sessao:
+    draft: ViagemDraft
+    tipo: str = "neutra"            # viagem | evento | neutra
+    rotulo: str | None = None       # nome da viagem ou do evento
+    origem: str = "agrupamento"
+    justificativa: str = ""
+    categoria: str | None = None    # só quando vinda do advisor
+    pais_dominante: str | None = None
+    lugares: tuple[str, ...] = ()
+    trip_id: int | None = None
+    event_id: int | None = None
+
+    @property
+    def duracao(self) -> timedelta:
+        return self.draft.fim - self.draft.inicio
+
+    def periodo_curto(self) -> str:
+        inicio = self.draft.inicio.strftime("%d-%m")
+        fim = self.draft.fim.strftime("%d-%m")
+        return f"Viagem de {inicio}" if inicio == fim else f"Viagem de {inicio} a {fim}"
+
+
 class SuggestionEngine:
     def __init__(
         self,
         session_factory: sessionmaker[Session],
         resolver: LocationResolver | None = None,
         template: str = TEMPLATE_PADRAO,
+        advisor: ClassificationAdvisor | None = None,
     ) -> None:
         self._factory = session_factory
         self._resolver = resolver
         self._template = template
+        self._advisor = advisor
 
-    # -- API --------------------------------------------------------------
+    # -- API ----------------------------------------------------------------
     def gerar(self) -> dict:
         with self._factory() as session:
             midias = list(session.scalars(select(MediaFile)))
             decididas = self._midias_com_decisao(session)
 
-            viagens = self._agrupar_e_persistir_viagens(session, midias)
-            pais_por_trip = self._pais_dominante_por_viagem(session, midias)
-            self._nomear_viagens(session, viagens, pais_por_trip)
+            sessoes, sessao_da_media = self._montar_sessoes(session, midias)
+            self._persistir_agrupamentos(session, midias, sessoes, sessao_da_media)
 
             geradas = 0
             for media in midias:
                 if media.id in decididas:
                     continue
-                drafts = self._evidencias_para(session, media, pais_por_trip)
-                self._persistir(session, media, drafts)
+                drafts = self._evidencias_para(
+                    session, media, sessao_da_media.get(media.id)
+                )
+                self._persistir_sugestao(session, media, drafts)
                 geradas += 1
                 if geradas % 500 == 0:
                     session.commit()
@@ -88,81 +126,201 @@ class SuggestionEngine:
             session.commit()
             return {
                 "sugestoes": geradas,
-                "viagens": len(viagens),
+                "viagens": sum(1 for s in sessoes if s.tipo == "viagem"),
+                "eventos": sum(1 for s in sessoes if s.tipo == "evento"),
                 "preservadas": len(decididas),
             }
 
-    # -- viagens ------------------------------------------------------------
-    def _agrupar_e_persistir_viagens(self, session: Session, midias) -> list[Trip]:
+    # -- sessões e cascata ----------------------------------------------------
+    def _montar_sessoes(
+        self, session: Session, midias
+    ) -> tuple[list[_Sessao], dict[int, _Sessao]]:
+        por_id = {m.id: m for m in midias}
         itens = [
             (m.id, m.data_capturada or m.mtime)
             for m in midias
             if (m.data_capturada or m.mtime) is not None
         ]
-        drafts = [d for d in agrupar_viagens(itens) if d.n_fotos >= _MIN_FOTOS_VIAGEM]
+        drafts = [
+            d for d in agrupar_viagens(itens) if d.n_fotos >= _MIN_FOTOS_SESSAO
+        ]
+        casa = detectar_casa([
+            (m.gps_lat, m.gps_lon) for m in midias if m.gps_lat is not None
+        ])
 
-        # Viagens são deriváveis (sem edição do usuário no MVP): regenera.
-        for media in midias:
-            media.trip_id = None
-        session.execute(delete(Trip))
-        session.flush()
-
-        por_media: dict[int, Trip] = {}
-        trips: list[Trip] = []
+        sessoes: list[_Sessao] = []
+        sessao_da_media: dict[int, _Sessao] = {}
         for draft in drafts:
-            trip = Trip(nome="", inicio=draft.inicio, fim=draft.fim,
-                        metodo=f"lacuna_temporal>{3}d")
-            session.add(trip)
-            session.flush()
-            trips.append(trip)
+            membros = [por_id[i] for i in draft.media_ids]
+            sessao = self._classificar(session, _Sessao(draft=draft), membros, casa)
+            if sessao.tipo == "neutra" and self._advisor is not None:
+                self._consultar_advisor(sessao, membros)
+            sessoes.append(sessao)
             for media_id in draft.media_ids:
-                por_media[media_id] = trip
-        for media in midias:
-            trip = por_media.get(media.id)
-            if trip is not None:
-                media.trip_id = trip.id
-        session.flush()
-        return trips
+                sessao_da_media[media_id] = sessao
+        return sessoes, sessao_da_media
 
-    def _pais_dominante_por_viagem(self, session: Session, midias) -> dict[int, tuple[str, int]]:
-        """trip_id → (país dominante, nº de fotos com GPS que o confirmam)."""
+    def _classificar(self, session: Session, sessao: _Sessao, membros,
+                     casa) -> _Sessao:
+        pastas = sorted({m.pasta for m in membros})
+        sessao.pais_dominante, sessao.lugares = self._geo_da_sessao(
+            session, membros
+        )
+
+        # 1. Pasta de categoria "Viagens" no caminho.
+        for pasta in pastas:
+            for segmento in pasta.split("/"):
+                if _CATEGORIAS_PASTA.get(_normalizar(segmento)) == "Viagens":
+                    return self._como_viagem(
+                        sessao, "pasta", f"pasta '{segmento}' no caminho"
+                    )
+
+        # 2. Palavra-chave de evento na pasta (Serena 15 Anos, Casamento…).
+        evento, de_keyword = extrair_evento(pastas)
+        if evento and de_keyword:
+            return self._como_evento(
+                sessao, evento, "pasta",
+                f"pasta '{evento}' indica um evento",
+            )
+
+        # 3. País reconhecido no nome das pastas.
+        for pasta in pastas:
+            hierarquia = extrair_hierarquia_da_pasta(pasta)
+            if hierarquia.pais:
+                return self._como_viagem(
+                    sessao, "pasta",
+                    f"país reconhecido na pasta ('{hierarquia.segmento_pais}')",
+                    pais=hierarquia.pais,
+                )
+
+        # 4. Deslocamento: longe de casa.
+        if casa is not None:
+            dists = sorted(
+                distancia_km(m.gps_lat, m.gps_lon, *casa)
+                for m in membros if m.gps_lat is not None
+            )
+            if dists and dists[len(dists) // 2] > _DIST_VIAGEM_KM:
+                return self._como_viagem(
+                    sessao, "gps",
+                    f"fotos a ~{dists[len(dists) // 2]:.0f} km de casa",
+                )
+
+        # 5. Estadia geocodificada: país conhecido e vários dias.
+        if (sessao.pais_dominante
+                and sessao.duracao >= _DURACAO_MIN_VIAGEM):
+            return self._como_viagem(
+                sessao, "geocoding_offline",
+                f"fotos com GPS em {sessao.pais_dominante} ao longo de "
+                f"{sessao.duracao.days + 1} dias",
+            )
+
+        # 6. Nome de álbum + sessão curta = evento nomeado (Quizomba).
+        if evento and sessao.duracao <= _DURACAO_MAX_EVENTO:
+            return self._como_evento(
+                sessao, evento, "pasta",
+                f"pasta '{evento}' nomeia uma sessão de "
+                f"{max(sessao.duracao.days, 1)} dia(s)",
+            )
+
+        # 7. Sem veredito — um cluster de horas NUNCA vira viagem sozinho.
+        return sessao
+
+    def _como_viagem(self, sessao: _Sessao, origem: str, justificativa: str,
+                     pais: str | None = None) -> _Sessao:
+        sessao.tipo = "viagem"
+        sessao.origem = origem
+        sessao.justificativa = justificativa
+        sessao.rotulo = pais or sessao.pais_dominante or sessao.periodo_curto()
+        return sessao
+
+    def _como_evento(self, sessao: _Sessao, nome: str, origem: str,
+                     justificativa: str) -> _Sessao:
+        sessao.tipo = "evento"
+        sessao.origem = origem
+        sessao.justificativa = justificativa
+        sessao.rotulo = nome
+        return sessao
+
+    def _geo_da_sessao(self, session: Session,
+                       membros) -> tuple[str | None, tuple[str, ...]]:
         if self._resolver is None:
-            return {}
-        paises: dict[int, Counter] = {}
-        for media in midias:
-            if media.trip_id is None or media.gps_lat is None:
+            return None, ()
+        paises: Counter = Counter()
+        lugares: list[str] = []
+        for media in membros:
+            if media.gps_lat is None:
                 continue
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
-            if location is not None and location.pais:
-                paises.setdefault(media.trip_id, Counter())[location.pais] += 1
-        return {
-            trip_id: contador.most_common(1)[0]
-            for trip_id, contador in paises.items()
-        }
+            if location is None:
+                continue
+            if location.pais:
+                paises[location.pais] += 1
+            lugar = ", ".join(filter(None, [location.cidade, location.pais]))
+            if lugar and lugar not in lugares:
+                lugares.append(lugar)
+        dominante = paises.most_common(1)[0][0] if paises else None
+        return dominante, tuple(lugares[:5])
 
-    def _nomear_viagens(self, session: Session, trips: list[Trip],
-                        pais_por_trip: dict[int, tuple[str, int]]) -> None:
-        # Nome curto, sem ano e sem "/": o template compõe "{ano} - {viagem}"
-        # (ex.: "2024 - França"), então o rótulo não pode repetir o ano.
-        for trip in trips:
-            pais = pais_por_trip.get(trip.id)
-            if pais is not None:
-                trip.nome = pais[0]
-            else:
-                inicio = trip.inicio.strftime("%d-%m")
-                fim = trip.fim.strftime("%d-%m")
-                trip.nome = (
-                    f"Viagem de {inicio}" if inicio == fim
-                    else f"Viagem de {inicio} a {fim}"
-                )
+    def _consultar_advisor(self, sessao: _Sessao, membros) -> None:
+        cluster = ClusterInfo(
+            pastas=tuple(sorted({m.pasta for m in membros})),
+            exemplos_arquivos=tuple(m.nome for m in membros[:8]),
+            inicio=sessao.draft.inicio,
+            fim=sessao.draft.fim,
+            n_fotos=sessao.draft.n_fotos,
+            lugares=sessao.lugares,
+        )
+        resultado = self._advisor.classificar(cluster)
+        if resultado is None:
+            return
+        sessao.categoria = resultado.categoria
+        if resultado.evento:
+            sessao.tipo = "evento"
+            sessao.rotulo = resultado.evento
+            sessao.origem = "llm"
+            sessao.justificativa = (
+                f"LLM (apenas metadados): {resultado.justificativa}"
+            )
+
+    # -- persistência de viagens/eventos -----------------------------------
+    def _persistir_agrupamentos(self, session: Session, midias,
+                                sessoes: list[_Sessao],
+                                sessao_da_media: dict[int, _Sessao]) -> None:
+        # Deriváveis (sem edição do usuário no MVP): regenera tudo.
+        for media in midias:
+            media.trip_id = None
+            media.event_id = None
+        session.execute(delete(Trip))
+        session.execute(delete(Event))
+        session.flush()
+
+        for sessao in sessoes:
+            if sessao.tipo == "viagem":
+                trip = Trip(nome=sessao.rotulo, inicio=sessao.draft.inicio,
+                            fim=sessao.draft.fim, metodo=sessao.origem)
+                session.add(trip)
+                session.flush()
+                sessao.trip_id = trip.id
+            elif sessao.tipo == "evento":
+                evento = Event(nome=sessao.rotulo, tipo="evento",
+                               inicio=sessao.draft.inicio,
+                               fim=sessao.draft.fim, metodo=sessao.origem)
+                session.add(evento)
+                session.flush()
+                sessao.event_id = evento.id
+
+        for media in midias:
+            sessao = sessao_da_media.get(media.id)
+            if sessao is not None:
+                media.trip_id = sessao.trip_id
+                media.event_id = sessao.event_id
         session.flush()
 
     # -- evidências -----------------------------------------------------------
     def _evidencias_para(self, session: Session, media: MediaFile,
-                         pais_por_trip: dict) -> list[_Draft]:
+                         sessao: _Sessao | None) -> list[_Draft]:
         drafts: list[_Draft] = []
 
-        # Data
         if media.data_capturada is not None:
             drafts.append(_Draft(
                 "data", "exif", media.data_capturada.isoformat(),
@@ -174,33 +332,29 @@ class SuggestionEngine:
                 "sem EXIF; data de modificação do arquivo (pouco confiável)",
             ))
 
-        # Geografia
-        drafts.extend(self._evidencias_geo(session, media, pais_por_trip))
+        drafts.extend(self._evidencias_geo(session, media, sessao))
 
-        # Viagem
-        trip = session.get(Trip, media.trip_id) if media.trip_id else None
-        if trip is not None:
-            n = session.scalar(
-                select(func.count(MediaFile.id)).where(MediaFile.trip_id == trip.id)
-            )
-            inicio = trip.inicio.strftime("%d/%m")
-            fim = trip.fim.strftime("%d/%m/%Y")
+        if sessao is not None and sessao.tipo == "viagem":
             drafts.append(_Draft(
-                "viagem", "agrupamento", trip.nome,
-                f"{n} fotos próximas entre {inicio} e {fim} "
-                f"(lacunas > 3 dias separam viagens)",
+                "viagem", sessao.origem, sessao.rotulo,
+                f"{sessao.draft.n_fotos} fotos entre "
+                f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
+            ))
+        if sessao is not None and sessao.tipo == "evento":
+            drafts.append(_Draft(
+                "evento", sessao.origem, sessao.rotulo,
+                f"{sessao.draft.n_fotos} fotos em "
+                f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
             ))
 
-        # Categoria
-        categoria = self._categoria(media, drafts)
+        categoria = self._categoria(media, sessao, drafts)
         if categoria is not None:
             drafts.append(categoria)
-
         return drafts
 
     def _evidencias_geo(self, session: Session, media: MediaFile,
-                        pais_por_trip: dict) -> list[_Draft]:
-        # 1) GPS + geocodificação offline: a melhor evidência disponível.
+                        sessao: _Sessao | None) -> list[_Draft]:
+        # 1) GPS + geocodificação offline.
         if media.gps_lat is not None and self._resolver is not None:
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
             if location is not None:
@@ -231,19 +385,19 @@ class SuggestionEngine:
                 if valor
             ]
 
-        # 3) Vizinhança: outras fotos da mesma viagem têm GPS.
-        if media.trip_id in pais_por_trip:
-            pais, n = pais_por_trip[media.trip_id]
+        # 3) Vizinhança: a sessão tem país dominante pelo GPS das outras.
+        if sessao is not None and sessao.pais_dominante:
             return [_Draft(
-                "pais", "vizinhanca", pais,
-                f"{n} fotos da mesma viagem têm GPS em {pais}",
+                "pais", "vizinhanca", sessao.pais_dominante,
+                f"outras fotos da mesma sessão têm GPS em "
+                f"{sessao.pais_dominante}",
             )]
 
         return []  # sem evidência: não inventa localização
 
-    def _categoria(self, media: MediaFile, drafts: list[_Draft]) -> _Draft | None:
-        from fotoorganizer.geolocation.folder_names import _normalizar
-
+    def _categoria(self, media: MediaFile, sessao: _Sessao | None,
+                   drafts: list[_Draft]) -> _Draft | None:
+        # 1) Pasta de categoria explícita no caminho da foto.
         for segmento in reversed(media.pasta.split("/")):
             canonico = _CATEGORIAS_PASTA.get(_normalizar(segmento))
             if canonico:
@@ -251,23 +405,30 @@ class SuggestionEngine:
                     "categoria", "pasta", canonico,
                     f"pasta '{segmento}' no caminho original",
                 )
-        campos = {d.campo for d in drafts}
-        if "viagem" in campos and "pais" in campos:
-            return _Draft(
-                "categoria", "vizinhanca", "Viagens",
-                "foto pertence a uma viagem com país identificado",
-            )
+        # 2) Tipo da sessão.
+        if sessao is not None:
+            if sessao.tipo == "viagem":
+                return _Draft("categoria", sessao.origem, "Viagens",
+                              sessao.justificativa)
+            if sessao.tipo == "evento":
+                return _Draft("categoria", sessao.origem, "Eventos",
+                              sessao.justificativa)
+            # 3) Advisor deu categoria sem evento.
+            if sessao.categoria:
+                return _Draft("categoria", "llm", sessao.categoria,
+                              sessao.justificativa or
+                              "sugerido por LLM a partir de metadados")
         return None
 
-    # -- persistência -----------------------------------------------------------
+    # -- persistência de sugestões ------------------------------------------
     def _midias_com_decisao(self, session: Session) -> set[int]:
         stmt = select(Suggestion.media_id).where(
             Suggestion.status != SuggestionStatus.PENDENTE
         )
         return set(session.scalars(stmt))
 
-    def _persistir(self, session: Session, media: MediaFile,
-                   drafts: list[_Draft]) -> None:
+    def _persistir_sugestao(self, session: Session, media: MediaFile,
+                            drafts: list[_Draft]) -> None:
         antigas = list(
             session.scalars(select(Suggestion).where(
                 Suggestion.media_id == media.id,
@@ -284,7 +445,6 @@ class SuggestionEngine:
 
         evidencias: dict[str, Evidence] = {}
         for draft in drafts:
-            # Uma evidência por campo (a melhor origem já foi escolhida acima).
             evidencia = Evidence(
                 media_id=media.id, campo=draft.campo, origem=draft.origem,
                 valor=draft.valor, nivel=nivel_para_score(draft.score),
@@ -297,13 +457,15 @@ class SuggestionEngine:
         campos = {campo: ev.valor for campo, ev in evidencias.items()}
         if "data" in evidencias:
             campos["ano"] = str(datetime.fromisoformat(evidencias["data"].valor).year)
-        # Evita "2024 - França/França/...": quando o rótulo da viagem é o
-        # próprio país, o nível {pais} não acrescenta nada.
+        # Evita "2024 - França/França/…".
         if campos.get("viagem") and campos.get("pais") == campos["viagem"]:
             campos["pais"] = None
+        # Evento local não ganha hierarquia geográfica no destino
+        # ("Eventos/2026/Serena 15 Anos", não ".../Serena 15 Anos/São Paulo").
+        if campos.get("evento"):
+            campos["pais"] = campos["regiao"] = campos["cidade"] = None
 
         destino = render_destino(self._template, campos)
-        # Evidências realmente usadas no destino ({ano} deriva de "data").
         usados = {
             campo: ev for campo, ev in evidencias.items()
             if f"{{{campo}}}" in self._template and campos.get(campo)

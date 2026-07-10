@@ -18,6 +18,7 @@ SCORES_REFERENCIA: dict[str, float] = {
     "pasta": 0.60,         # país/cidade extraído do nome da pasta
     "vizinhanca": 0.55,    # inferido de fotos próximas no tempo
     "agrupamento": 0.70,   # viagem por lacuna temporal
+    "llm": 0.55,           # sugerido por LLM a partir de metadados (opt-in)
     "fs": 0.40,            # data do filesystem (sem EXIF)
     "visao": 0.30,         # apenas análise visual
     "usuario": 1.00,       # correção manual prevalece sobre tudo
