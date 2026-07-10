@@ -66,9 +66,14 @@ mantendo só a maior cópia.
 
 ## Limitações conhecidas (v1)
 
-- HEIC/HEIF (formato padrão do iPhone) é suportado via `pillow-heif`
+- HEIC/HEIF/HIF (iPhone e Samsung) é suportado via `pillow-heif`
   (já em `requirements.txt`) — se essa lib não estiver instalada, o scanner
-  ignora `.heic`/`.heif` silenciosamente em vez de quebrar.
+  ignora essas extensões silenciosamente em vez de quebrar.
+- RAW (`.dng`, `.cr2`, `.cr3`, `.nef`, `.arw`, `.raf`, `.orf`, `.rw2`) é
+  suportado via `rawpy` + `exifread` (já em `requirements.txt`): EXIF vem de
+  `exifread`, e o hash perceptual usa a miniatura JPEG embutida no arquivo
+  (via `rawpy.extract_thumb`) — sem essas libs, o scanner ignora RAW em vez
+  de quebrar.
 - Lista de países é estática, não geocodifica coordenadas GPS pra
   nome de lugar (`localizacao_exif` fica como "lat,lon" cru).
 - `/scan` é síncrono — coleções muito grandes (milhares de fotos) vão
