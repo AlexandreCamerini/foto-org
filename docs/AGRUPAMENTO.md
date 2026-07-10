@@ -20,7 +20,7 @@ cluster que precisa ser classificado.
 | 2 | Pasta com palavra-chave de evento (aniversário, "N anos", casamento, formatura, festa, natal, réveillon, batizado, show…) | EVENTO nomeado pela pasta | pasta 0.60 |
 | 3 | País reconhecido no nome das pastas | VIAGEM | pasta 0.60 |
 | 4 | GPS: distância mediana até "casa" > 100 km | VIAGEM | gps 0.85 |
-| 5 | GPS geocodificado (país conhecido) E duração ≥ 3 dias | VIAGEM | geocoding 0.85 |
+| 5 | GPS geocodificado (país conhecido) E duração ≥ 3 dias E **casa desconhecida** | VIAGEM | geocoding 0.85 |
 | 6 | Pasta com nome de álbum (não técnico) E duração ≤ 2 dias | EVENTO nomeado pela pasta | pasta 0.60 |
 | 7 | Nada acima | NEUTRA → advisor LLM (opt-in) ou sem rótulo | llm 0.55 |
 
@@ -41,6 +41,24 @@ Consequências no destino:
   (país/região/cidade) são suprimidos do destino — "Eventos/2026/Serena 15
   Anos", não ".../Serena 15 Anos/São Paulo".
 - Template padrão: `{categoria}/{ano} - {viagem}/{evento}/{regiao}/{cidade}`.
+
+## 2b. Escolha do modelo (benchmark)
+
+A cascata vive em `grouping/classifier.py` como função pura
+parametrizável; `scripts/avaliar_agrupamento.py` compara variantes contra
+16 cenários rotulados (incluindo os casos reais que motivaram o modelo).
+Resultado (2026-07-10):
+
+| Variante | Acertos | Erro típico |
+|---|---|---|
+| A — v4 original (estadia≥3d, sem exigir casa desconhecida) | 15/16 | férias EM CASA (6 dias de GPS a 2 km) viram "viagem" |
+| B — estadia ≥ 2 dias | 15/16 | idem |
+| C — álbum vira evento sem limite de duração | 14/16 | "Obra da casa" (10 dias) vira evento |
+| **D — estadia só com casa desconhecida (adotada)** | **16/16** | — |
+| E — D + estadia ≥ 2 dias | 16/16 | empate; D preferida por ser mais conservadora |
+
+Com casa conhecida, quem decide deslocamento é a regra 4 (distância); a
+regra 5 só cobre acervos sem GPS suficiente para saber onde é casa.
 
 ## 3. Advisor LLM (apoio, nunca decisão final)
 

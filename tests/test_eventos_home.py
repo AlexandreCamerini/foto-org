@@ -1,4 +1,4 @@
-from fotoorganizer.classification.eventos import (
+from fotoorganizer.grouping.eventos import (
     extrair_evento,
     keyword_de_evento,
     nome_de_album,
@@ -79,3 +79,39 @@ def test_nome_de_usuario_nao_e_album():
     assert nome is None
     nome, _ = extrair_evento(["/home/maria/fotos/2024_01_01"])
     assert nome is None
+
+
+# -- classificador (função pura) ----------------------------------------
+def test_classificador_cenarios_chave():
+    from datetime import timedelta
+
+    from fotoorganizer.grouping.classifier import (
+        DadosSessao,
+        classificar_sessao,
+    )
+
+    def sessao(pastas, horas=0, dias=0, pais=None, dist=None):
+        return DadosSessao(
+            pastas=tuple(pastas), duracao=timedelta(days=dias, hours=horas),
+            pais_dominante=pais, dist_mediana_casa_km=dist,
+            periodo_curto="Viagem de 01-01",
+        )
+
+    # Férias EM CASA nunca são viagem (motivou a config vencedora D).
+    d = classificar_sessao(sessao(["/fotos/DCIM"], dias=6, pais="Brasil",
+                                  dist=2.0))
+    assert d.tipo == "neutra"
+
+    # Fim de semana longe de casa é viagem pela distância.
+    d = classificar_sessao(sessao(["/fotos/DCIM"], dias=2, pais="Brasil",
+                                  dist=300.0))
+    assert d.tipo == "viagem" and d.origem == "gps"
+
+    # Estadia geocodificada só decide sem casa conhecida.
+    d = classificar_sessao(sessao(["/fotos/exports"], dias=5, pais="França",
+                                  dist=None))
+    assert d.tipo == "viagem" and d.origem == "geocoding_offline"
+
+    # Keyword de evento vence país na pasta (casamento na Itália é evento).
+    d = classificar_sessao(sessao(["/fotos/Itália/Casamento de João"], dias=1))
+    assert d.tipo == "evento" and "Casamento" in d.rotulo

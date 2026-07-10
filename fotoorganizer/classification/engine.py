@@ -24,12 +24,16 @@ from fotoorganizer.classification.confidence import (
     elo_mais_fraco,
     nivel_para_score,
 )
-from fotoorganizer.classification.eventos import extrair_evento
 from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_destino
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
 from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import agrupar_viagens
+from fotoorganizer.grouping.classifier import (
+    ConfigClassificacao,
+    DadosSessao,
+    classificar_sessao,
+)
 from fotoorganizer.grouping.temporal import ViagemDraft
 from fotoorganizer.models import (
     Event,
@@ -49,9 +53,6 @@ _CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",
                      "familia": "Família", "família": "Família",
                      "eventos": "Eventos", "evento": "Eventos"}
 _MIN_FOTOS_SESSAO = 2
-_DIST_VIAGEM_KM = 100.0
-_DURACAO_MIN_VIAGEM = timedelta(days=3)
-_DURACAO_MAX_EVENTO = timedelta(days=2)
 
 
 @dataclass(slots=True)
@@ -96,11 +97,13 @@ class SuggestionEngine:
         resolver: LocationResolver | None = None,
         template: str = TEMPLATE_PADRAO,
         advisor: ClassificationAdvisor | None = None,
+        config: ConfigClassificacao = ConfigClassificacao(),
     ) -> None:
         self._factory = session_factory
         self._resolver = resolver
         self._template = template
         self._advisor = advisor
+        self._config = config
 
     # -- API ----------------------------------------------------------------
     def gerar(self) -> dict:
@@ -162,83 +165,34 @@ class SuggestionEngine:
 
     def _classificar(self, session: Session, sessao: _Sessao, membros,
                      casa) -> _Sessao:
-        pastas = sorted({m.pasta for m in membros})
+        pastas = tuple(sorted({m.pasta for m in membros}))
         sessao.pais_dominante, sessao.lugares = self._geo_da_sessao(
             session, membros
         )
 
-        # 1. Pasta de categoria "Viagens" no caminho.
-        for pasta in pastas:
-            for segmento in pasta.split("/"):
-                if _CATEGORIAS_PASTA.get(_normalizar(segmento)) == "Viagens":
-                    return self._como_viagem(
-                        sessao, "pasta", f"pasta '{segmento}' no caminho"
-                    )
-
-        # 2. Palavra-chave de evento na pasta (Serena 15 Anos, Casamento…).
-        evento, de_keyword = extrair_evento(pastas)
-        if evento and de_keyword:
-            return self._como_evento(
-                sessao, evento, "pasta",
-                f"pasta '{evento}' indica um evento",
-            )
-
-        # 3. País reconhecido no nome das pastas.
-        for pasta in pastas:
-            hierarquia = extrair_hierarquia_da_pasta(pasta)
-            if hierarquia.pais:
-                return self._como_viagem(
-                    sessao, "pasta",
-                    f"país reconhecido na pasta ('{hierarquia.segmento_pais}')",
-                    pais=hierarquia.pais,
-                )
-
-        # 4. Deslocamento: longe de casa.
+        dist_mediana = None
         if casa is not None:
             dists = sorted(
                 distancia_km(m.gps_lat, m.gps_lon, *casa)
                 for m in membros if m.gps_lat is not None
             )
-            if dists and dists[len(dists) // 2] > _DIST_VIAGEM_KM:
-                return self._como_viagem(
-                    sessao, "gps",
-                    f"fotos a ~{dists[len(dists) // 2]:.0f} km de casa",
-                )
+            if dists:
+                dist_mediana = dists[len(dists) // 2]
 
-        # 5. Estadia geocodificada: país conhecido e vários dias.
-        if (sessao.pais_dominante
-                and sessao.duracao >= _DURACAO_MIN_VIAGEM):
-            return self._como_viagem(
-                sessao, "geocoding_offline",
-                f"fotos com GPS em {sessao.pais_dominante} ao longo de "
-                f"{sessao.duracao.days + 1} dias",
-            )
-
-        # 6. Nome de álbum + sessão curta = evento nomeado (Quizomba).
-        if evento and sessao.duracao <= _DURACAO_MAX_EVENTO:
-            return self._como_evento(
-                sessao, evento, "pasta",
-                f"pasta '{evento}' nomeia uma sessão de "
-                f"{max(sessao.duracao.days, 1)} dia(s)",
-            )
-
-        # 7. Sem veredito — um cluster de horas NUNCA vira viagem sozinho.
-        return sessao
-
-    def _como_viagem(self, sessao: _Sessao, origem: str, justificativa: str,
-                     pais: str | None = None) -> _Sessao:
-        sessao.tipo = "viagem"
-        sessao.origem = origem
-        sessao.justificativa = justificativa
-        sessao.rotulo = pais or sessao.pais_dominante or sessao.periodo_curto()
-        return sessao
-
-    def _como_evento(self, sessao: _Sessao, nome: str, origem: str,
-                     justificativa: str) -> _Sessao:
-        sessao.tipo = "evento"
-        sessao.origem = origem
-        sessao.justificativa = justificativa
-        sessao.rotulo = nome
+        decisao = classificar_sessao(
+            DadosSessao(
+                pastas=pastas,
+                duracao=sessao.duracao,
+                pais_dominante=sessao.pais_dominante,
+                dist_mediana_casa_km=dist_mediana,
+                periodo_curto=sessao.periodo_curto(),
+            ),
+            self._config,
+        )
+        sessao.tipo = decisao.tipo
+        sessao.rotulo = decisao.rotulo
+        sessao.origem = decisao.origem
+        sessao.justificativa = decisao.justificativa
         return sessao
 
     def _geo_da_sessao(self, session: Session,
