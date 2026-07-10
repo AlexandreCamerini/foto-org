@@ -45,3 +45,30 @@ def setup_logging(log_dir: Path, level: int = logging.INFO) -> None:
         logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
     )
     root.addHandler(console)
+
+    _instalar_captura_de_excecoes()
+
+
+def _instalar_captura_de_excecoes() -> None:
+    """Exceções não tratadas (inclusive em slots Qt e threads) iam só para
+    o stderr — invisíveis quando o app é aberto fora de um terminal. Agora
+    tudo cai no log estruturado antes do comportamento padrão."""
+    import sys
+    import threading
+
+    logger = logging.getLogger("fotoorganizer.crash")
+
+    def excepthook(tipo, valor, tb):
+        logger.critical(
+            "exceção não tratada", exc_info=(tipo, valor, tb)
+        )
+        sys.__excepthook__(tipo, valor, tb)
+
+    def threading_hook(args):
+        logger.critical(
+            "exceção não tratada em thread %s", args.thread.name,
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    sys.excepthook = excepthook
+    threading.excepthook = threading_hook

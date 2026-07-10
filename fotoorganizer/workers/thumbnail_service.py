@@ -27,9 +27,16 @@ class _GenerateTask(QRunnable):
         self._original = original
 
     def run(self) -> None:  # thread do pool
-        cache = self._service._cache
-        path = cache.get_or_generate(self._chave, self._original)
-        self._service._on_generated(self._media_id, self._chave, path)
+        service = self._service
+        if service._encerrado:
+            return
+        path = service._cache.get_or_generate(self._chave, self._original)
+        try:
+            service._on_generated(self._media_id, self._chave, path)
+        except RuntimeError:
+            # O QObject do serviço foi destruído (app fechando) enquanto a
+            # geração terminava — descartar em silêncio é o correto.
+            pass
 
 
 class ThumbnailService(QObject):
@@ -43,8 +50,17 @@ class ThumbnailService(QObject):
         self._mem: OrderedDict[str, QPixmap] = OrderedDict()
         self._pendentes: set[str] = set()
         self._ilegiveis: set[str] = set()
+        self._encerrado = False
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(workers)
+
+    def encerrar(self) -> None:
+        """Desliga com segurança: descarta a fila e espera as tarefas em
+        andamento — chamar antes de destruir a janela evita 'Signal source
+        has been deleted' no fechamento do app."""
+        self._encerrado = True
+        self._pool.clear()
+        self._pool.waitForDone()
 
     def pixmap_for(self, media_id: int, chave: str | None,
                    original: str) -> QPixmap | None:
@@ -77,6 +93,8 @@ class ThumbnailService(QObject):
 
     def _on_generated(self, media_id: int, chave: str, path: Path | None) -> None:
         # Chamado na thread do pool; sinais cruzam para a UI como queued.
+        if self._encerrado:
+            return
         self._pendentes.discard(chave)
         if path is None:
             self._ilegiveis.add(chave)

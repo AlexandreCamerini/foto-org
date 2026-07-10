@@ -272,6 +272,9 @@ class MainWindow(QMainWindow):
         if self._scan_worker is not None and self._scan_worker.isRunning():
             self._cancelar_scan()
             self._scan_worker.wait(5000)
+        # Desliga o pool de miniaturas antes da destruição dos QObjects —
+        # senão tarefas pendentes emitem sinal em objeto morto ao fechar.
+        self._thumb_service.encerrar()
         event.accept()
 
     # -- painéis -------------------------------------------------------------
