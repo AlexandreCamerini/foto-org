@@ -2,6 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "foto-organizer-backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/acamerini/Claude/Projects/foto-organizer/backend && /Users/acamerini/Claude/Projects/foto-organizer/.venv/bin/uvicorn app.main:app --port 8000"
+      ],
+      "port": 8000
+    },
+    {
       "name": "foto-organizer-streamlit",
       "runtimeExecutable": "bash",
       "runtimeArgs": [

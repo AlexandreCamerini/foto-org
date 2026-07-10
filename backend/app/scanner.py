@@ -32,7 +32,13 @@ if _HAS_HEIF:
     IMAGE_EXTENSIONS |= {".heic", ".heif"}
 
 _TAG_NAMES = {v: k for k, v in ExifTags.TAGS.items()}
-_DATE_TAG = _TAG_NAMES.get("DateTimeOriginal") or _TAG_NAMES.get("DateTime")
+# DateTimeOriginal (data em que a foto foi tirada) mora na sub-IFD "Exif",
+# não na IFD0 top-level que `img.getexif()` devolve direto — por isso
+# precisa de `get_ifd(_EXIF_IFD_TAG)`. `DateTime` (data de modificação do
+# arquivo, menos confiável) fica na IFD0 e serve de fallback.
+_DATE_ORIGINAL_TAG = _TAG_NAMES.get("DateTimeOriginal")
+_DATE_TAG = _TAG_NAMES.get("DateTime")
+_EXIF_IFD_TAG = _TAG_NAMES.get("ExifOffset")
 _GPS_TAG = _TAG_NAMES.get("GPSInfo")
 
 
@@ -99,8 +105,13 @@ def _extract_exif(path: Path) -> tuple[datetime | None, str | None]:
             if not exif:
                 return None, None
 
-            if _DATE_TAG and _DATE_TAG in exif:
+            exif_ifd = exif.get_ifd(_EXIF_IFD_TAG) if _EXIF_IFD_TAG and hasattr(exif, "get_ifd") else {}
+            raw = None
+            if _DATE_ORIGINAL_TAG and _DATE_ORIGINAL_TAG in exif_ifd:
+                raw = exif_ifd[_DATE_ORIGINAL_TAG]
+            elif _DATE_TAG and _DATE_TAG in exif:
                 raw = exif[_DATE_TAG]
+            if raw:
                 try:
                     data_exif = datetime.strptime(raw, "%Y:%m:%d %H:%M:%S")
                 except (ValueError, TypeError):
