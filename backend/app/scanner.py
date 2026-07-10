@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +36,12 @@ try:
     # metadados (Pillow também não entende a estrutura EXIF de RAW cru).
     import exifread
     import rawpy
+
+    # exifread loga um warning("File format not recognized.") pra CADA
+    # arquivo que não é TIFF/IFD clássico (todo CR3, por exemplo) — em vez
+    # de exceção. Num scan com milhares de RAW isso inunda o log; a falha
+    # em si já é tratada (ver `_gps_from_exifread`), então abafamos aqui.
+    logging.getLogger("exifread").setLevel(logging.ERROR)
 
     _HAS_RAW = True
 except ImportError:
@@ -152,25 +159,6 @@ def _extract_exif(path: Path) -> tuple[datetime | None, str | None]:
     return data_exif, localizacao
 
 
-def _perceptual_hash_raw(path: Path) -> str | None:
-    if not (_HAS_IMAGEHASH and _HAS_RAW):
-        return None
-    try:
-        with rawpy.imread(str(path)) as raw:
-            thumb = raw.extract_thumb()
-        if thumb.format == rawpy.ThumbFormat.JPEG:
-            img = Image.open(io.BytesIO(thumb.data))
-        elif thumb.format == rawpy.ThumbFormat.BITMAP:
-            img = Image.fromarray(thumb.data)
-        else:
-            return None
-        return str(imagehash.phash(img))
-    except Exception:
-        # Sem miniatura embutida, ou libraw não reconhece a variante do RAW —
-        # a foto ainda entra no catálogo (por md5), só sem hash perceptual.
-        return None
-
-
 def _exifread_dms_to_decimal(values, ref: str) -> float:
     degrees, minutes, seconds = (float(v) for v in values)
     decimal = degrees + minutes / 60 + seconds / 3600
@@ -179,33 +167,52 @@ def _exifread_dms_to_decimal(values, ref: str) -> float:
     return decimal
 
 
-def _extract_exif_raw(path: Path) -> tuple[datetime | None, str | None]:
-    """Mesma ideia de `_extract_exif`, mas via exifread — Pillow não entende
-    a estrutura de metadados de arquivos RAW cru."""
-    data_exif: datetime | None = None
-    localizacao: str | None = None
-
+def _gps_from_exifread(path: Path) -> str | None:
+    """Best-effort: exifread só entende contêineres RAW baseados em
+    TIFF/IFD (DNG, NEF, ARW, ...). CR3 usa ISO-BMFF (mesma família do
+    .mp4/.heic) e faz o parse falhar — por isso GPS de CR3 fica sempre
+    `None` aqui (a data não depende disto, ver `_extract_raw`)."""
     try:
         with path.open("rb") as handle:
             tags = exifread.process_file(handle, details=False)
-
-        raw_date = tags.get("EXIF DateTimeOriginal") or tags.get("Image DateTime")
-        if raw_date:
-            try:
-                data_exif = datetime.strptime(str(raw_date), "%Y:%m:%d %H:%M:%S")
-            except (ValueError, TypeError):
-                data_exif = None
-
         lat, lat_ref = tags.get("GPS GPSLatitude"), tags.get("GPS GPSLatitudeRef")
         lon, lon_ref = tags.get("GPS GPSLongitude"), tags.get("GPS GPSLongitudeRef")
         if lat and lon and lat_ref and lon_ref:
             lat_dec = _exifread_dms_to_decimal(lat.values, str(lat_ref))
             lon_dec = _exifread_dms_to_decimal(lon.values, str(lon_ref))
-            localizacao = f"{lat_dec:.6f},{lon_dec:.6f}"
+            return f"{lat_dec:.6f},{lon_dec:.6f}"
     except Exception:
         pass
+    return None
 
-    return data_exif, localizacao
+
+def _extract_raw(path: Path) -> tuple[datetime | None, str | None, str | None]:
+    """Abre o RAW uma única vez com libraw pra tirar data + miniatura
+    (evita reabrir arquivos de dezenas de MB duas vezes). A data vem do
+    libraw (`raw.other.timestamp`) em vez de exifread porque libraw entende
+    qualquer variante de RAW pelo mesmo código, inclusive CR3 — exifread só
+    lê contêineres TIFF/IFD clássicos e falha silenciosamente no CR3."""
+    data_exif: datetime | None = None
+    hash_perceptual: str | None = None
+
+    try:
+        with rawpy.imread(str(path)) as raw:
+            if raw.other.timestamp:
+                data_exif = raw.other.timestamp
+            if _HAS_IMAGEHASH:
+                thumb = raw.extract_thumb()
+                if thumb.format == rawpy.ThumbFormat.JPEG:
+                    img = Image.open(io.BytesIO(thumb.data))
+                    hash_perceptual = str(imagehash.phash(img))
+                elif thumb.format == rawpy.ThumbFormat.BITMAP:
+                    hash_perceptual = str(imagehash.phash(Image.fromarray(thumb.data)))
+    except Exception:
+        # Arquivo corrompido ou variante de RAW que o libraw não abre — a
+        # foto ainda entra no catálogo (por md5), só sem data/hash de RAW.
+        pass
+
+    localizacao = _gps_from_exifread(path)
+    return data_exif, localizacao, hash_perceptual
 
 
 def scan_file(path: Path) -> ScannedPhoto:
@@ -213,8 +220,7 @@ def scan_file(path: Path) -> ScannedPhoto:
     is_raw = path.suffix.lower() in RAW_EXTENSIONS
 
     if is_raw:
-        data_exif, localizacao = _extract_exif_raw(path)
-        hash_perceptual = _perceptual_hash_raw(path)
+        data_exif, localizacao, hash_perceptual = _extract_raw(path)
     else:
         data_exif, localizacao = _extract_exif(path)
         hash_perceptual = _perceptual_hash(path)
