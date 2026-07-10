@@ -13,6 +13,7 @@ dependencies = [
     "exifread>=3.0",
     "ImageHash>=4.3",
     "xxhash>=3.4",
+    "reverse-geocode>=1.6",
 ]
 
 [project.optional-dependencies]

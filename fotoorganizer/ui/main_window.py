@@ -17,20 +17,25 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QSlider,
     QSplitter,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer import __version__
+from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.config.settings import Settings
+from fotoorganizer.geolocation import LocationResolver
+from fotoorganizer.geolocation.offline import OfflineGeocoder
 from fotoorganizer.metadata import PurePythonExtractor
-from fotoorganizer.repositories import MediaRepository
+from fotoorganizer.repositories import MediaRepository, SuggestionRepository
 from fotoorganizer.scanner import CatalogScanner
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.ui.filter_bar import FilterBar
 from fotoorganizer.ui.inspector import Inspector
 from fotoorganizer.ui.media_model import MediaIdRole, MediaListModel
+from fotoorganizer.ui.review_view import ReviewView
 from fotoorganizer.ui.sidebar import Sidebar
 from fotoorganizer.workers import ScanWorker, ThumbnailService
 
@@ -56,11 +61,19 @@ class MainWindow(QMainWindow):
         # -- painéis -----------------------------------------------------
         self.sidebar = Sidebar(self._repo)
         self.inspector = Inspector()
-        centro = self._build_centro()
+        biblioteca = self._build_centro()
+
+        self._suggestion_repo = SuggestionRepository(session_factory)
+        self.review = ReviewView(self._suggestion_repo, self._criar_engine)
+        self.review.mensagem.connect(self.statusBar().showMessage)
+
+        self.tabs = QTabWidget()
+        self.tabs.addTab(biblioteca, "Biblioteca")
+        self.tabs.addTab(self.review, "Revisão")
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.sidebar)
-        self.splitter.addWidget(centro)
+        self.splitter.addWidget(self.tabs)
         self.splitter.addWidget(self.inspector)
         self.splitter.setSizes([240, 760, 280])
         self.splitter.setCollapsible(1, False)
@@ -83,6 +96,12 @@ class MainWindow(QMainWindow):
         self.grid.selectionModel().currentChanged.connect(self._on_selecao)
 
         self._aplicar_filtros()
+
+    def _criar_engine(self) -> SuggestionEngine:
+        """Factory usada pelo worker de sugestões (geocoder é lazy/pesado)."""
+        return SuggestionEngine(
+            self._session_factory, LocationResolver(OfflineGeocoder())
+        )
 
     # -- construção -------------------------------------------------------
     def _build_centro(self) -> QWidget:

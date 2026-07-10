@@ -152,4 +152,42 @@ QSlider::handle:horizontal {{
 QSlider::handle:horizontal:hover {{ background: {ACCENT}; }}
 
 QScrollArea {{ border: none; }}
+
+QTabWidget::pane {{ border: none; }}
+QTabBar::tab {{
+    background: transparent;
+    color: {TEXT_SECONDARY};
+    padding: 8px 16px;
+    border-bottom: 2px solid transparent;
+}}
+QTabBar::tab:selected {{
+    color: {TEXT_PRIMARY};
+    border-bottom: 2px solid {ACCENT};
+}}
+
+QTableView {{
+    background-color: {BG_WINDOW};
+    alternate-background-color: {BG_PANEL};
+    border: none;
+    outline: none;
+    selection-background-color: {BG_CARD};
+    selection-color: {TEXT_PRIMARY};
+}}
+QTableView::item {{ padding: 4px 8px; border: none; }}
+QHeaderView::section {{
+    background-color: {BG_PANEL};
+    color: {TEXT_SECONDARY};
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 6px 8px;
+}}
+
+QTextBrowser {{
+    background-color: {BG_PANEL};
+    border: none;
+    border-top: 1px solid {BORDER};
+    padding: 4px 12px;
+}}
 """

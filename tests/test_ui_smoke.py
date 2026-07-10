@@ -69,3 +69,36 @@ def test_selecao_preenche_inspetor(window, tmp_path, qtbot):
     assert window.inspector._nome.text() == "unica.jpg"
     assert "Canon" in window.inspector._camera.text()
     assert "43.95" in window.inspector._gps.text()
+
+
+def test_revisao_gera_aprova_e_mostra_evidencias(window, tmp_path, qtbot):
+    from fotoorganizer.models import SuggestionStatus
+    from fotoorganizer.repositories import SuggestionFilters
+
+    fotos = tmp_path / "biblioteca"
+    for i in range(4):
+        make_jpeg(fotos / f"img_{i}.jpg", seed=i, gps=(43.95, 4.81),
+                  data_exif=f"2024:05:0{i+1} 10:00:00")
+    with qtbot.waitSignal(_start_scan(window, fotos), timeout=15000):
+        pass
+
+    review = window.review
+    review._gerar()
+    with qtbot.waitSignal(review._worker.terminado, timeout=30000):
+        pass
+
+    assert review.model.total == 4
+    review.model.fetchMore()
+
+    # Evidências visíveis ao selecionar
+    review.table.setCurrentIndex(review.model.index(0, 0))
+    html = review._evidencias.toHtml()
+    assert "pais" in html and "geocodifica" in html
+
+    # Aprovar em lote
+    review.table.selectAll()
+    review._acao(review._repo.aprovar)
+    aprovadas = review._repo.contar(
+        SuggestionFilters(status=SuggestionStatus.APROVADA)
+    )
+    assert aprovadas == 4
