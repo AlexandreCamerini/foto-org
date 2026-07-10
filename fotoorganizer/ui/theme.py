@@ -190,4 +190,10 @@ QTextBrowser {{
     border-top: 1px solid {BORDER};
     padding: 4px 12px;
 }}
+
+QFrame#cartaoMembro {{
+    background-color: {BG_CARD};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+}}
 """

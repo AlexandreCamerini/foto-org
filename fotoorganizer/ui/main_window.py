@@ -29,9 +29,15 @@ from fotoorganizer.config.settings import Settings
 from fotoorganizer.geolocation import LocationResolver
 from fotoorganizer.geolocation.offline import OfflineGeocoder
 from fotoorganizer.metadata import PurePythonExtractor
-from fotoorganizer.repositories import MediaRepository, SuggestionRepository
+from fotoorganizer.duplicates import DuplicateDetector
+from fotoorganizer.repositories import (
+    DuplicateRepository,
+    MediaRepository,
+    SuggestionRepository,
+)
 from fotoorganizer.scanner import CatalogScanner
 from fotoorganizer.thumbnails import ThumbnailCache
+from fotoorganizer.ui.duplicates_view import DuplicatesView
 from fotoorganizer.ui.filter_bar import FilterBar
 from fotoorganizer.ui.inspector import Inspector
 from fotoorganizer.ui.media_model import MediaIdRole, MediaListModel
@@ -67,9 +73,16 @@ class MainWindow(QMainWindow):
         self.review = ReviewView(self._suggestion_repo, self._criar_engine)
         self.review.mensagem.connect(self.statusBar().showMessage)
 
+        self._duplicate_repo = DuplicateRepository(session_factory)
+        self.duplicates = DuplicatesView(
+            self._duplicate_repo, self._criar_detector, self._thumb_service
+        )
+        self.duplicates.mensagem.connect(self.statusBar().showMessage)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(biblioteca, "Biblioteca")
         self.tabs.addTab(self.review, "Revisão")
+        self.tabs.addTab(self.duplicates, "Duplicatas")
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.sidebar)
@@ -101,6 +114,11 @@ class MainWindow(QMainWindow):
         """Factory usada pelo worker de sugestões (geocoder é lazy/pesado)."""
         return SuggestionEngine(
             self._session_factory, LocationResolver(OfflineGeocoder())
+        )
+
+    def _criar_detector(self) -> DuplicateDetector:
+        return DuplicateDetector(
+            self._session_factory, ThumbnailCache(self._settings.cache_dir)
         )
 
     # -- construção -------------------------------------------------------

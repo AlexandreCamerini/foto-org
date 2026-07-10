@@ -93,6 +93,8 @@ class MediaFile(Base):
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"))
     hash_rapido: Mapped[str | None]
     hash_sha256: Mapped[str | None]
+    # phash 64-bit em hex — calculado sob demanda pela detecção de duplicatas.
+    hash_perceptual: Mapped[str | None]
     status_revisao: Mapped[ReviewStatus] = mapped_column(
         Enum(ReviewStatus, native_enum=False), default=ReviewStatus.NAO_REVISADO
     )
