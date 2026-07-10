@@ -4,6 +4,9 @@ Cada milestone é uma fatia entregável e testável. Definition of done comum:
 `pytest` verde, nenhuma violação dos invariantes do CLAUDE.md, app abre e a
 fatia é demonstrável de ponta a ponta.
 
+**Status: M0–M7 CONCLUÍDOS** (MVP completo). Próximos passos em
+"Próximas versões" no fim deste arquivo.
+
 ## M0 — Fundação (esqueleto executável)
 - Estrutura `fotoorganizer/`, config TOML, logging estruturado.
 - SQLite WAL + SQLAlchemy 2 + Alembic com a migração inicial (schema em
@@ -71,6 +74,38 @@ fatia é demonstrável de ponta a ponta.
 
 ## M7 — Polimento e empacotamento
 - Remoção do legado `backend/`+`streamlit_app/` (commit próprio).
-- Dados de demonstração sintéticos, README novo, instruções de empacotamento
-  (PyInstaller/briefcase), roadmap v2 (providers externos, sidecar XMP,
-  reconhecimento automático).
+- Dados de demonstração sintéticos (scripts/gerar_demo.py), README novo,
+  instruções de empacotamento (docs/EMPACOTAMENTO.md), roadmap v2 abaixo.
+
+---
+
+# Próximas versões (v2+)
+
+Por ordem de valor, respeitando "núcleo local estável antes de recursos
+externos":
+
+1. **Detecção facial local real** — provider (ex.: modelo ONNX local)
+   implementando `FaceRecognitionProvider`; sugestão "possível pessoa"
+   com limiar conservador; categoria "família" quando familiar confirmado
+   presente. A infraestrutura (embeddings cifrados, estados, associação
+   manual) já existe.
+2. **Análise visual local** — provider implementando `VisionProvider`
+   (cena: praia/montanha/urbano; qualidade; screenshot vs. foto); rótulos
+   viram evidências de baixa confiança no motor.
+3. **UI de pessoas** — tela de cadastro/gestão de perfis e revisão de
+   rostos (backend pronto no M6).
+4. **Templates configuráveis na UI** — editor de template com preview
+   (o motor já aceita template arbitrário).
+5. **Timezone estimado** — inferir `tz_estimado` de GPS + hora local e
+   usá-lo no agrupamento temporal (coluna já existe).
+6. **exiftool opcional em batch** (`-stay_open`) para IPTC/XMP completos,
+   com o extrator puro-Python como fallback (Protocol já definido).
+7. **Sidecar XMP** — escrita de metadados aprovados em arquivos .xmp ao
+   lado dos originais (originais preservados; fase posterior por design).
+8. **Provider externo opt-in** (geocoding e/ou visão via API) — com
+   indicação visual de envio, lista de arquivos e cancelamento, conforme
+   docs/PRIVACIDADE.md.
+9. **Eventos nomeados** — detecção de eventos (aniversários, casamentos)
+   combinando calendário, pessoas confirmadas e rótulos visuais.
+10. **Empacotamento assinado** — bundle .app notarizado (base em
+    docs/EMPACOTAMENTO.md).

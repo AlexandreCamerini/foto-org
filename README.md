@@ -1,80 +1,90 @@
-# Organizador de Fotos
+# Foto Organizer
 
-Varre diretórios de fotos no seu Mac, cataloga metadados, detecta duplicatas
-(exatas e visualmente parecidas), e sugere agrupamento por viagem/país/
-região/cidade a partir do nome das pastas e da linha do tempo das fotos.
+App desktop para macOS que cataloga, analisa e organiza (de forma
+**assistida e não destrutiva**) grandes coleções de fotos espalhadas por
+pastas e volumes. 100% local: sem conta, sem nuvem, sem telemetria.
 
-## Stack
+Princípio central: **primeiro catalogar, depois sugerir, então revisar e
+somente por último executar operações físicas** — e mesmo então, apenas
+cópias verificadas por hash. O app nunca move, renomeia, altera ou exclui
+uma foto original.
 
-Backend FastAPI + SQLAlchemy, banco SQLite local (`database/fotos.db`),
-frontend Streamlit. Tudo local — sem deploy, sem conta, sem API externa.
+## O que ele faz
 
-## Como rodar
+- **Cataloga** JPEG/PNG/HEIC/HEIF/HIF/TIFF/WebP e RAW (DNG, CR2, CR3, NEF,
+  ARW, RAF, ORF, RW2) sem tocar nos originais, com varredura incremental,
+  pausável e retomável.
+- **Extrai** EXIF (data de captura, câmera, lente, GPS), dimensões e datas
+  do filesystem; RAW via libraw (inclusive CR3).
+- **Sugere organização** com evidências estruturadas: geocodificação
+  reversa **offline** do GPS, país/cidade pelo nome das pastas, viagens por
+  lacuna temporal, tudo com nível de confiança e justificativa ("o país
+  veio do GPS", "a cidade veio da pasta, confiança média").
+- **Detecta duplicatas** em 3 níveis: idênticas (SHA-256), mesmo conteúdo
+  (phash igual) e visualmente parecidas — revisão lado a lado, nunca
+  exclusão automática.
+- **Planeja e executa cópias** com dry-run obrigatório, sobrescrita
+  impossível (criação exclusiva no SO), verificação de hash antes/depois e
+  audit log completo.
+
+## Instalação e execução
+
+Requisitos: macOS, Python 3.12+.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
 
-# Terminal 1 — backend
-cd backend && uvicorn app.main:app --reload --port 8000
+# Interface gráfica
+python -m fotoorganizer
 
-# Terminal 2 — frontend
-cd streamlit_app && streamlit run app.py
+# CLI (varredura headless e benchmark)
+python -m fotoorganizer scan ~/Pictures/MinhasFotos
+python -m fotoorganizer bench -n 1000
 ```
 
-Abra o Streamlit (endereço que ele imprime, normalmente
-http://localhost:8501), cole o caminho de uma ou mais pastas na aba
-"Varrer pastas" e clique em "Varrer agora".
+Dados do app: `~/Library/Application Support/FotoOrganizer/` (catálogo
+SQLite, config.toml, logs) e `~/Library/Caches/FotoOrganizer/`
+(miniaturas). Apagar essas pastas remove o catálogo por completo sem
+afetar nenhuma foto.
 
-## Estrutura
+## Dados de demonstração
 
-```
-backend/app/
-  main.py          endpoints FastAPI (POST /scan, GET /photos|duplicates|suggestions)
-  models.py        tabela `photos` (SQLAlchemy)
-  database.py      engine/sessão SQLite
-  scanner.py       varredura de diretório + hash md5/perceptual + EXIF
-  duplicates.py    detecção de duplicatas exatas e visuais
-  suggestions.py   hierarquia geográfica (nome de pasta) + agrupamento por viagem
-  geo_data.py      lista estática de países (PT/EN) pra reconhecer pastas
-streamlit_app/app.py  interface (varrer, ver fotos, duplicatas, sugestões)
-database/             fotos.db vive aqui (não versionado)
+Nunca use fotos pessoais para testar: gere uma biblioteca sintética.
+
+```bash
+python scripts/gerar_demo.py /tmp/demo_fotos
+python -m fotoorganizer   # adicione /tmp/demo_fotos como fonte
 ```
 
-## Como funciona a detecção de duplicatas
+## Fluxo de uso
 
-- **Exata**: mesmo hash MD5 do arquivo (bytes idênticos).
-- **Visual**: hash perceptual (`imagehash.phash`) com distância de Hamming
-  ≤ 8 — pega fotos reexportadas/comprimidas que não são bit-a-bit iguais.
+1. **Biblioteca** — adicione pastas; a varredura roda em background com
+   progresso, pausa e retomada. Filtre por data, tipo, fonte e busca.
+2. **Revisão** — gere sugestões; cada uma mostra destino proposto, badge
+   de confiança e o painel "por quê?" com as evidências. Aprove, rejeite
+   ou edite (em lote, com desfazer).
+3. **Duplicatas** — detecte e resolva lado a lado (principal/versão/
+   ignorar).
+4. **Operações** — escolha o destino, crie o plano das aprovadas, rode o
+   dry-run (obrigatório) e execute a cópia verificada.
 
-Cada grupo de duplicatas reporta quanto espaço em disco dá pra economizar
-mantendo só a maior cópia.
+## Testes
 
-## Como funciona a sugestão de agrupamento
+```bash
+.venv/bin/python -m pytest
+```
 
-1. **Hierarquia geográfica**: os segmentos do caminho da pasta são
-   comparados contra uma lista de países conhecidos (`geo_data.py`). Se
-   `.../Viagens/Japão/Tóquio/foto.jpg` bate com "Japão", o resto do caminho
-   vira região/cidade.
-2. **Viagem**: as fotos são ordenadas por data (EXIF, ou data do arquivo se
-   não tiver EXIF) e agrupadas — uma lacuna de mais de 3 dias sem foto
-   nenhuma marca o início de uma viagem nova.
-3. **Score de confiança** (0 a 1): soma pontos por sinal encontrado — país
-   reconhecido na pasta (+0.4), cidade específica (+0.2), data EXIF real
-   (+0.2), GPS no EXIF (+0.2).
+A suíte usa apenas arquivos sintéticos gerados em tempo de teste — nenhuma
+fotografia real no repositório.
 
-## Limitações conhecidas (v1)
+## Documentação
 
-- HEIC/HEIF/HIF (iPhone e Samsung) é suportado via `pillow-heif`
-  (já em `requirements.txt`) — se essa lib não estiver instalada, o scanner
-  ignora essas extensões silenciosamente em vez de quebrar.
-- RAW (`.dng`, `.cr2`, `.cr3`, `.nef`, `.arw`, `.raf`, `.orf`, `.rw2`) é
-  suportado via `rawpy` + `exifread` (já em `requirements.txt`): EXIF vem de
-  `exifread`, e o hash perceptual usa a miniatura JPEG embutida no arquivo
-  (via `rawpy.extract_thumb`) — sem essas libs, o scanner ignora RAW em vez
-  de quebrar.
-- Lista de países é estática, não geocodifica coordenadas GPS pra
-  nome de lugar (`localizacao_exif` fica como "lat,lon" cru).
-- `/scan` é síncrono — coleções muito grandes (milhares de fotos) vão
-  demorar, porque calcula hash de cada arquivo na hora.
+- [Guia do projeto (CLAUDE.md)](CLAUDE.md) — invariantes de segurança e stack
+- [Arquitetura, schema e decisões](docs/ARQUITETURA.md)
+- [Sistema de confiança](docs/CONFIANCA.md)
+- [Privacidade](docs/PRIVACIDADE.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Direção de arte](docs/DIRECAO_DE_ARTE.md)
+- [Empacotamento (.app)](docs/EMPACOTAMENTO.md)
