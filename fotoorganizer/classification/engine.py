@@ -28,7 +28,14 @@ from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_desti
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
 from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
-from fotoorganizer.grouping import agrupar_viagens, dividir_por_transicao_casa
+from fotoorganizer.grouping import (
+    FotoRef,
+    Heranca,
+    agrupar_viagens,
+    dividir_por_transicao_casa,
+    estimar_offsets,
+    herdar_gps,
+)
 from fotoorganizer.grouping.classifier import (
     ConfigClassificacao,
     DadosSessao,
@@ -47,7 +54,21 @@ from fotoorganizer.models import (
 
 log = logging.getLogger(__name__)
 
-VERSAO_LOGICA = "4.0"
+VERSAO_LOGICA = "4.1"
+
+
+def _delta_legivel(delta: timedelta) -> str:
+    segundos = int(delta.total_seconds())
+    if segundos < 60:
+        return f"{segundos}s"
+    return f"{segundos // 60}min"
+
+
+def _camera_legivel(media: MediaFile | None) -> str:
+    if media is None:
+        return ""
+    partes = " ".join(filter(None, [media.make, media.model]))
+    return f" ({partes})" if partes else ""
 
 _CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",
                      "familia": "Família", "família": "Família",
@@ -64,9 +85,13 @@ class _Draft:
     origem: str
     valor: str
     justificativa: str
+    # Herança de GPS modula o score da origem pelo Δt (fator ≤ 1.0).
+    score_override: float | None = None
 
     @property
     def score(self) -> float:
+        if self.score_override is not None:
+            return self.score_override
         return SCORES_REFERENCIA[self.origem]
 
 
@@ -113,8 +138,15 @@ class SuggestionEngine:
         with self._factory() as session:
             midias = list(session.scalars(select(MediaFile)))
             decididas = self._midias_com_decisao(session)
+            por_id = {m.id: m for m in midias}
 
-            sessoes, sessao_da_media = self._montar_sessoes(session, midias)
+            # Correlação entre fontes: fotos sem GPS herdam localização de
+            # fotos de outra origem tiradas a minutos de distância.
+            herancas = self._correlacionar(midias)
+
+            sessoes, sessao_da_media = self._montar_sessoes(
+                session, midias, herancas
+            )
             self._persistir_agrupamentos(session, midias, sessoes, sessao_da_media)
 
             geradas = 0
@@ -122,7 +154,8 @@ class SuggestionEngine:
                 if media.id in decididas:
                     continue
                 drafts = self._evidencias_para(
-                    session, media, sessao_da_media.get(media.id)
+                    session, media, sessao_da_media.get(media.id),
+                    herancas, por_id,
                 )
                 self._persistir_sugestao(session, media, drafts)
                 geradas += 1
@@ -134,12 +167,44 @@ class SuggestionEngine:
                 "sugestoes": geradas,
                 "viagens": sum(1 for s in sessoes if s.tipo == "viagem"),
                 "eventos": sum(1 for s in sessoes if s.tipo == "evento"),
+                "herancas_gps": len(herancas),
                 "preservadas": len(decididas),
             }
 
+    # -- correlação entre fontes ---------------------------------------------
+    @staticmethod
+    def _correlacionar(midias) -> dict[int, Heranca]:
+        refs = [
+            FotoRef(
+                media_id=m.id, source_id=m.source_id,
+                quando=(m.data_capturada or m.mtime),
+                camera=(m.make, m.model),
+                lat=m.gps_lat, lon=m.gps_lon,
+                hash_rapido=m.hash_rapido,
+                hash_perceptual=m.hash_perceptual,
+            )
+            for m in midias
+            if (m.data_capturada or m.mtime) is not None
+        ]
+        offsets = estimar_offsets(refs)
+        if offsets:
+            log.info("correlação: deriva de relógio estimada para %d câmeras",
+                     len(offsets))
+        return {h.media_id: h for h in herdar_gps(refs, offsets)}
+
+    @staticmethod
+    def _coords(media, herancas: dict[int, Heranca]) -> tuple[float, float] | None:
+        """Coordenadas efetivas: GPS próprio, senão o herdado."""
+        if media.gps_lat is not None:
+            return media.gps_lat, media.gps_lon
+        heranca = herancas.get(media.id)
+        if heranca is not None:
+            return heranca.lat, heranca.lon
+        return None
+
     # -- sessões e cascata ----------------------------------------------------
     def _montar_sessoes(
-        self, session: Session, midias
+        self, session: Session, midias, herancas: dict[int, Heranca]
     ) -> tuple[list[_Sessao], dict[int, _Sessao]]:
         por_id = {m.id: m for m in midias}
         itens = [
@@ -147,6 +212,8 @@ class SuggestionEngine:
             for m in midias
             if (m.data_capturada or m.mtime) is not None
         ]
+        # Casa: só GPS real — coordenadas herdadas repetem as dos doadores
+        # e inflariam artificialmente a célula modal.
         casa = detectar_casa([
             (m.gps_lat, m.gps_lon) for m in midias if m.gps_lat is not None
         ])
@@ -155,7 +222,8 @@ class SuggestionEngine:
             # Viagens coladas: o gap temporal não separa duas viagens com
             # menos de 3 dias em casa no meio — a transição casa↔fora sim.
             drafts = [
-                sub for d in drafts for sub in self._dividir_draft(d, por_id, casa)
+                sub for d in drafts
+                for sub in self._dividir_draft(d, por_id, casa, herancas)
             ]
         drafts = [d for d in drafts if d.n_fotos >= _MIN_FOTOS_SESSAO]
 
@@ -163,7 +231,9 @@ class SuggestionEngine:
         sessao_da_media: dict[int, _Sessao] = {}
         for draft in drafts:
             membros = [por_id[i] for i in draft.media_ids]
-            sessao = self._classificar(session, _Sessao(draft=draft), membros, casa)
+            sessao = self._classificar(
+                session, _Sessao(draft=draft), membros, casa, herancas
+            )
             if sessao.tipo == "neutra" and self._advisor is not None:
                 self._consultar_advisor(sessao, membros)
             sessoes.append(sessao)
@@ -171,16 +241,16 @@ class SuggestionEngine:
                 sessao_da_media[media_id] = sessao
         return sessoes, sessao_da_media
 
-    def _dividir_draft(self, draft: ViagemDraft, por_id,
-                       casa) -> list[ViagemDraft]:
+    def _dividir_draft(self, draft: ViagemDraft, por_id, casa,
+                       herancas: dict[int, Heranca]) -> list[ViagemDraft]:
         itens = []
         for media_id in draft.media_ids:
             media = por_id[media_id]
             estado = None
-            if media.gps_lat is not None:
+            coords = self._coords(media, herancas)
+            if coords is not None:
                 estado = (
-                    distancia_km(media.gps_lat, media.gps_lon, *casa)
-                    <= self._config.raio_casa_km
+                    distancia_km(*coords, *casa) <= self._config.raio_casa_km
                 )
             itens.append((media_id, media.data_capturada or media.mtime, estado))
 
@@ -196,17 +266,19 @@ class SuggestionEngine:
         ]
 
     def _classificar(self, session: Session, sessao: _Sessao, membros,
-                     casa) -> _Sessao:
+                     casa, herancas: dict[int, Heranca]) -> _Sessao:
         pastas = tuple(sorted({m.pasta for m in membros}))
         sessao.pais_dominante, sessao.lugares, pernas = self._geo_da_sessao(
-            session, membros
+            session, membros, herancas
         )
 
         dist_mediana = None
         if casa is not None:
+            coords = [
+                self._coords(m, herancas) for m in membros
+            ]
             dists = sorted(
-                distancia_km(m.gps_lat, m.gps_lon, *casa)
-                for m in membros if m.gps_lat is not None
+                distancia_km(*c, *casa) for c in coords if c is not None
             )
             if dists:
                 dist_mediana = dists[len(dists) // 2]
@@ -229,20 +301,22 @@ class SuggestionEngine:
         return sessao
 
     def _geo_da_sessao(
-        self, session: Session, membros
+        self, session: Session, membros, herancas: dict[int, Heranca]
     ) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
         """(país dominante, lugares, pernas). Pernas = países em ordem
         cronológica de chegada com massa mínima de fotos — ≥ 2 caracterizam
-        viagem multi-país. `membros` já vem na ordem temporal da sessão."""
+        viagem multi-país. `membros` já vem na ordem temporal da sessão.
+        Usa coordenadas efetivas (GPS próprio ou herdado de outra fonte)."""
         if self._resolver is None:
             return None, (), ()
         paises: Counter = Counter()
         ordem_paises: list[str] = []
         lugares: list[str] = []
         for media in membros:
-            if media.gps_lat is None:
+            coords = self._coords(media, herancas)
+            if coords is None:
                 continue
-            location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
+            location = self._resolver.resolve(session, *coords)
             if location is None:
                 continue
             if location.pais:
@@ -318,7 +392,9 @@ class SuggestionEngine:
 
     # -- evidências -----------------------------------------------------------
     def _evidencias_para(self, session: Session, media: MediaFile,
-                         sessao: _Sessao | None) -> list[_Draft]:
+                         sessao: _Sessao | None,
+                         herancas: dict[int, Heranca],
+                         por_id: dict[int, MediaFile]) -> list[_Draft]:
         drafts: list[_Draft] = []
 
         if media.data_capturada is not None:
@@ -332,7 +408,9 @@ class SuggestionEngine:
                 "sem EXIF; data de modificação do arquivo (pouco confiável)",
             ))
 
-        drafts.extend(self._evidencias_geo(session, media, sessao))
+        drafts.extend(
+            self._evidencias_geo(session, media, sessao, herancas, por_id)
+        )
 
         if sessao is not None and sessao.tipo == "viagem":
             drafts.append(_Draft(
@@ -353,7 +431,9 @@ class SuggestionEngine:
         return drafts
 
     def _evidencias_geo(self, session: Session, media: MediaFile,
-                        sessao: _Sessao | None) -> list[_Draft]:
+                        sessao: _Sessao | None,
+                        herancas: dict[int, Heranca],
+                        por_id: dict[int, MediaFile]) -> list[_Draft]:
         # 1) GPS + geocodificação offline.
         if media.gps_lat is not None and self._resolver is not None:
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
@@ -365,6 +445,32 @@ class SuggestionEngine:
                 )
                 return [
                     _Draft(campo, "geocoding_offline", valor, just)
+                    for campo, valor in [
+                        ("pais", location.pais), ("regiao", location.regiao),
+                        ("cidade", location.cidade),
+                    ]
+                    if valor
+                ]
+
+        # 1b) GPS herdado de foto de outra fonte (correlação temporal).
+        heranca = herancas.get(media.id)
+        if heranca is not None and self._resolver is not None:
+            location = self._resolver.resolve(session, heranca.lat, heranca.lon)
+            if location is not None:
+                media.location_id = location.id
+                doador = por_id.get(heranca.doador_id)
+                just = (
+                    f"GPS herdado de '{doador.nome if doador else '?'}'"
+                    f"{_camera_legivel(doador)} — tirada a "
+                    f"{_delta_legivel(heranca.delta)} de distância"
+                )
+                score = round(
+                    SCORES_REFERENCIA["vizinhanca_temporal"]
+                    * heranca.score_fator, 3,
+                )
+                return [
+                    _Draft(campo, "vizinhanca_temporal", valor, just,
+                           score_override=score)
                     for campo, valor in [
                         ("pais", location.pais), ("regiao", location.regiao),
                         ("cidade", location.cidade),

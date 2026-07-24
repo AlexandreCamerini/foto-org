@@ -33,6 +33,7 @@ class MemberRow:
     tamanho: int
     hash_rapido: str | None
     papel: DuplicateRole
+    source_id: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,12 @@ class GroupRow:
         """Espaço liberado se só a maior cópia fosse mantida (informativo)."""
         tamanhos = sorted((m.tamanho for m in self.membros), reverse=True)
         return sum(tamanhos[1:])
+
+    @property
+    def n_fontes(self) -> int:
+        """Mesma foto presente em mais de uma fonte é vínculo entre
+        catálogos (âncora de correlação), não só espaço a recuperar."""
+        return len({m.source_id for m in self.membros})
 
 
 class DuplicateRepository:
@@ -72,6 +79,7 @@ class DuplicateRepository:
                         member_id=membro.id, media_id=media.id, nome=media.nome,
                         caminho=media.caminho, tamanho=media.tamanho,
                         hash_rapido=media.hash_rapido, papel=membro.papel,
+                        source_id=media.source_id,
                     ))
                 linhas.append(GroupRow(
                     id=grupo.id, nivel=grupo.nivel,

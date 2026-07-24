@@ -279,6 +279,27 @@ def test_sem_data_de_captura_nao_afirma_rajada(factory_com_source):
     assert stats["sequencia"] == 0
 
 
+def test_mesma_foto_em_duas_fontes_conta_n_fontes(migrated_engine, tmp_path):
+    """Cópia da mesma foto em fontes diferentes: o grupo sabe que é um
+    vínculo entre catálogos (n_fontes=2), não só espaço a recuperar."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        f1 = Source(caminho="/fotos/pasta")
+        f2 = Source(caminho="/fotos/takeout")
+        session.add_all([f1, f2])
+        session.flush()
+        _inserir_midia(session, f1.id, "raw.jpg", "00000000000000aa",
+                       hash_rapido="xxh3:igual", tamanho=500)
+        _inserir_midia(session, f2.id, "copia.jpg", "00000000000000aa",
+                       hash_rapido="xxh3:igual2", tamanho=500)
+        session.commit()
+
+    DuplicateDetector(factory).detectar()
+    repo = DuplicateRepository(factory)
+    (grupo,) = repo.listar_grupos()
+    assert grupo.n_fontes == 2
+
+
 def test_bytes_recuperaveis(ambiente):
     factory, detector, fotos = ambiente
     detector.detectar()

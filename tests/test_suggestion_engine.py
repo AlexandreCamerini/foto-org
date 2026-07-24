@@ -27,11 +27,14 @@ class FakeGeocoder:
         return None
 
 
-def _media(source_id, nome, pasta, data=None, mtime=None, gps=None):
+def _media(source_id, nome, pasta, data=None, mtime=None, gps=None,
+           make=None, model=None, hash_rapido=None, phash=None):
     return MediaFile(
         source_id=source_id, caminho=f"{pasta}/{nome}", pasta=pasta, nome=nome,
         extensao="jpg", tamanho=100, data_capturada=data, mtime=mtime,
         gps_lat=gps[0] if gps else None, gps_lon=gps[1] if gps else None,
+        make=make, model=model, hash_rapido=hash_rapido,
+        hash_perceptual=phash,
     )
 
 
@@ -154,6 +157,90 @@ def test_destino_nao_duplica_ano_nem_pais(ambiente):
     # "{ano} - {viagem}" compõe "2024 - França"; {pais} some por ser igual
     # ao rótulo da viagem — nada de "2024 - 2024" nem "França/França".
     assert sugestao.destino_sugerido == "Viagens/2024 - França/Provence/Avignon"
+
+
+def test_gps_herdado_de_outra_fonte_gera_evidencia_e_destino(migrated_engine):
+    """Câmera sem GPS + telefone com GPS na mesma cena: a foto da câmera
+    herda a localização, com evidência explicando de quem veio."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        pasta_raw = Source(caminho="/fotos/raw")
+        fonte_tel = Source(caminho="/fotos/DCIM")
+        session.add_all([pasta_raw, fonte_tel])
+        session.flush()
+        # 3 fotos da câmera SEM GPS…
+        for i in range(3):
+            session.add(_media(
+                pasta_raw.id, f"raw_{i}.jpg", "/fotos/raw",
+                data=base + timedelta(minutes=5 * i),
+                make="Canon", model="EOS R6",
+            ))
+        # …e 2 do telefone COM GPS, minutos de distância.
+        for i in range(2):
+            session.add(_media(
+                fonte_tel.id, f"tel_{i}.jpg", "/fotos/DCIM",
+                data=base + timedelta(minutes=5 * i + 1),
+                gps=(43.95, 4.8083), make="Apple", model="iPhone 15",
+            ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    resultado = engine.gerar()
+    assert resultado["herancas_gps"] == 3
+
+    sugestao, evidencias = _sugestao_de(factory, "raw_0.jpg")
+    origens = {e.origem for e in evidencias}
+    assert "vizinhanca_temporal" in origens
+    heranca = next(e for e in evidencias if e.origem == "vizinhanca_temporal")
+    assert "herdado de 'tel_0.jpg'" in heranca.justificativa
+    assert "iPhone 15" in heranca.justificativa
+    # A localização herdada chega ao destino sugerido.
+    assert "Avignon" in sugestao.destino_sugerido
+
+
+def test_deriva_de_relogio_corrigida_pelas_ancoras(migrated_engine):
+    """Câmera 3h atrasada: as cópias no 'takeout' (mesmo phash, hora
+    certa) ancoram o offset e a herança volta a funcionar."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        pasta_raw = Source(caminho="/fotos/raw")
+        takeout = Source(caminho="/fotos/takeout")
+        session.add_all([pasta_raw, takeout])
+        session.flush()
+        # Âncoras: 2 fotos da câmera (hora errada) + cópias com GPS e hora
+        # certa no takeout (mesmo phash).
+        for i in range(2):
+            session.add(_media(
+                pasta_raw.id, f"anc_{i}.jpg", "/fotos/raw",
+                data=base + timedelta(minutes=i),
+                make="Canon", model="EOS R6", phash=f"ph_{i}",
+            ))
+            session.add(_media(
+                takeout.id, f"anc_takeout_{i}.jpg", "/fotos/takeout",
+                data=base + timedelta(hours=3, minutes=i),
+                gps=(43.95, 4.8083), phash=f"ph_{i}",
+            ))
+        # Foto nova da câmera sem cópia; doadora do takeout 1min depois
+        # (na linha do tempo corrigida).
+        session.add(_media(
+            pasta_raw.id, "nova.jpg", "/fotos/raw",
+            data=base + timedelta(minutes=30),
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            takeout.id, "doadora.jpg", "/fotos/takeout",
+            data=base + timedelta(hours=3, minutes=31),
+            gps=(43.95, 4.8083),
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "nova.jpg")
+    assert any(e.origem == "vizinhanca_temporal" for e in evidencias)
 
 
 def test_viagem_multipais_rotulada_pelas_pernas(migrated_engine):
