@@ -13,6 +13,9 @@ class DuplicateLevel(enum.StrEnum):
     EXATO = "exato"           # mesmo hash criptográfico
     CONTEUDO = "conteudo"     # mesmos pixels, metadados/compressão diferentes
     VISUAL = "visual"         # perceptualmente semelhantes (phash)
+    # Frames da mesma câmera a segundos de distância: rajada/variações de
+    # uma cena, não cópias — o usuário escolhe o melhor, não "remove dups".
+    SEQUENCIA = "sequencia"
 
 
 class DuplicateRole(enum.StrEnum):

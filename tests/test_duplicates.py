@@ -1,4 +1,5 @@
 import shutil
+from datetime import datetime, timedelta
 
 import pytest
 from PIL import Image
@@ -13,6 +14,7 @@ from fotoorganizer.models import (
     DuplicateLevel,
     DuplicateRole,
     MediaFile,
+    Source,
 )
 from fotoorganizer.repositories import DuplicateRepository
 from fotoorganizer.scanner import CatalogScanner
@@ -167,6 +169,114 @@ def test_acoes_do_repositorio(ambiente):
     repo.desfazer_grupo(grupo.id)
     atual = next(g for g in repo.listar_grupos() if g.id == grupo.id)
     assert not atual.decidido
+
+
+# -- rajadas (sequência) vs duplicata visual ---------------------------------
+def _inserir_midia(session, source_id, nome, phash, *, make="Canon",
+                   model="EOS R6", quando=None, tamanho=1000,
+                   hash_rapido=None):
+    """Linha de catálogo direto no banco: phash já preenchido faz a
+    detecção pular qualquer acesso a arquivo."""
+    media = MediaFile(
+        source_id=source_id, caminho=f"/fake/{nome}", pasta="/fake",
+        nome=nome, extensao="jpg", tamanho=tamanho,
+        hash_rapido=hash_rapido or f"xxh3:{nome}",
+        hash_perceptual=phash, make=make, model=model,
+        data_capturada=quando,
+    )
+    session.add(media)
+    return media
+
+
+@pytest.fixture()
+def factory_com_source(migrated_engine):
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        source = Source(caminho="/fake")
+        session.add(source)
+        session.commit()
+        source_id = source.id
+    return factory, source_id
+
+
+def test_rajada_mesma_camera_vira_sequencia(factory_com_source):
+    factory, source_id = factory_com_source
+    base = datetime(2025, 5, 24, 17, 0, 0)
+    with factory() as session:
+        # phash a distância 2, mesma câmera, 2s entre frames.
+        _inserir_midia(session, source_id, "burst_1.jpg",
+                       "0000000000000000", quando=base)
+        _inserir_midia(session, source_id, "burst_2.jpg",
+                       "0000000000000003", quando=base + timedelta(seconds=2))
+        session.commit()
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["sequencia"] == 1
+    assert stats["visual"] == 0
+
+    with factory() as session:
+        grupo = session.scalars(select(DuplicateGroup)).one()
+        assert grupo.nivel == DuplicateLevel.SEQUENCIA
+
+
+def test_phash_identico_em_rajada_tambem_e_sequencia(factory_com_source):
+    factory, source_id = factory_com_source
+    base = datetime(2025, 5, 24, 17, 0, 0)
+    with factory() as session:
+        # Cena estática em burst: phash idêntico, bytes diferentes.
+        _inserir_midia(session, source_id, "static_1.jpg",
+                       "00000000000000ff", quando=base)
+        _inserir_midia(session, source_id, "static_2.jpg",
+                       "00000000000000ff", quando=base + timedelta(seconds=1))
+        session.commit()
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["sequencia"] == 1
+    assert stats["conteudo"] == 0
+
+
+def test_fotos_parecidas_de_cameras_diferentes_seguem_visuais(factory_com_source):
+    factory, source_id = factory_com_source
+    base = datetime(2025, 5, 24, 17, 0, 0)
+    with factory() as session:
+        _inserir_midia(session, source_id, "a.jpg", "0000000000000000",
+                       model="EOS R6", quando=base)
+        _inserir_midia(session, source_id, "b.jpg", "0000000000000003",
+                       model="iPhone 15", quando=base + timedelta(seconds=2))
+        session.commit()
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["visual"] == 1
+    assert stats["sequencia"] == 0
+
+
+def test_parecidas_com_horas_de_distancia_nao_sao_rajada(factory_com_source):
+    factory, source_id = factory_com_source
+    base = datetime(2025, 5, 24, 17, 0, 0)
+    with factory() as session:
+        _inserir_midia(session, source_id, "a.jpg", "0000000000000000",
+                       quando=base)
+        _inserir_midia(session, source_id, "b.jpg", "0000000000000003",
+                       quando=base + timedelta(hours=3))
+        session.commit()
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["visual"] == 1
+    assert stats["sequencia"] == 0
+
+
+def test_sem_data_de_captura_nao_afirma_rajada(factory_com_source):
+    factory, source_id = factory_com_source
+    with factory() as session:
+        _inserir_midia(session, source_id, "a.jpg", "0000000000000000",
+                       quando=None)
+        _inserir_midia(session, source_id, "b.jpg", "0000000000000003",
+                       quando=None)
+        session.commit()
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["visual"] == 1
+    assert stats["sequencia"] == 0
 
 
 def test_bytes_recuperaveis(ambiente):

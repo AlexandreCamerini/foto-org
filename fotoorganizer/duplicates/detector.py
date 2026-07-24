@@ -1,11 +1,14 @@
-"""Detecção de duplicatas em três níveis — somente leitura, nada é excluído.
+"""Detecção de duplicatas em quatro níveis — somente leitura, nada é excluído.
 
 1. EXATO     — mesmo SHA-256 (bytes idênticos), confirmado sob demanda a
                partir de candidatos por (tamanho, hash rápido).
 2. CONTEUDO  — mesmo phash (distância 0) com bytes diferentes: reexports,
                recompressões, metadados alterados.
-3. VISUAL    — phash a distância 1..LIMIAR: sequências, edições leves,
-               redimensionamentos.
+3. VISUAL    — phash a distância 1..LIMIAR: edições leves,
+               redimensionamentos, recortes pequenos.
+4. SEQUENCIA — grupo phash cujos membros são da MESMA câmera a segundos de
+               distância: rajada/variações de uma cena. Não é duplicata —
+               apresentar como tal induziria a descartar o melhor frame.
 
 Grupos com decisão do usuário (algum papel definido) são preservados na
 redetecção; os demais são regenerados.
@@ -15,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from datetime import timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -35,6 +39,21 @@ from fotoorganizer.thumbnails import ThumbnailCache
 log = logging.getLogger(__name__)
 
 LIMIAR_VISUAL = 8
+# Intervalo máximo entre frames consecutivos para caracterizar rajada.
+GAP_RAJADA = timedelta(seconds=10)
+
+
+def _eh_rajada(membros) -> bool:
+    """Mesma câmera e todos os frames a ≤ GAP_RAJADA um do outro. Sem data
+    de captura ou sem câmera identificada, não se afirma rajada."""
+    datas = [m.data_capturada for m in membros]
+    if any(d is None for d in datas):
+        return False
+    cameras = {(m.make, m.model) for m in membros}
+    if len(cameras) != 1 or cameras == {(None, None)}:
+        return False
+    datas.sort()
+    return all(b - a <= GAP_RAJADA for a, b in zip(datas, datas[1:]))
 
 
 class DuplicateDetector:
@@ -63,7 +82,7 @@ class DuplicateDetector:
             if progress:
                 progress("Agrupando…")
             ja_agrupados = self._media_ids_em_grupos(session)
-            stats = {"exato": 0, "conteudo": 0, "visual": 0,
+            stats = {"exato": 0, "conteudo": 0, "visual": 0, "sequencia": 0,
                      "preservados": preservados}
 
             # Cada grupo exato mantém 1 representante elegível na passada de
@@ -146,15 +165,19 @@ class DuplicateDetector:
                         continue
                     (identicos if dist == 0 else parecidos).append(outro)
 
-            if identicos:
-                membros = [media, *identicos]
-                self._criar_grupo(session, DuplicateLevel.CONTEUDO, membros)
-                stats["conteudo"] += 1
-                visitados |= {m.id for m in membros}
-            elif parecidos:
-                membros = [media, *parecidos]
-                self._criar_grupo(session, DuplicateLevel.VISUAL, membros)
-                stats["visual"] += 1
+            if identicos or parecidos:
+                membros = [media, *identicos] if identicos else [media, *parecidos]
+                # Rajada tem precedência sobre os dois níveis de phash:
+                # até phash idêntico (cena estática em burst) não é cópia
+                # se veio da mesma câmera em segundos.
+                if _eh_rajada(membros):
+                    nivel = DuplicateLevel.SEQUENCIA
+                elif identicos:
+                    nivel = DuplicateLevel.CONTEUDO
+                else:
+                    nivel = DuplicateLevel.VISUAL
+                self._criar_grupo(session, nivel, membros)
+                stats[nivel.value] += 1
                 visitados |= {m.id for m in membros}
             else:
                 visitados.add(media.id)

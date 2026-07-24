@@ -20,6 +20,7 @@ _NIVEL_ROTULO = {
     DuplicateLevel.EXATO: "Idênticos",
     DuplicateLevel.CONTEUDO: "Mesmo conteúdo",
     DuplicateLevel.VISUAL: "Parecidos",
+    DuplicateLevel.SEQUENCIA: "Sequência (rajada)",
 }
 
 
