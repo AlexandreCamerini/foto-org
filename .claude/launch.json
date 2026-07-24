@@ -11,6 +11,15 @@
       "port": 8000
     },
     {
+      "name": "foto-organizer-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/acamerini/Claude/Projects/foto-organizer && .venv/bin/python -m fotoorganizer web --porta 8765"
+      ],
+      "port": 8765
+    },
+    {
       "name": "foto-organizer-streamlit",
       "runtimeExecutable": "bash",
       "runtimeArgs": [

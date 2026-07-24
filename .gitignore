@@ -12,3 +12,7 @@ database/*.db
 .DS_Store
 .vscode/
 .idea/
+
+# webapp
+webapp/node_modules/
+webapp/dist/

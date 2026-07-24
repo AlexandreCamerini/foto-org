@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* Tokens da direção de arte (docs/DIRECAO_DE_ARTE.md): a foto é a cor da
+   interface — chrome neutro, escuro e silencioso. */
+@theme {
+  --color-janela: #1e1e1e;
+  --color-painel: #252526;
+  --color-cartao: #2d2d30;
+  --color-borda: #3e3e42;
+  --color-texto: #e8e8e8;
+  --color-texto-2: #9da0a6;
+  --color-texto-3: #6b6e76;
+  --color-acento: #3b82f6;
+  --color-conf-alta: #34d399;
+  --color-conf-media: #fbbf24;
+  --color-conf-baixa: #f87171;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background: var(--color-janela);
+  color: var(--color-texto);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Título de painel: 11px uppercase tracking largo. */
+.titulo-painel {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-texto-2);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-borda);
+  border-radius: 5px;
+  border: 2px solid var(--color-janela);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

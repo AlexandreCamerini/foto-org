@@ -102,6 +102,28 @@ def cmd_bench(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_web(args: argparse.Namespace) -> int:
+    """Servidor local da UI web — escuta apenas em 127.0.0.1."""
+    import uvicorn
+
+    from fotoorganizer.database import (
+        create_db_engine,
+        create_session_factory,
+        upgrade_to_head,
+    )
+    from fotoorganizer.server import create_app
+
+    settings = load_settings()
+    settings.ensure_dirs()
+    upgrade_to_head(settings.db_path)
+    factory = create_session_factory(create_db_engine(settings.db_path))
+    app = create_app(settings, factory)
+    print(f"Foto Organizer web em http://127.0.0.1:{args.porta} "
+          f"(catálogo: {settings.db_path})")
+    uvicorn.run(app, host="127.0.0.1", port=args.porta, log_level="warning")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING)
     parser = argparse.ArgumentParser(prog="fotoorganizer")
@@ -110,6 +132,10 @@ def main(argv: list[str] | None = None) -> int:
     p_scan = sub.add_parser("scan", help="varre pastas para o catálogo (read-only)")
     p_scan.add_argument("pastas", nargs="+")
     p_scan.set_defaults(func=cmd_scan)
+
+    p_web = sub.add_parser("web", help="UI web local (127.0.0.1)")
+    p_web.add_argument("--porta", type=int, default=8765)
+    p_web.set_defaults(func=cmd_web)
 
     p_bench = sub.add_parser("bench", help="benchmark de indexação com fixtures")
     p_bench.add_argument("-n", "--quantidade", type=int, default=500)
