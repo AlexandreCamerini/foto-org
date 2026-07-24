@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import io
 import logging
+import os
+import threading
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -51,7 +53,12 @@ def generate_thumbnail(source: Path, destino: Path, size: int = THUMB_SIZE) -> b
             if img.mode not in ("RGB", "L"):
                 img = img.convert("RGB")
             destino.parent.mkdir(parents=True, exist_ok=True)
-            tmp = destino.with_suffix(".tmp")
+            # Sufixo único por processo+thread: duas cópias idênticas do
+            # mesmo conteúdo geradas em paralelo (scan multi-thread) têm a
+            # mesma chave e não podem disputar o mesmo .tmp.
+            tmp = destino.with_suffix(
+                f".{os.getpid()}-{threading.get_ident()}.tmp"
+            )
             img.save(tmp, "JPEG", quality=_JPEG_QUALITY)
             tmp.replace(destino)
         return True

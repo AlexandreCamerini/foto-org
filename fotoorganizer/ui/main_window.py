@@ -225,7 +225,8 @@ class MainWindow(QMainWindow):
         if self._scan_worker is not None and self._scan_worker.isRunning():
             return
         scanner = CatalogScanner(
-            self._session_factory, PurePythonExtractor(), self._settings.scanner
+            self._session_factory, PurePythonExtractor(), self._settings.scanner,
+            thumb_cache=ThumbnailCache(self._settings.cache_dir),
         )
         self._scan_worker = ScanWorker(scanner, caminho, parent=self)
         self._scan_worker.progresso.connect(self.sidebar.scan_progresso)

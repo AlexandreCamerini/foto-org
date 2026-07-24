@@ -27,12 +27,16 @@ def _build_scanner(db_path: Path):
     )
     from fotoorganizer.metadata import PurePythonExtractor
     from fotoorganizer.scanner import CatalogScanner
+    from fotoorganizer.thumbnails import ThumbnailCache
 
     settings = load_settings()
     upgrade_to_head(db_path)
     engine = create_db_engine(db_path)
     factory = create_session_factory(engine)
-    return CatalogScanner(factory, PurePythonExtractor(), settings.scanner)
+    return CatalogScanner(
+        factory, PurePythonExtractor(), settings.scanner,
+        thumb_cache=ThumbnailCache(settings.cache_dir),
+    )
 
 
 def _print_progress(metrics, caminho: str) -> None:

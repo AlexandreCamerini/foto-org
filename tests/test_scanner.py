@@ -142,6 +142,25 @@ def test_fonte_indisponivel(scanner_env, tmp_path):
         assert source.disponivel is False
 
 
+def test_scan_deixa_thumbnail_pronta_no_cache(migrated_engine, tmp_path):
+    from fotoorganizer.thumbnails import ThumbnailCache
+
+    fotos = tmp_path / "fotos"
+    make_jpeg(fotos / "a.jpg", seed=1)
+    cache = ThumbnailCache(tmp_path / "cache")
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(
+        factory, PurePythonExtractor(), ScannerSettings(), thumb_cache=cache
+    )
+
+    scanner.scan_source(fotos)
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).one()
+    assert media.hash_rapido is not None
+    assert cache.get(media.hash_rapido) is not None  # gerada durante o scan
+
+
 def test_fonte_reutilizada_entre_scans(scanner_env, tmp_path):
     scanner, extractor, factory = scanner_env
     make_jpeg(tmp_path / "a.jpg")

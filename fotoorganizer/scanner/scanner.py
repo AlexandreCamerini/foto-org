@@ -38,6 +38,7 @@ from fotoorganizer.models import (
 )
 from fotoorganizer.scanner.discovery import DiscoveryConfig, iter_media_files
 from fotoorganizer.security.hashing import quick_signature
+from fotoorganizer.thumbnails import ThumbnailCache
 
 log = logging.getLogger(__name__)
 
@@ -103,10 +104,12 @@ class CatalogScanner:
         session_factory: sessionmaker[Session],
         extractor: MetadataExtractor,
         settings: ScannerSettings,
+        thumb_cache: ThumbnailCache | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._extractor = extractor
         self._settings = settings
+        self._thumb_cache = thumb_cache
 
     def scan_source(
         self,
@@ -262,7 +265,15 @@ class CatalogScanner:
 
     def _extrair(self, path: Path):
         """Roda nas threads do pool: só leitura do arquivo, nada de DB."""
-        return self._extractor.extract(path), quick_signature(path)
+        meta = self._extractor.extract(path)
+        assinatura = quick_signature(path)
+        if self._thumb_cache is not None:
+            # Aproveita que o arquivo já está sendo lido para deixar a
+            # miniatura pronta: a grade e o phash das duplicatas deixam de
+            # reabrir o original (em RAW, ~0.4s a menos por arquivo depois).
+            # Best-effort: imagem indecodificável vira placeholder na UI.
+            self._thumb_cache.get_or_generate(assinatura, path)
+        return meta, assinatura
 
     def _gravar(
         self, session: Session, source_id: int, path: Path, stat, meta,
