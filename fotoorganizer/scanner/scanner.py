@@ -148,6 +148,7 @@ class CatalogScanner:
             seguir_symlinks=self._settings.seguir_symlinks,
             padroes_ignorados=tuple(source.padroes_ignorados or ()),
         )
+        conhecidos = self._carregar_conhecidos(session, source.id)
         desde_commit = 0
 
         for path in iter_media_files(Path(source.caminho), config):
@@ -158,7 +159,9 @@ class CatalogScanner:
 
             metrics.vistos += 1
             try:
-                bytes_indexados = self._index_file(session, source.id, path)
+                bytes_indexados = self._index_file(
+                    session, source.id, path, conhecidos
+                )
                 if bytes_indexados is not None:
                     metrics.indexados += 1
                     metrics.bytes_processados += bytes_indexados
@@ -202,18 +205,48 @@ class CatalogScanner:
             scan.checkpoint = {"ultimo_caminho": checkpoint_path}
         session.commit()
 
-    def _index_file(self, session: Session, source_id: int, path: Path) -> int | None:
+    def _carregar_conhecidos(
+        self, session: Session, source_id: int
+    ) -> dict[str, tuple[int, float | None, int | None]]:
+        """Assinaturas de todos os arquivos já catalogados da fonte, numa
+        query só: caminho → (tamanho, mtime_ts, inode). No re-scan, o comum
+        (arquivo inalterado) é decidido em memória — sem um SELECT por
+        arquivo, que em 30k fotos viravam 30k queries."""
+        rows = session.execute(
+            select(
+                MediaFile.caminho, MediaFile.tamanho,
+                MediaFile.mtime, MediaFile.inode,
+            ).where(MediaFile.source_id == source_id)
+        )
+        return {
+            caminho: (
+                tamanho, mtime.timestamp() if mtime else None, inode
+            )
+            for caminho, tamanho, mtime, inode in rows
+        }
+
+    def _index_file(
+        self,
+        session: Session,
+        source_id: int,
+        path: Path,
+        conhecidos: dict[str, tuple[int, float | None, int | None]],
+    ) -> int | None:
         """Indexa um arquivo; retorna os bytes lidos, ou None se inalterado."""
         stat = path.stat()
         caminho = str(path)
 
+        assinatura = conhecidos.get(caminho)
+        if assinatura is not None and self._unchanged_sig(assinatura, stat):
+            return None
+
+        # Só arquivos novos/alterados pagam o SELECT individual (para obter
+        # o registro ORM a atualizar).
         existing = session.scalar(
             select(MediaFile).where(
                 MediaFile.source_id == source_id, MediaFile.caminho == caminho
             )
         )
-        if existing is not None and self._unchanged(existing, stat):
-            return None
 
         meta = self._extractor.extract(path)
         media = existing or MediaFile(
@@ -255,13 +288,15 @@ class CatalogScanner:
         return stat.st_size
 
     @staticmethod
-    def _unchanged(media: MediaFile, stat) -> bool:
-        if media.tamanho != stat.st_size or media.inode != stat.st_ino:
+    def _unchanged_sig(
+        assinatura: tuple[int, float | None, int | None], stat
+    ) -> bool:
+        tamanho, mtime_ts, inode = assinatura
+        if tamanho != stat.st_size or inode != stat.st_ino:
             return False
-        if media.mtime is None:
+        if mtime_ts is None:
             return False
-        delta = abs(media.mtime.timestamp() - _ts(stat.st_mtime).timestamp())
-        return delta < _MTIME_TOLERANCE
+        return abs(mtime_ts - _ts(stat.st_mtime).timestamp()) < _MTIME_TOLERANCE
 
     def _get_or_create_source(
         self, session: Session, caminho: Path, padroes_ignorados: tuple[str, ...]
