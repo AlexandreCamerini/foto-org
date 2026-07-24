@@ -14,7 +14,16 @@ UI (PySide6, main thread) ⇄ ViewModels ⇄ Repositories/Services ⇄ Workers
 
 ## Schema inicial (Alembic, migração 0001)
 
-- `sources` — pasta/volume raiz, apelido, ativo, disponível, ignorar_padrões.
+- `sources` — pasta/volume raiz, tipo (pasta | apple_photos |
+  google_takeout — migração 0003), apelido, ativo, disponível,
+  ignorar_padrões. Catálogos externos (Apple Fotos via osxphotos,
+  Google Takeout via sidecars JSON) entram como fontes do MESMO catálogo
+  pelo `ExternalCatalogImporter` (`fotoorganizer/sources/`): o arquivo
+  manda (EXIF), o catálogo externo preenche lacunas (data/GPS de export)
+  e contribui contexto em `metadata_entries` (namespaces `apple`,
+  `google`). O cruzamento entre fontes (deriva de relógio por
+  pares-âncora + herança de GPS por proximidade temporal) vive em
+  `grouping/correlacao.py` — ver docs/AGRUPAMENTO.md.
 - `scan_sessions` — fonte, início/fim, status (rodando/pausado/concluído),
   checkpoint, contadores (arquivos, erros, bytes), versão do scanner.
 - `media_files` — id, source_id, caminho, volume, pasta, nome, extensão,

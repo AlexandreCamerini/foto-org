@@ -15,6 +15,14 @@
   sem opt-in explícito (`[privacidade] servicos_externos`, desligado por
   padrão) — e, quando ligado, a UI indica visualmente o que será enviado e
   permite cancelar.
+- **Catálogos externos sem rede.** A importação do Apple Fotos lê a
+  biblioteca local via osxphotos (somente leitura; exige Acesso Total ao
+  Disco concedido pelo usuário) e a do Google Photos usa a pasta do
+  Google Takeout que o usuário baixou — o app não fala com a API do
+  Google nem com o iCloud. O cruzamento de informações entre fontes
+  (herança de GPS, deriva de relógio) acontece inteiramente no catálogo
+  local e vira evidência revisável; nada é escrito de volta nos arquivos
+  nem nos catálogos de origem.
 - **Sem telemetria.** O app não coleta uso, não liga para casa, não tem conta.
 - **Logs sem conteúdo sensível.** Logs registram eventos e caminhos de
   arquivo (necessários para diagnóstico local), nunca conteúdo de imagem,

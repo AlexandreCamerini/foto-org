@@ -20,9 +20,16 @@ uma foto original.
   reversa **offline** do GPS, país/cidade pelo nome das pastas, viagens por
   lacuna temporal, tudo com nível de confiança e justificativa ("o país
   veio do GPS", "a cidade veio da pasta, confiança média").
-- **Detecta duplicatas** em 3 níveis: idênticas (SHA-256), mesmo conteúdo
-  (phash igual) e visualmente parecidas — revisão lado a lado, nunca
-  exclusão automática.
+- **Cruza fontes** para usar a informação mais correta disponível: importa
+  os catálogos do **Apple Fotos** (leitura local, opt-in) e do **Google
+  Takeout** (pasta exportada, sem rede) e correlaciona a linha do tempo —
+  a foto da câmera sem GPS herda a localização da foto do telefone tirada
+  minutos antes, com deriva de relógio corrigida automaticamente e
+  evidência dizendo de onde veio.
+- **Detecta duplicatas** em 4 níveis: idênticas (SHA-256), mesmo conteúdo
+  (phash igual), visualmente parecidas e sequências/rajadas (mesma câmera
+  em segundos) — revisão lado a lado, nunca exclusão automática. A mesma
+  foto em duas fontes é tratada como vínculo entre catálogos, não lixo.
 - **Planeja e executa cópias** com dry-run obrigatório, sobrescrita
   impossível (criação exclusiva no SO), verificação de hash antes/depois e
   audit log completo.

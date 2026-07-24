@@ -54,6 +54,27 @@ Consequências no destino:
   Anos", não ".../Serena 15 Anos/São Paulo".
 - Template padrão: `{categoria}/{ano} - {viagem}/{evento}/{regiao}/{cidade}`.
 
+## 2a. Correlação temporal entre fontes (lógica 4.1)
+
+A câmera boa não grava GPS; o telefone grava. Antes da cascata, o motor
+cruza as fontes (`grouping/correlacao.py`):
+
+1. **Deriva de relógio** — a MESMA foto presente em duas fontes (mesmo
+   hash rápido, ou mesmo phash quando o export recomprimiu) é um
+   par-âncora; a mediana de (hora na fonte com GPS − hora na câmera) por
+   câmera corrige relógio errado/fuso não ajustado. Âncoras dispersas
+   (MAD > 3 min) ou insuficientes (< 2) são descartadas.
+2. **Herança de GPS** — foto sem GPS herda a localização da foto com GPS
+   de OUTRA origem (fonte ou câmera diferente) mais próxima na linha do
+   tempo corrigida, janela ±10 min. Evidência `vizinhanca_temporal`
+   (0.75×fator, fator 1.0 até Δt de 2 min decaindo a 0.6 na borda) com
+   justificativa nomeando a doadora.
+
+As coordenadas efetivas (próprias ou herdadas) alimentam a cascata
+(regras 4/5), as pernas multi-país e a transição casa↔fora. "Casa" usa
+só GPS real — herdadas repetiriam as doadoras e inflariam a célula.
+Nada é escrito em EXIF; a herança existe apenas como evidência.
+
 ## 2b. Escolha do modelo (benchmark)
 
 A cascata vive em `grouping/classifier.py` como função pura
