@@ -182,6 +182,43 @@ def test_filtro_por_viagem(client, migrated_engine):
     assert filtrado["total"] == 1
 
 
+def test_duplicatas_detectar_e_decidir(migrated_engine, tmp_path):
+    import shutil
+    import time
+
+    fotos = tmp_path / "fotos"
+    original = make_jpeg(fotos / "original.jpg", seed=7)
+    shutil.copy(original, fotos / "copia.jpg")
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()) \
+        .scan_source(fotos)
+    client = TestClient(create_app(settings, factory))
+
+    assert client.post("/api/duplicatas/detectar").status_code == 200
+    for _ in range(100):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+
+    (grupo,) = client.get("/api/duplicatas").json()
+    assert grupo["nivel"] == "exato"
+
+    principal = grupo["membros"][0]["media_id"]
+    client.post(f"/api/duplicatas/{grupo['id']}/principal",
+                json={"media_id": principal})
+    (depois,) = client.get("/api/duplicatas").json()
+    assert depois["decidido"] is True
+    papeis = {m["media_id"]: m["papel"] for m in depois["membros"]}
+    assert papeis[principal] == "principal"
+
+    client.post(f"/api/duplicatas/{grupo['id']}/desfazer")
+    (final,) = client.get("/api/duplicatas").json()
+    assert final["decidido"] is False
+
+
 def test_filtros_viagens_sugestoes_duplicatas_respondem(client):
     filtros = client.get("/api/midia/filtros").json()
     assert "jpg" in filtros["extensoes"]

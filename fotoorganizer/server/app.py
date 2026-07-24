@@ -60,6 +60,10 @@ class AcaoSugestoesBody(BaseModel):
     ids: list[int]
     acao: str  # aprovar | rejeitar | desfazer
 
+
+class PrincipalBody(BaseModel):
+    media_id: int
+
 _PREVIEW_SIZE = 2048
 
 _WEBAPP_DIST = Path(__file__).resolve().parents[2] / "webapp" / "dist"
@@ -320,6 +324,27 @@ def create_app(
         if body.acao not in acoes:
             raise HTTPException(422, f"ação desconhecida: {body.acao}")
         return {"afetadas": acoes[body.acao](body.ids)}
+
+    @app.post("/api/duplicatas/detectar")
+    def detectar_duplicatas() -> dict:
+        if not jobs.iniciar_duplicatas():
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.post("/api/duplicatas/{group_id}/principal")
+    def duplicata_principal(group_id: int, body: PrincipalBody) -> dict:
+        duplicate_repo.escolher_principal(group_id, body.media_id)
+        return {"ok": True}
+
+    @app.post("/api/duplicatas/{group_id}/ignorar")
+    def duplicata_ignorar(group_id: int) -> dict:
+        duplicate_repo.ignorar_grupo(group_id)
+        return {"ok": True}
+
+    @app.post("/api/duplicatas/{group_id}/desfazer")
+    def duplicata_desfazer(group_id: int) -> dict:
+        duplicate_repo.desfazer_grupo(group_id)
+        return {"ok": True}
 
     # -- trabalhos em background (scan/importação) ---------------------------
     @app.post("/api/scan")

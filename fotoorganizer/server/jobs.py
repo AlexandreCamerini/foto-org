@@ -70,6 +70,11 @@ class JobManager:
             "sugestoes", "catálogo inteiro", self._rodar_sugestoes
         )
 
+    def iniciar_duplicatas(self) -> bool:
+        return self._iniciar(
+            "duplicatas", "catálogo inteiro", self._rodar_duplicatas
+        )
+
     def _iniciar(self, tipo: str, alvo: str, funcao, *args) -> bool:
         if self.ocupado():
             return False
@@ -136,6 +141,27 @@ class JobManager:
             )
         except Exception as exc:
             log.exception("job sugestões falhou")
+            self._atualizar(status="erro", mensagem=str(exc))
+
+    def _rodar_duplicatas(self) -> None:
+        try:
+            from fotoorganizer.duplicates import DuplicateDetector
+
+            detector = DuplicateDetector(
+                self._factory, ThumbnailCache(self._settings.cache_dir)
+            )
+            stats = detector.detectar(
+                progress=lambda etapa: self._atualizar(etapa=etapa)
+            )
+            self._atualizar(
+                status="concluido",
+                processados=sum(
+                    v for k, v in stats.items() if k != "preservados"
+                ),
+                resultado=stats,
+            )
+        except Exception as exc:
+            log.exception("job duplicatas falhou")
             self._atualizar(status="erro", mensagem=str(exc))
 
     def _advisor(self):

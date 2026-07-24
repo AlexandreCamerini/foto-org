@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FiltrosMidia } from "./api";
 import Inspector from "./components/Inspector";
 import Loupe from "./components/Loupe";
+import Duplicates from "./components/Duplicates";
 import PhotoGrid from "./components/PhotoGrid";
 import Review from "./components/Review";
 import Sidebar from "./components/Sidebar";
@@ -120,11 +121,7 @@ export default function App() {
             />
           )}
           {aba === "Revisão" && <Review job={job} />}
-          {aba === "Duplicatas" && (
-            <div className="flex flex-1 items-center justify-center text-texto-2">
-              Duplicatas — em construção nesta fase.
-            </div>
-          )}
+          {aba === "Duplicatas" && <Duplicates job={job} />}
           {aba === "Biblioteca" && (
             <>
               <div className="flex items-center gap-2 border-b border-borda px-3 py-2">

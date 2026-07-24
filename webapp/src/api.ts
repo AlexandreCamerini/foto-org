@@ -129,6 +129,27 @@ export const api = {
     if (!resposta.ok) throw new Error(`erro ${resposta.status}`);
     return resposta.json() as Promise<{ afetadas: number }>;
   },
+  duplicatas: () => json<GrupoDuplicatas[]>("/api/duplicatas"),
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
 };
+
+export interface MembroDuplicata {
+  member_id: number;
+  media_id: number;
+  nome: string;
+  caminho: string;
+  tamanho: number;
+  papel: string;
+  source_id: number;
+}
+
+export interface GrupoDuplicatas {
+  id: number;
+  nivel: string;
+  rotulo: string;
+  decidido: boolean;
+  bytes_recuperaveis: number;
+  n_fontes: number;
+  membros: MembroDuplicata[];
+}

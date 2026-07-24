@@ -75,6 +75,7 @@ export function useJob() {
     importarTakeout: (caminho: string) =>
       disparar("/api/importar", { tipo: "google_takeout", caminho }),
     gerarSugestoes: () => disparar("/api/sugestoes/gerar", {}),
+    detectarDuplicatas: () => disparar("/api/duplicatas/detectar", {}),
     cancelar: () => fetch("/api/job/cancelar", { method: "POST" }),
   };
 }
