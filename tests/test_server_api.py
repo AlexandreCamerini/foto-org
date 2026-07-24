@@ -67,6 +67,67 @@ def test_thumb_e_preview_sao_jpeg(client):
     assert preview.content[:2] == b"\xff\xd8"
 
 
+def test_scan_em_background_indexa_e_reporta(migrated_engine, tmp_path):
+    import time
+
+    fotos = tmp_path / "novas"
+    for i in range(4):
+        make_jpeg(fotos / f"n_{i}.jpg", seed=i)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    client = TestClient(create_app(settings, factory))
+
+    resposta = client.post("/api/scan", json={"caminho": str(fotos)})
+    assert resposta.status_code == 200
+
+    for _ in range(100):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+    assert estado["processados"] == 4
+    assert client.get("/api/status").json()["total"] == 4
+
+    # Pasta inexistente e tipo de import inválido: erros claros.
+    assert client.post(
+        "/api/scan", json={"caminho": "/nao/existe"}
+    ).status_code == 422
+    assert client.post(
+        "/api/importar", json={"tipo": "dropbox"}
+    ).status_code == 422
+
+
+def test_import_takeout_em_background(migrated_engine, tmp_path):
+    import json as jsonlib
+    import time
+
+    raiz = tmp_path / "Takeout" / "Google Photos"
+    foto = make_jpeg(raiz / "Album" / "IMG.jpg", data_exif=None)
+    foto.with_name(foto.name + ".json").write_text(jsonlib.dumps({
+        "photoTakenTime": {"timestamp": "1730467800"},
+        "geoData": {"latitude": 1.0, "longitude": 2.0},
+    }), encoding="utf-8")
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    client = TestClient(create_app(settings, factory))
+
+    resposta = client.post(
+        "/api/importar",
+        json={"tipo": "google_takeout", "caminho": str(raiz)},
+    )
+    assert resposta.status_code == 200
+    for _ in range(100):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+    assert estado["processados"] == 1
+    (fonte,) = client.get("/api/fontes").json()
+    assert fonte["tipo"] == "google_takeout"
+
+
 def test_filtros_viagens_sugestoes_duplicatas_respondem(client):
     filtros = client.get("/api/midia/filtros").json()
     assert "jpg" in filtros["extensoes"]

@@ -5,6 +5,7 @@ import Inspector from "./components/Inspector";
 import Loupe from "./components/Loupe";
 import PhotoGrid from "./components/PhotoGrid";
 import Sidebar from "./components/Sidebar";
+import { useJob } from "./hooks/useJob";
 import { useMidia } from "./hooks/useMidia";
 
 const ABAS = ["Biblioteca", "Viagens", "Revisão", "Duplicatas"] as const;
@@ -27,6 +28,7 @@ export default function App() {
   };
   const midia = useMidia(filtros);
   const { itens, total, hasNextPage, fetchNextPage } = midia;
+  const job = useJob();
 
   // Filtro novo invalida a seleção por índice.
   useEffect(() => {
@@ -96,7 +98,7 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Sidebar fonteAtual={fonte} onSelecionar={setFonte} />
+        <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
 
         <main className="flex min-w-0 flex-1 flex-col">
           {aba === "Biblioteca" ? (

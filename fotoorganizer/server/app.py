@@ -14,9 +14,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import asyncio
+import json as jsonlib
+
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -36,10 +40,20 @@ from fotoorganizer.repositories import (
 )
 from fotoorganizer.repositories.media import MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters
+from fotoorganizer.server.jobs import JobManager
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.thumbnails.generator import generate_thumbnail
 
 log = logging.getLogger(__name__)
+
+
+class ScanBody(BaseModel):
+    caminho: str
+
+
+class ImportBody(BaseModel):
+    tipo: str  # apple_photos | google_takeout
+    caminho: str | None = None
 
 _PREVIEW_SIZE = 2048
 
@@ -79,6 +93,7 @@ def create_app(
     duplicate_repo = DuplicateRepository(session_factory)
     thumb_cache = ThumbnailCache(settings.cache_dir)
     preview_dir = settings.cache_dir / "previews"
+    jobs = JobManager(settings, session_factory)
 
     # -- status e fontes ---------------------------------------------------
     @app.get("/api/status")
@@ -292,6 +307,59 @@ def create_app(
             }
             for grupo in duplicate_repo.listar_grupos()
         ]
+
+    # -- trabalhos em background (scan/importação) ---------------------------
+    @app.post("/api/scan")
+    def iniciar_scan(body: ScanBody) -> dict:
+        caminho = Path(body.caminho).expanduser()
+        if not caminho.is_dir():
+            raise HTTPException(422, f"pasta não encontrada: {caminho}")
+        if not jobs.iniciar_scan(caminho):
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.post("/api/importar")
+    def iniciar_import(body: ImportBody) -> dict:
+        if body.tipo == "apple_photos":
+            iniciado = jobs.iniciar_import_apple()
+        elif body.tipo == "google_takeout":
+            if not body.caminho:
+                raise HTTPException(422, "informe a pasta do Takeout")
+            caminho = Path(body.caminho).expanduser()
+            if not caminho.is_dir():
+                raise HTTPException(422, f"pasta não encontrada: {caminho}")
+            iniciado = jobs.iniciar_import_takeout(caminho)
+        else:
+            raise HTTPException(422, f"tipo desconhecido: {body.tipo}")
+        if not iniciado:
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.get("/api/job")
+    def job_estado() -> dict:
+        return jobs.estado()
+
+    @app.post("/api/job/cancelar")
+    def job_cancelar() -> dict:
+        jobs.cancelar()
+        return jobs.estado()
+
+    @app.get("/api/progresso")
+    async def progresso() -> StreamingResponse:
+        """SSE com o estado do trabalho atual até ele terminar."""
+
+        async def stream():
+            anterior: dict | None = None
+            while True:
+                estado = jobs.estado()
+                if estado != anterior:
+                    yield f"data: {jsonlib.dumps(estado)}\n\n"
+                    anterior = estado
+                if estado.get("status") != "rodando":
+                    break
+                await asyncio.sleep(0.5)
+
+        return StreamingResponse(stream(), media_type="text/event-stream")
 
     # -- frontend estático -----------------------------------------------------
     if _WEBAPP_DIST.is_dir():
