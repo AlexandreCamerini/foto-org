@@ -156,6 +156,55 @@ def test_destino_nao_duplica_ano_nem_pais(ambiente):
     assert sugestao.destino_sugerido == "Viagens/2024 - França/Provence/Avignon"
 
 
+def test_viagens_coladas_separadas_pela_passagem_em_casa(migrated_engine):
+    """Duas idas à França com só 1 dia em casa no meio: o gap temporal de
+    3 dias não separa, a transição casa↔fora sim — devem virar 2 viagens."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 1, 10, 0)
+    casa_gps = (-23.55, -46.63)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # Massa de fotos em casa ao longo do ano — estabelece a "casa"
+        # (célula modal exige ≥20 fotos com GPS e ≥30% nela).
+        for i in range(22):
+            session.add(_media(
+                fonte.id, f"casa_{i}.jpg", "/fotos/dia a dia",
+                data=base - timedelta(days=10 * (i + 1)), gps=casa_gps,
+            ))
+        # Viagem A (dias 0-2), casa (dias 3-4), viagem B (dias 5-7):
+        # nenhuma lacuna chega a 3 dias.
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"ida_{i}.jpg", "/fotos/DCIM",
+                data=base + timedelta(days=i), gps=(43.95, 4.8083),
+            ))
+        for i in range(2):
+            session.add(_media(
+                fonte.id, f"pausa_{i}.jpg", "/fotos/DCIM",
+                data=base + timedelta(days=3 + i), gps=casa_gps,
+            ))
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"volta_{i}.jpg", "/fotos/DCIM",
+                data=base + timedelta(days=5 + i), gps=(43.95, 4.8083),
+            ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    resultado = engine.gerar()
+
+    assert resultado["viagens"] == 2
+    with factory() as session:
+        trips = list(session.scalars(select(Trip)))
+    assert len(trips) == 2
+    assert {t.nome for t in trips} == {"França"}
+    # Períodos distintos: A termina antes de B começar.
+    trips.sort(key=lambda t: t.inicio)
+    assert trips[0].fim < trips[1].inicio
+
+
 def test_regeneracao_preserva_decisao_do_usuario(ambiente):
     factory, engine = ambiente
     engine.gerar()

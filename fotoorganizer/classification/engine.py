@@ -28,7 +28,7 @@ from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_desti
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
 from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
-from fotoorganizer.grouping import agrupar_viagens
+from fotoorganizer.grouping import agrupar_viagens, dividir_por_transicao_casa
 from fotoorganizer.grouping.classifier import (
     ConfigClassificacao,
     DadosSessao,
@@ -144,12 +144,17 @@ class SuggestionEngine:
             for m in midias
             if (m.data_capturada or m.mtime) is not None
         ]
-        drafts = [
-            d for d in agrupar_viagens(itens) if d.n_fotos >= _MIN_FOTOS_SESSAO
-        ]
         casa = detectar_casa([
             (m.gps_lat, m.gps_lon) for m in midias if m.gps_lat is not None
         ])
+        drafts = agrupar_viagens(itens)
+        if casa is not None:
+            # Viagens coladas: o gap temporal não separa duas viagens com
+            # menos de 3 dias em casa no meio — a transição casa↔fora sim.
+            drafts = [
+                sub for d in drafts for sub in self._dividir_draft(d, por_id, casa)
+            ]
+        drafts = [d for d in drafts if d.n_fotos >= _MIN_FOTOS_SESSAO]
 
         sessoes: list[_Sessao] = []
         sessao_da_media: dict[int, _Sessao] = {}
@@ -162,6 +167,30 @@ class SuggestionEngine:
             for media_id in draft.media_ids:
                 sessao_da_media[media_id] = sessao
         return sessoes, sessao_da_media
+
+    def _dividir_draft(self, draft: ViagemDraft, por_id,
+                       casa) -> list[ViagemDraft]:
+        itens = []
+        for media_id in draft.media_ids:
+            media = por_id[media_id]
+            estado = None
+            if media.gps_lat is not None:
+                estado = (
+                    distancia_km(media.gps_lat, media.gps_lon, *casa)
+                    <= self._config.raio_casa_km
+                )
+            itens.append((media_id, media.data_capturada or media.mtime, estado))
+
+        segmentos = dividir_por_transicao_casa(itens)
+        if len(segmentos) <= 1:
+            return [draft]
+        return [
+            ViagemDraft(
+                inicio=seg[0][1], fim=seg[-1][1],
+                media_ids=[media_id for media_id, _ in seg],
+            )
+            for seg in segmentos
+        ]
 
     def _classificar(self, session: Session, sessao: _Sessao, membros,
                      casa) -> _Sessao:

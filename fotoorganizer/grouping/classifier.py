@@ -25,6 +25,9 @@ class ConfigClassificacao:
     duracao_max_evento: timedelta = timedelta(days=2)
     # Distância mediana até casa que caracteriza deslocamento (regra 4).
     dist_viagem_km: float = 100.0
+    # Raio em torno da casa para o corte de sessões por transição
+    # casa↔fora (viagens coladas com < GAP_NOVA_VIAGEM em casa no meio).
+    raio_casa_km: float = 50.0
     # Regra 5 só vale quando a casa é desconhecida: com casa conhecida, a
     # regra 4 (distância) é quem decide — senão férias EM CASA virariam
     # "viagem" só por durarem dias com GPS.

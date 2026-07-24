@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from fotoorganizer.grouping import agrupar_viagens
+from fotoorganizer.grouping import agrupar_viagens, dividir_por_transicao_casa
 
 
 def _dias(n: int) -> datetime:
@@ -35,3 +35,44 @@ def test_ordem_de_entrada_nao_importa():
 def test_dia_unico_tem_periodo_simples():
     viagens = agrupar_viagens([(1, _dias(0)), (2, _dias(0))])
     assert viagens[0].periodo_legivel() == "01/05/2024"
+
+
+# -- divisão por transição casa↔fora ----------------------------------------
+FORA, CASA, SEM_GPS = False, True, None
+
+
+def test_viagens_coladas_separadas_ao_passar_por_casa():
+    # [viagem A][2 dias em casa][viagem B] — gap temporal nunca > 3 dias.
+    itens = [
+        (1, _dias(0), FORA), (2, _dias(1), FORA),
+        (3, _dias(2), CASA), (4, _dias(3), CASA),
+        (5, _dias(4), FORA), (6, _dias(5), FORA),
+    ]
+    segmentos = dividir_por_transicao_casa(itens)
+    assert [[m for m, _ in seg] for seg in segmentos] == [[1, 2], [3, 4], [5, 6]]
+
+
+def test_foto_isolada_em_casa_nao_corta_viagem_real():
+    # Um único frame "em casa" no meio (GPS errado/escala) não confirma.
+    itens = [
+        (1, _dias(0), FORA), (2, _dias(1), FORA),
+        (3, _dias(2), CASA),
+        (4, _dias(3), FORA), (5, _dias(4), FORA),
+    ]
+    segmentos = dividir_por_transicao_casa(itens)
+    assert len(segmentos) == 1
+
+
+def test_fotos_sem_gps_herdam_o_segmento_corrente():
+    itens = [
+        (1, _dias(0), FORA), (2, _dias(1), SEM_GPS),
+        (3, _dias(2), CASA), (4, _dias(3), CASA), (5, _dias(4), SEM_GPS),
+    ]
+    segmentos = dividir_por_transicao_casa(itens)
+    assert [[m for m, _ in seg] for seg in segmentos] == [[1, 2], [3, 4, 5]]
+
+
+def test_sessao_sem_gps_nenhum_fica_inteira():
+    itens = [(1, _dias(0), SEM_GPS), (2, _dias(1), SEM_GPS)]
+    segmentos = dividir_por_transicao_casa(itens)
+    assert len(segmentos) == 1
