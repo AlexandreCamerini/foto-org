@@ -8,18 +8,30 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from fotoorganizer.models import SourceType
 from fotoorganizer.repositories import MediaRepository
 
 TODAS_AS_FONTES = -1
 
+# Marcador discreto do tipo de fonte na lista (pasta é o caso comum e
+# fica sem prefixo; catálogos externos ganham identificação).
+_PREFIXO_TIPO = {
+    SourceType.PASTA: "",
+    SourceType.APPLE_PHOTOS: "🍎 ",
+    SourceType.GOOGLE_TAKEOUT: "🌐 ",
+}
+
 
 class Sidebar(QWidget):
     adicionar_pasta = Signal()
+    importar_apple = Signal()
+    importar_takeout = Signal()
     fonte_selecionada = Signal(object)  # source_id: int | None
     pausar_scan = Signal()
     continuar_scan = Signal()
@@ -47,9 +59,19 @@ class Sidebar(QWidget):
 
         self._btn_adicionar = QPushButton("Adicionar pasta…")
         self._btn_adicionar.clicked.connect(self.adicionar_pasta.emit)
+        self._btn_importar = QPushButton("Importar catálogo…")
+        menu_importar = QMenu(self._btn_importar)
+        menu_importar.addAction(
+            "Apple Fotos (somente leitura)…", self.importar_apple.emit
+        )
+        menu_importar.addAction(
+            "Google Takeout (pasta local)…", self.importar_takeout.emit
+        )
+        self._btn_importar.setMenu(menu_importar)
         botao_row = QHBoxLayout()
         botao_row.setContentsMargins(12, 4, 12, 4)
         botao_row.addWidget(self._btn_adicionar)
+        botao_row.addWidget(self._btn_importar)
         layout.addLayout(botao_row)
 
         # Progresso do scan (aparece só durante varredura)
@@ -92,8 +114,9 @@ class Sidebar(QWidget):
         selecionar = item_todas
         for source, contagem in self._repo.fontes_com_contagem():
             rotulo = source.apelido or source.caminho
+            prefixo = _PREFIXO_TIPO.get(source.tipo, "")
             sufixo = "" if source.disponivel else "  ⚠ indisponível"
-            item = QListWidgetItem(f"{rotulo}  ({contagem}){sufixo}")
+            item = QListWidgetItem(f"{prefixo}{rotulo}  ({contagem}){sufixo}")
             item.setData(Qt.ItemDataRole.UserRole, source.id)
             item.setToolTip(source.caminho)
             self._lista.addItem(item)

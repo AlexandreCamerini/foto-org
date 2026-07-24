@@ -40,6 +40,31 @@ def _start_scan(window, pasta):
     return window._scan_worker.terminado
 
 
+def test_import_takeout_ponta_a_ponta(window, tmp_path, qtbot):
+    import json
+
+    from fotoorganizer.sources import GoogleTakeoutProvider
+
+    raiz = tmp_path / "Takeout" / "Google Photos"
+    foto = make_jpeg(raiz / "Album X" / "IMG_1.jpg", data_exif=None)
+    foto.with_name(foto.name + ".json").write_text(json.dumps({
+        "photoTakenTime": {"timestamp": "1730467800"},
+        "geoData": {"latitude": 25.2, "longitude": 55.3},
+    }), encoding="utf-8")
+
+    window._iniciar_import(GoogleTakeoutProvider(raiz))
+    with qtbot.waitSignal(window._import_worker.terminado, timeout=15000):
+        pass
+
+    assert window.model.total == 1
+    # Fonte externa aparece na sidebar com marcador de tipo.
+    textos = [
+        window.sidebar._lista.item(i).text()
+        for i in range(window.sidebar._lista.count())
+    ]
+    assert any("🌐" in t for t in textos)
+
+
 def test_scan_ponta_a_ponta_atualiza_grade(window, tmp_path, qtbot):
     fotos = tmp_path / "biblioteca"
     for i in range(8):

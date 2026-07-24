@@ -168,10 +168,13 @@ class DuplicatesView(QWidget):
         self._lista.clear()
         for grupo in self._grupos:
             extra = " · decidido" if grupo.decidido else ""
+            # Mesma foto em fontes diferentes é vínculo entre catálogos —
+            # sinalizar muda a leitura de "desperdício" para "confirmação".
+            fontes = f" · em {grupo.n_fontes} fontes" if grupo.n_fontes > 1 else ""
             item = QListWidgetItem(
                 f"{grupo.rotulo_nivel} · {len(grupo.membros)} arquivos · "
                 f"{_tamanho_legivel(grupo.bytes_recuperaveis)} recuperáveis"
-                f"{extra}"
+                f"{fontes}{extra}"
             )
             item.setData(Qt.ItemDataRole.UserRole, grupo.id)
             self._lista.addItem(item)

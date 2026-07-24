@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListView,
     QMainWindow,
+    QMessageBox,
     QSlider,
     QSplitter,
     QTabWidget,
@@ -36,6 +37,12 @@ from fotoorganizer.repositories import (
     SuggestionRepository,
 )
 from fotoorganizer.scanner import CatalogScanner
+from fotoorganizer.sources import (
+    ApplePhotosProvider,
+    ExternalCatalogImporter,
+    ExternalCatalogProvider,
+    GoogleTakeoutProvider,
+)
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.ui.duplicates_view import DuplicatesView
 from fotoorganizer.ui.filter_bar import FilterBar
@@ -44,7 +51,7 @@ from fotoorganizer.ui.inspector import Inspector
 from fotoorganizer.ui.media_model import MediaIdRole, MediaListModel
 from fotoorganizer.ui.review_view import ReviewView
 from fotoorganizer.ui.sidebar import Sidebar
-from fotoorganizer.workers import ScanWorker, ThumbnailService
+from fotoorganizer.workers import ImportWorker, ScanWorker, ThumbnailService
 
 _ICON_MIN, _ICON_MAX, _ICON_DEFAULT = 96, 320, 160
 
@@ -62,6 +69,7 @@ class MainWindow(QMainWindow):
         self._repo = MediaRepository(session_factory)
         self._thumb_service = ThumbnailService(ThumbnailCache(settings.cache_dir))
         self._scan_worker: ScanWorker | None = None
+        self._import_worker: ImportWorker | None = None
 
         # -- painéis -----------------------------------------------------
         self.sidebar = Sidebar(self._repo)
@@ -104,6 +112,8 @@ class MainWindow(QMainWindow):
 
         # -- sinais --------------------------------------------------------
         self.sidebar.adicionar_pasta.connect(self._escolher_pasta)
+        self.sidebar.importar_apple.connect(self._importar_apple)
+        self.sidebar.importar_takeout.connect(self._importar_takeout)
         self.sidebar.fonte_selecionada.connect(self._on_fonte_selecionada)
         self.sidebar.pausar_scan.connect(self._pausar_scan)
         self.sidebar.continuar_scan.connect(self._continuar_scan)
@@ -251,6 +261,63 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().showMessage(
             f"{rotulo}: {indexados} indexados, {pulados} pulados, {erros} erros"
+        )
+
+    # -- importação de catálogos externos -----------------------------------
+    def _importar_apple(self) -> None:
+        resposta = QMessageBox.question(
+            self, "Importar do Apple Fotos",
+            "A biblioteca do Fotos será lida em modo somente leitura — "
+            "nenhuma foto é movida ou alterada.\n\n"
+            "Se o macOS bloquear, conceda Acesso Total ao Disco ao app em "
+            "Ajustes → Privacidade e Segurança.\n\nImportar agora?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if resposta == QMessageBox.StandardButton.Yes:
+            self._iniciar_import(ApplePhotosProvider())
+
+    def _importar_takeout(self) -> None:
+        pasta = QFileDialog.getExistingDirectory(
+            self, "Escolha a pasta do Google Takeout (extraída)"
+        )
+        if pasta:
+            self._iniciar_import(GoogleTakeoutProvider(Path(pasta)))
+
+    def _iniciar_import(self, provider: ExternalCatalogProvider) -> None:
+        if self._import_worker is not None and self._import_worker.isRunning():
+            return
+        importer = ExternalCatalogImporter(
+            self._session_factory, PurePythonExtractor(),
+            self._settings.scanner,
+            thumb_cache=ThumbnailCache(self._settings.cache_dir),
+        )
+        self._import_worker = ImportWorker(importer, provider, parent=self)
+        self._import_worker.progresso.connect(self._on_import_progresso)
+        self._import_worker.terminado.connect(self._on_import_terminado)
+        self.statusBar().showMessage(
+            f"Importando {provider.apelido} (somente leitura)…"
+        )
+        self._import_worker.start()
+
+    def _on_import_progresso(self, vistos: int, importados: int,
+                             erros: int) -> None:
+        self.statusBar().showMessage(
+            f"Importando… {vistos} vistos, {importados} importados, "
+            f"{erros} erros"
+        )
+
+    def _on_import_terminado(self, importados: int, pulados: int, erros: int,
+                             erro_fatal: str) -> None:
+        self.sidebar.recarregar()
+        self.filter_bar.recarregar_opcoes()
+        self._aplicar_filtros()
+        if erro_fatal:
+            QMessageBox.warning(self, "Importação falhou", erro_fatal)
+            self.statusBar().showMessage("Importação falhou")
+            return
+        self.statusBar().showMessage(
+            f"Importação concluída: {importados} importados, "
+            f"{pulados} pulados, {erros} erros"
         )
 
     def _pausar_scan(self) -> None:
