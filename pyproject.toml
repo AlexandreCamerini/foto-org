@@ -26,6 +26,10 @@ dev = [
 llm = [
     "anthropic>=0.116",
 ]
+# Importador do Apple Fotos (opt-in; leitura local da biblioteca)
+apple = [
+    "osxphotos>=0.70",
+]
 
 [project.scripts]
 fotoorganizer = "fotoorganizer.app.main:main"
