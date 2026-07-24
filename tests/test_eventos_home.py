@@ -115,3 +115,33 @@ def test_classificador_cenarios_chave():
     # Keyword de evento vence país na pasta (casamento na Itália é evento).
     d = classificar_sessao(sessao(["/fotos/Itália/Casamento de João"], dias=1))
     assert d.tipo == "evento" and "Casamento" in d.rotulo
+
+
+def test_viagem_multipais_nomeada_pelas_pernas_em_ordem():
+    from datetime import timedelta
+
+    from fotoorganizer.grouping.classifier import (
+        DadosSessao,
+        classificar_sessao,
+    )
+
+    dados = DadosSessao(
+        pastas=("/fotos/DCIM",),
+        duracao=timedelta(days=21),
+        pais_dominante="Tailândia",       # mais fotos, mas chegou depois
+        dist_mediana_casa_km=9000.0,
+        periodo_curto="Viagem de 01-11 a 21-11",
+        paises_no_tempo=("Emirados Árabes", "Tailândia", "Vietnã"),
+    )
+    d = classificar_sessao(dados)
+    assert d.tipo == "viagem"
+    assert d.rotulo == "Emirados Árabes – Tailândia – Vietnã"
+
+    # Com uma perna só relevante, o rótulo continua sendo o país dominante.
+    dados_um_pais = DadosSessao(
+        pastas=("/fotos/DCIM",), duracao=timedelta(days=5),
+        pais_dominante="França", dist_mediana_casa_km=9000.0,
+        periodo_curto="Viagem de 01-01", paises_no_tempo=(),
+    )
+    d = classificar_sessao(dados_um_pais)
+    assert d.rotulo == "França"

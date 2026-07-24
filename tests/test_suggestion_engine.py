@@ -156,6 +156,44 @@ def test_destino_nao_duplica_ano_nem_pais(ambiente):
     assert sugestao.destino_sugerido == "Viagens/2024 - França/Provence/Avignon"
 
 
+def test_viagem_multipais_rotulada_pelas_pernas(migrated_engine):
+    """21 dias fora passando por 2 países (sem casa conhecida): uma viagem
+    só, nomeada pelas pernas em ordem cronológica de chegada."""
+
+    @dataclass
+    class GeocoderDoisPaises:
+        def resolve(self, lat, lon):
+            if lat > 20:
+                return GeoResult("Emirados Árabes", None, "Dubai", "fake")
+            return GeoResult("Tailândia", None, "Bangkok", "fake")
+
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 11, 1, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(4):  # Dubai primeiro…
+            session.add(_media(
+                fonte.id, f"dubai_{i}.jpg", "/fotos/DCIM",
+                data=base + timedelta(days=i), gps=(25.2, 55.3),
+            ))
+        for i in range(4):  # …Tailândia depois, com mais dias.
+            session.add(_media(
+                fonte.id, f"thai_{i}.jpg", "/fotos/DCIM",
+                data=base + timedelta(days=6 + 2 * i), gps=(13.75, 100.5),
+            ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(GeocoderDoisPaises()))
+    resultado = engine.gerar()
+
+    assert resultado["viagens"] == 1
+    with factory() as session:
+        trip = session.scalars(select(Trip)).one()
+    assert trip.nome == "Emirados Árabes – Tailândia"
+
+
 def test_viagens_coladas_separadas_pela_passagem_em_casa(migrated_engine):
     """Duas idas à França com só 1 dia em casa no meio: o gap temporal de
     3 dias não separa, a transição casa↔fora sim — devem virar 2 viagens."""

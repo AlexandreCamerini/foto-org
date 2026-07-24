@@ -31,13 +31,14 @@ class Cenario:
     esperado: str  # viagem | evento | neutra
 
 
-def _sessao(pastas, horas=0, dias=0, pais=None, dist=None):
+def _sessao(pastas, horas=0, dias=0, pais=None, dist=None, pernas=()):
     return DadosSessao(
         pastas=tuple(pastas),
         duracao=timedelta(days=dias, hours=horas),
         pais_dominante=pais,
         dist_mediana_casa_km=dist,
         periodo_curto="Viagem de 01-01 a 05-01",
+        paises_no_tempo=tuple(pernas),
     )
 
 
@@ -88,6 +89,11 @@ CENARIOS = [
     Cenario("sessão de horas, GPS país sem casa",
             _sessao(["/fotos/DCIM"], horas=6, pais="Brasil", dist=None),
             "neutra"),
+    # — multi-país (caso real: Dubai, Thai & Viet, 21 dias) —
+    Cenario("viagem multi-país, 21 dias, 9000km de casa",
+            _sessao(["/fotos/DCIM"], dias=21, pais="Tailândia", dist=9000.0,
+                    pernas=("Emirados Árabes", "Tailândia", "Vietnã")),
+            "viagem"),
 ]
 
 VARIANTES = {

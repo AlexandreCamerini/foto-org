@@ -53,6 +53,9 @@ _CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",
                      "familia": "Família", "família": "Família",
                      "eventos": "Eventos", "evento": "Eventos"}
 _MIN_FOTOS_SESSAO = 2
+# Fotos geocodificadas mínimas para um país contar como perna da viagem —
+# uma escala de aeroporto com 1-2 fotos não nomeia a viagem.
+_MIN_FOTOS_PERNA = 3
 
 
 @dataclass(slots=True)
@@ -195,7 +198,7 @@ class SuggestionEngine:
     def _classificar(self, session: Session, sessao: _Sessao, membros,
                      casa) -> _Sessao:
         pastas = tuple(sorted({m.pasta for m in membros}))
-        sessao.pais_dominante, sessao.lugares = self._geo_da_sessao(
+        sessao.pais_dominante, sessao.lugares, pernas = self._geo_da_sessao(
             session, membros
         )
 
@@ -215,6 +218,7 @@ class SuggestionEngine:
                 pais_dominante=sessao.pais_dominante,
                 dist_mediana_casa_km=dist_mediana,
                 periodo_curto=sessao.periodo_curto(),
+                paises_no_tempo=pernas,
             ),
             self._config,
         )
@@ -224,11 +228,16 @@ class SuggestionEngine:
         sessao.justificativa = decisao.justificativa
         return sessao
 
-    def _geo_da_sessao(self, session: Session,
-                       membros) -> tuple[str | None, tuple[str, ...]]:
+    def _geo_da_sessao(
+        self, session: Session, membros
+    ) -> tuple[str | None, tuple[str, ...], tuple[str, ...]]:
+        """(país dominante, lugares, pernas). Pernas = países em ordem
+        cronológica de chegada com massa mínima de fotos — ≥ 2 caracterizam
+        viagem multi-país. `membros` já vem na ordem temporal da sessão."""
         if self._resolver is None:
-            return None, ()
+            return None, (), ()
         paises: Counter = Counter()
+        ordem_paises: list[str] = []
         lugares: list[str] = []
         for media in membros:
             if media.gps_lat is None:
@@ -238,11 +247,19 @@ class SuggestionEngine:
                 continue
             if location.pais:
                 paises[location.pais] += 1
+                if location.pais not in ordem_paises:
+                    ordem_paises.append(location.pais)
             lugar = ", ".join(filter(None, [location.cidade, location.pais]))
             if lugar and lugar not in lugares:
                 lugares.append(lugar)
         dominante = paises.most_common(1)[0][0] if paises else None
-        return dominante, tuple(lugares[:5])
+        pernas = tuple(
+            pais for pais in ordem_paises
+            if paises[pais] >= _MIN_FOTOS_PERNA
+        )
+        if len(pernas) < 2:
+            pernas = ()
+        return dominante, tuple(lugares[:5]), pernas
 
     def _consultar_advisor(self, sessao: _Sessao, membros) -> None:
         cluster = ClusterInfo(

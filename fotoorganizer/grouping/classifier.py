@@ -41,6 +41,9 @@ class DadosSessao:
     pais_dominante: str | None      # via geocoding dos membros com GPS
     dist_mediana_casa_km: float | None  # None = sem casa conhecida ou sem GPS
     periodo_curto: str              # rótulo de fallback ("Viagem de dd-mm…")
+    # Países da sessão em ordem cronológica de chegada (só os relevantes) —
+    # ≥ 2 entradas indicam viagem multi-país (Dubai → Tailândia → Vietnã).
+    paises_no_tempo: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +62,13 @@ def classificar_sessao(
     config: ConfigClassificacao = ConfigClassificacao(),
 ) -> Decisao:
     def viagem(origem: str, justificativa: str, pais: str | None = None) -> Decisao:
-        rotulo = pais or dados.pais_dominante or dados.periodo_curto
+        if pais:
+            rotulo = pais
+        elif len(dados.paises_no_tempo) >= 2:
+            # Multi-país: as pernas em ordem cronológica nomeiam a viagem.
+            rotulo = " – ".join(dados.paises_no_tempo)
+        else:
+            rotulo = dados.pais_dominante or dados.periodo_curto
         return Decisao("viagem", rotulo, origem, justificativa)
 
     # 1. Pasta de categoria "Viagens" no caminho.

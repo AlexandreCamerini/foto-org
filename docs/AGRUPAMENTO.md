@@ -6,11 +6,19 @@ O modelo v4 é uma cascata: **determinístico quando há informação; LLM como
 apoio opt-in quando não há**. Nunca soma pontos: cada regra produz
 evidências com origem e confiança próprias (docs/CONFIANCA.md).
 
-## 1. Sessões (base temporal)
+## 1. Sessões (base temporal + transição casa↔fora)
 
 Fotos são agrupadas em *sessões* por lacuna temporal (> 3 dias sem fotos
 separa sessões — inalterado). Uma sessão ainda NÃO é uma viagem: é só um
 cluster que precisa ser classificado.
+
+Com casa conhecida, a sessão é adicionalmente cortada quando a linha do
+tempo cruza o raio de casa (50 km, `raio_casa_km`): duas viagens com menos
+de 3 dias em casa no meio deixavam o gap temporal cego
+([viagem A][2 dias em casa][viagem B] virava uma sessão só). A transição
+exige confirmação pela foto com GPS seguinte no mesmo estado — um frame
+isolado (GPS errado, escala rápida perto de casa) não divide uma viagem
+real. Sem GPS ou sem casa conhecida, nada muda.
 
 ## 2. Cascata determinística (por sessão, na ordem)
 
@@ -37,6 +45,10 @@ Definições:
 
 Consequências no destino:
 - VIAGEM → campo `viagem` (país dominante ou período) + categoria Viagens.
+  Viagem multi-país (≥ 2 países com ≥ 3 fotos geocodificadas cada) é
+  nomeada pelas pernas em ordem cronológica de chegada — "Emirados Árabes
+  – Tailândia – Vietnã" — em vez de só o país com mais fotos; a hierarquia
+  região/cidade de cada foto continua refletindo a perna dela.
 - EVENTO → campo `evento` + categoria Eventos; níveis geográficos
   (país/região/cidade) são suprimidos do destino — "Eventos/2026/Serena 15
   Anos", não ".../Serena 15 Anos/São Paulo".
@@ -46,8 +58,10 @@ Consequências no destino:
 
 A cascata vive em `grouping/classifier.py` como função pura
 parametrizável; `scripts/avaliar_agrupamento.py` compara variantes contra
-16 cenários rotulados (incluindo os casos reais que motivaram o modelo).
-Resultado (2026-07-10):
+cenários rotulados (incluindo os casos reais que motivaram o modelo) —
+17 cenários em 2026-07-23, com D em 17/17. Cada erro real encontrado na
+revisão deve virar um cenário novo ANTES de qualquer ajuste de regra.
+Resultado original (2026-07-10, 16 cenários):
 
 | Variante | Acertos | Erro típico |
 |---|---|---|
