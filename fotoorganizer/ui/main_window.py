@@ -60,9 +60,7 @@ class MainWindow(QMainWindow):
         self._settings = settings
         self._session_factory = session_factory
         self._repo = MediaRepository(session_factory)
-        self._thumb_service = ThumbnailService(
-            ThumbnailCache(settings.cache_dir), workers=settings.scanner.workers
-        )
+        self._thumb_service = ThumbnailService(ThumbnailCache(settings.cache_dir))
         self._scan_worker: ScanWorker | None = None
 
         # -- painéis -----------------------------------------------------

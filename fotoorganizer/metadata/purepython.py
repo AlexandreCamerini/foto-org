@@ -134,6 +134,10 @@ class PurePythonExtractor:
             meta.erro = f"{type(exc).__name__}: {exc}"
 
         # GPS/câmera best-effort via exifread (só contêineres TIFF/IFD).
+        # CR3 é ISO-BMFF: o exifread falha sempre — pular economiza uma
+        # segunda leitura do arquivo (~25 MB) por foto.
+        if path.suffix.lower() == ".cr3":
+            return meta
         try:
             with path.open("rb") as fh:
                 tags = exifread.process_file(fh, details=False)

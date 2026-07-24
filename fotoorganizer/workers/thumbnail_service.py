@@ -6,6 +6,7 @@ sinal `pronta(media_id)` depois — nunca I/O na thread da UI.
 
 from __future__ import annotations
 
+import os
 from collections import OrderedDict
 from pathlib import Path
 
@@ -43,9 +44,13 @@ class ThumbnailService(QObject):
     pronta = Signal(int)  # media_id (conexão queued → thread da UI)
     falhou = Signal(int)
 
-    def __init__(self, cache: ThumbnailCache, workers: int = 2,
+    def __init__(self, cache: ThumbnailCache, workers: int | None = None,
                  parent=None) -> None:
         super().__init__(parent)
+        if workers is None:
+            # Geração é I/O + decode (soltam o GIL); metade dos núcleos
+            # preenche a grade rápido sem disputar CPU com o scan.
+            workers = max(2, (os.cpu_count() or 4) // 2)
         self._cache = cache
         self._mem: OrderedDict[str, QPixmap] = OrderedDict()
         self._pendentes: set[str] = set()
