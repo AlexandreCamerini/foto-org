@@ -15,12 +15,16 @@ dependencies = [
     "xxhash>=3.4",
     "reverse-geocode>=1.6",
     "cryptography>=42.0",
+    # Servidor local da UI web (escuta só em 127.0.0.1; docs/ARQUITETURA.md)
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-qt>=4.4",
+    "httpx>=0.27",
 ]
 # Advisor de classificação via Claude (opt-in; docs/AGRUPAMENTO.md §3)
 llm = [
