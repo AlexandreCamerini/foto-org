@@ -16,6 +16,10 @@ SCORES_REFERENCIA: dict[str, float] = {
     "geocoding_offline": 0.85,
     "geocoding_externo": 0.75,
     "pasta": 0.60,         # país/cidade extraído do nome da pasta
+    # GPS herdado de foto de OUTRA fonte tirada a minutos de distância
+    # (correlação temporal entre fontes). Mais forte que a vizinhança de
+    # sessão: o vínculo é foto-a-foto e a janela é de minutos, não dias.
+    "vizinhanca_temporal": 0.75,
     "vizinhanca": 0.55,    # inferido de fotos próximas no tempo
     "agrupamento": 0.70,   # viagem por lacuna temporal
     "llm": 0.55,           # sugerido por LLM a partir de metadados (opt-in)
