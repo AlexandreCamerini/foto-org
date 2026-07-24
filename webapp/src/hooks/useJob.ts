@@ -74,6 +74,7 @@ export function useJob() {
       disparar("/api/importar", { tipo: "apple_photos" }),
     importarTakeout: (caminho: string) =>
       disparar("/api/importar", { tipo: "google_takeout", caminho }),
+    gerarSugestoes: () => disparar("/api/sugestoes/gerar", {}),
     cancelar: () => fetch("/api/job/cancelar", { method: "POST" }),
   };
 }

@@ -128,6 +128,60 @@ def test_import_takeout_em_background(migrated_engine, tmp_path):
     assert fonte["tipo"] == "google_takeout"
 
 
+def test_gerar_sugestoes_e_aprovar(migrated_engine, tmp_path):
+    import time
+
+    fotos = tmp_path / "fotos"
+    for i in range(3):
+        make_jpeg(fotos / f"f_{i}.jpg", seed=i)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(factory, PurePythonExtractor(), ScannerSettings())
+    scanner.scan_source(fotos)
+    client = TestClient(create_app(settings, factory))
+
+    assert client.post("/api/sugestoes/gerar").status_code == 200
+    for _ in range(150):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+
+    pendentes = client.get("/api/sugestoes").json()
+    assert len(pendentes["itens"]) == 3
+
+    ids = [s["id"] for s in pendentes["itens"][:2]]
+    resultado = client.post(
+        "/api/sugestoes/acao", json={"ids": ids, "acao": "aprovar"}
+    ).json()
+    assert resultado["afetadas"] == 2
+    depois = client.get("/api/sugestoes").json()
+    assert depois["contagens"]["aprovada"] == 2
+    assert len(depois["itens"]) == 1
+
+    assert client.post(
+        "/api/sugestoes/acao", json={"ids": ids, "acao": "explodir"}
+    ).status_code == 422
+
+
+def test_filtro_por_viagem(client, migrated_engine):
+    from fotoorganizer.models import MediaFile, Trip
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        trip = Trip(nome="Teste")
+        session.add(trip)
+        session.flush()
+        media = session.query(MediaFile).first()
+        media.trip_id = trip.id
+        trip_id = trip.id
+        session.commit()
+
+    filtrado = client.get("/api/midia", params={"trip_id": trip_id}).json()
+    assert filtrado["total"] == 1
+
+
 def test_filtros_viagens_sugestoes_duplicatas_respondem(client):
     filtros = client.get("/api/midia/filtros").json()
     assert "jpg" in filtros["extensoes"]

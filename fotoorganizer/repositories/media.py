@@ -27,6 +27,8 @@ class MediaFilters:
     extensao: str | None = None
     source_id: int | None = None
     ano: int | None = None
+    trip_id: int | None = None
+    event_id: int | None = None
     ordenacao: str = "data_desc"
 
 
@@ -49,6 +51,10 @@ class MediaRepository:
             stmt = stmt.where(
                 func.strftime("%Y", MediaFile.data_capturada) == str(filters.ano)
             )
+        if filters.trip_id is not None:
+            stmt = stmt.where(MediaFile.trip_id == filters.trip_id)
+        if filters.event_id is not None:
+            stmt = stmt.where(MediaFile.event_id == filters.event_id)
         return stmt
 
     def listar(

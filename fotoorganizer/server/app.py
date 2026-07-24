@@ -55,6 +55,11 @@ class ImportBody(BaseModel):
     tipo: str  # apple_photos | google_takeout
     caminho: str | None = None
 
+
+class AcaoSugestoesBody(BaseModel):
+    ids: list[int]
+    acao: str  # aprovar | rejeitar | desfazer
+
 _PREVIEW_SIZE = 2048
 
 _WEBAPP_DIST = Path(__file__).resolve().parents[2] / "webapp" / "dist"
@@ -122,13 +127,15 @@ def create_app(
         extensao: str | None = None,
         source_id: int | None = None,
         ano: int | None = None,
+        trip_id: int | None = None,
+        event_id: int | None = None,
         ordenacao: str = "data_desc",
         offset: int = 0,
         limit: int = 200,
     ) -> dict:
         filters = MediaFilters(
             busca=busca, extensao=extensao, source_id=source_id,
-            ano=ano, ordenacao=ordenacao,
+            ano=ano, trip_id=trip_id, event_id=event_id, ordenacao=ordenacao,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
@@ -201,57 +208,46 @@ def create_app(
                             headers={"Cache-Control": "max-age=31536000"})
 
     # -- agrupamentos ---------------------------------------------------------
+    def _capa_disponivel(session, coluna, valor) -> int | None:
+        """Capa do card: prefere foto com miniatura já em cache — fotos em
+        volume desconectado não conseguem gerar imagem agora."""
+        candidatos = list(session.scalars(
+            select(MediaFile)
+            .where(coluna == valor)
+            .order_by(MediaFile.data_capturada)
+            .limit(24)
+        ))
+        for media in candidatos:
+            if media.hash_rapido and thumb_cache.get(media.hash_rapido):
+                return media.id
+        return candidatos[0].id if candidatos else None
+
+    def _agrupamentos(session, modelo, coluna) -> list[dict]:
+        resultado = []
+        for grupo in session.scalars(select(modelo).order_by(modelo.inicio)):
+            contagem = session.scalar(
+                select(func.count(MediaFile.id)).where(coluna == grupo.id)
+            ) or 0
+            resultado.append({
+                "id": grupo.id,
+                "nome": grupo.nome,
+                "inicio": grupo.inicio.isoformat() if grupo.inicio else None,
+                "fim": grupo.fim.isoformat() if grupo.fim else None,
+                "metodo": grupo.metodo,
+                "fotos": contagem,
+                "capa_id": _capa_disponivel(session, coluna, grupo.id),
+            })
+        return resultado
+
     @app.get("/api/viagens")
     def viagens() -> list[dict]:
         with session_factory() as session:
-            resultado = []
-            for trip in session.scalars(select(Trip).order_by(Trip.inicio)):
-                contagem = session.scalar(
-                    select(func.count(MediaFile.id)).where(
-                        MediaFile.trip_id == trip.id
-                    )
-                ) or 0
-                capa = session.scalar(
-                    select(MediaFile.id)
-                    .where(MediaFile.trip_id == trip.id)
-                    .order_by(MediaFile.data_capturada)
-                )
-                resultado.append({
-                    "id": trip.id,
-                    "nome": trip.nome,
-                    "inicio": trip.inicio.isoformat() if trip.inicio else None,
-                    "fim": trip.fim.isoformat() if trip.fim else None,
-                    "metodo": trip.metodo,
-                    "fotos": contagem,
-                    "capa_id": capa,
-                })
-            return resultado
+            return _agrupamentos(session, Trip, MediaFile.trip_id)
 
     @app.get("/api/eventos")
     def eventos() -> list[dict]:
         with session_factory() as session:
-            resultado = []
-            for evento in session.scalars(select(Event).order_by(Event.inicio)):
-                contagem = session.scalar(
-                    select(func.count(MediaFile.id)).where(
-                        MediaFile.event_id == evento.id
-                    )
-                ) or 0
-                capa = session.scalar(
-                    select(MediaFile.id)
-                    .where(MediaFile.event_id == evento.id)
-                    .order_by(MediaFile.data_capturada)
-                )
-                resultado.append({
-                    "id": evento.id,
-                    "nome": evento.nome,
-                    "inicio": evento.inicio.isoformat() if evento.inicio else None,
-                    "fim": evento.fim.isoformat() if evento.fim else None,
-                    "metodo": evento.metodo,
-                    "fotos": contagem,
-                    "capa_id": capa,
-                })
-            return resultado
+            return _agrupamentos(session, Event, MediaFile.event_id)
 
     # -- sugestões e duplicatas (leitura; ações nas fatias seguintes) --------
     @app.get("/api/sugestoes")
@@ -307,6 +303,23 @@ def create_app(
             }
             for grupo in duplicate_repo.listar_grupos()
         ]
+
+    @app.post("/api/sugestoes/gerar")
+    def gerar_sugestoes() -> dict:
+        if not jobs.iniciar_sugestoes():
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.post("/api/sugestoes/acao")
+    def acao_sugestoes(body: AcaoSugestoesBody) -> dict:
+        acoes = {
+            "aprovar": suggestion_repo.aprovar,
+            "rejeitar": suggestion_repo.rejeitar,
+            "desfazer": suggestion_repo.desfazer,
+        }
+        if body.acao not in acoes:
+            raise HTTPException(422, f"ação desconhecida: {body.acao}")
+        return {"afetadas": acoes[body.acao](body.ids)}
 
     # -- trabalhos em background (scan/importação) ---------------------------
     @app.post("/api/scan")

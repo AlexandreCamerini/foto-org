@@ -4,7 +4,9 @@ import type { FiltrosMidia } from "./api";
 import Inspector from "./components/Inspector";
 import Loupe from "./components/Loupe";
 import PhotoGrid from "./components/PhotoGrid";
+import Review from "./components/Review";
 import Sidebar from "./components/Sidebar";
+import Trips from "./components/Trips";
 import { useJob } from "./hooks/useJob";
 import { useMidia } from "./hooks/useMidia";
 
@@ -19,11 +21,19 @@ export default function App() {
   const [zoom, setZoom] = useState(160);
   const [selIndex, setSelIndex] = useState<number | null>(null);
   const [loupeAberto, setLoupeAberto] = useState(false);
+  // Filtro de agrupamento (clique num card de viagem/evento).
+  const [grupo, setGrupo] = useState<{
+    trip_id?: number;
+    event_id?: number;
+    nome: string;
+  } | null>(null);
   const colunasRef = useRef(1);
 
   const filtros: FiltrosMidia = {
     busca: busca || undefined,
     source_id: fonte ?? undefined,
+    trip_id: grupo?.trip_id,
+    event_id: grupo?.event_id,
     ordenacao,
   };
   const midia = useMidia(filtros);
@@ -34,7 +44,7 @@ export default function App() {
   useEffect(() => {
     setSelIndex(null);
     setLoupeAberto(false);
-  }, [busca, fonte, ordenacao]);
+  }, [busca, fonte, ordenacao, grupo]);
 
   const navegar = useCallback(
     (destino: number) => {
@@ -101,9 +111,32 @@ export default function App() {
         <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
 
         <main className="flex min-w-0 flex-1 flex-col">
-          {aba === "Biblioteca" ? (
+          {aba === "Viagens" && (
+            <Trips
+              onAbrir={(filtro, nome) => {
+                setGrupo({ ...filtro, nome });
+                setAba("Biblioteca");
+              }}
+            />
+          )}
+          {aba === "Revisão" && <Review job={job} />}
+          {aba === "Duplicatas" && (
+            <div className="flex flex-1 items-center justify-center text-texto-2">
+              Duplicatas — em construção nesta fase.
+            </div>
+          )}
+          {aba === "Biblioteca" && (
             <>
               <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
+                {grupo && (
+                  <button
+                    onClick={() => setGrupo(null)}
+                    className="flex items-center gap-1 rounded-md border border-acento px-2 py-1 text-acento hover:bg-cartao"
+                    title="Limpar filtro de agrupamento"
+                  >
+                    {grupo.nome} ✕
+                  </button>
+                )}
                 <input
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
@@ -151,10 +184,6 @@ export default function App() {
                 />
               </footer>
             </>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-texto-2">
-              {aba} — em construção nesta fase.
-            </div>
           )}
         </main>
 

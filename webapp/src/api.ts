@@ -60,7 +60,34 @@ export interface FiltrosMidia {
   extensao?: string;
   source_id?: number;
   ano?: number;
+  trip_id?: number;
+  event_id?: number;
   ordenacao?: string;
+}
+
+export interface Agrupamento {
+  id: number;
+  nome: string;
+  inicio: string | null;
+  fim: string | null;
+  metodo: string;
+  fotos: number;
+  capa_id: number | null;
+}
+
+export interface SugestaoRow {
+  id: number;
+  media_id: number;
+  nome: string;
+  pasta: string;
+  destino: string;
+  nivel: "alta" | "media" | "baixa";
+  status: string;
+}
+
+export interface PaginaSugestoes {
+  contagens: Record<string, number>;
+  itens: SugestaoRow[];
 }
 
 async function json<T>(url: string): Promise<T> {
@@ -87,6 +114,21 @@ export const api = {
   detalhe: (id: number) => json<MediaDetalhe>(`/api/midia/${id}`),
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
+  viagens: () => json<Agrupamento[]>("/api/viagens"),
+  eventos: () => json<Agrupamento[]>("/api/eventos"),
+  sugestoes: (status: string, offset = 0, limit = 200) =>
+    json<PaginaSugestoes>(
+      `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}`,
+    ),
+  acaoSugestoes: async (ids: number[], acao: string) => {
+    const resposta = await fetch("/api/sugestoes/acao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, acao }),
+    });
+    if (!resposta.ok) throw new Error(`erro ${resposta.status}`);
+    return resposta.json() as Promise<{ afetadas: number }>;
+  },
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
 };

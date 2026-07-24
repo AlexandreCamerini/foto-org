@@ -65,6 +65,11 @@ class JobManager:
             "import", provider.apelido, self._rodar_import, provider
         )
 
+    def iniciar_sugestoes(self) -> bool:
+        return self._iniciar(
+            "sugestoes", "catálogo inteiro", self._rodar_sugestoes
+        )
+
     def _iniciar(self, tipo: str, alvo: str, funcao, *args) -> bool:
         if self.ocupado():
             return False
@@ -111,6 +116,39 @@ class JobManager:
         except Exception as exc:
             log.exception("job scan falhou")
             self._atualizar(status="erro", mensagem=str(exc))
+
+    def _rodar_sugestoes(self) -> None:
+        try:
+            from fotoorganizer.classification import SuggestionEngine
+            from fotoorganizer.geolocation import LocationResolver
+            from fotoorganizer.geolocation.offline import OfflineGeocoder
+
+            engine = SuggestionEngine(
+                self._factory,
+                LocationResolver(OfflineGeocoder()),
+                advisor=self._advisor(),
+            )
+            resultado = engine.gerar()
+            self._atualizar(
+                status="concluido",
+                processados=resultado.get("sugestoes", 0),
+                resultado=resultado,
+            )
+        except Exception as exc:
+            log.exception("job sugestões falhou")
+            self._atualizar(status="erro", mensagem=str(exc))
+
+    def _advisor(self):
+        """Advisor LLM só com opt-in explícito — sem ele, 100% local."""
+        if not self._settings.privacidade.servicos_externos:
+            return None
+        try:
+            from fotoorganizer.classification.advisor import ClaudeAdvisor
+
+            return ClaudeAdvisor()
+        except Exception as exc:
+            log.warning("advisor indisponível (%s); seguindo local", exc)
+            return None
 
     def _rodar_import(self, provider) -> None:
         importer = ExternalCatalogImporter(
