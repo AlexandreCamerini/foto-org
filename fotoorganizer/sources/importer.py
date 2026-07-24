@@ -231,6 +231,8 @@ class ExternalCatalogImporter:
             entradas.append(("favorito", "true"))
         for album in asset.albuns:
             entradas.append(("album", album))
+        for pessoa in asset.pessoas:
+            entradas.append(("pessoa", pessoa))
         if asset.gps_lat is not None:
             entradas.append(("gps", f"{asset.gps_lat:.6f},{asset.gps_lon:.6f}"))
         if asset.data_capturada is not None:

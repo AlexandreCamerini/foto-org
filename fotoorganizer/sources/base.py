@@ -30,6 +30,10 @@ class ExternalAsset:
     descricao: str | None = None
     favorito: bool = False
     albuns: tuple[str, ...] = field(default=())
+    # Pessoas nomeadas pelo catálogo externo (o app não roda reconhecimento
+    # facial por padrão — invariante 6 — mas aproveita o que o usuário já
+    # nomeou em outro lugar, como qualquer outro metadado importado).
+    pessoas: tuple[str, ...] = field(default=())
 
 
 class ExternalCatalogProvider(Protocol):
