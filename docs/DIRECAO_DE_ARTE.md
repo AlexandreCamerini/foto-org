@@ -2,8 +2,15 @@
 
 Referências: Adobe Lightroom Classic (layout e densidade), Apple Fotos
 (clareza e navegação), Mylio Photos (organização por fontes/calendário),
-Peakto (catálogo unificado). Regra de ouro dos apps dessa classe: **a foto é
-a cor da interface** — o chrome é neutro, escuro e silencioso.
+Peakto (catálogo unificado), Photo Mechanic (velocidade/teclado no loupe),
+Aftershoot/Narrative (survey de rajadas). Regra de ouro dos apps dessa
+classe: **a foto é a cor da interface** — o chrome é neutro, escuro e
+silencioso.
+
+Este documento é a spec das DUAS UIs (webapp React, principal; PySide6,
+fallback): mesmos tokens, mesmo layout de 3 painéis. No webapp os tokens
+vivem em `webapp/src/index.css` (@theme) e devem espelhar os valores
+abaixo.
 
 ## Layout (3 painéis, estilo Lightroom)
 

@@ -46,13 +46,23 @@ echo "Instalando dependências (pode demorar na primeira vez)…"
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -e ".[$EXTRAS]"
 
-# 4. Verificação: suíte de testes completa.
+# 4. UI web (opcional — exige Node 18+; sem ele, fica a UI nativa).
+if command -v npm >/dev/null 2>&1; then
+    echo "Construindo a UI web (webapp/)…"
+    (cd webapp && npm install --silent && npm run build --silent) \
+        || echo "AVISO: build da UI web falhou — 'scripts/executar.sh' (nativa) segue funcionando."
+else
+    echo "AVISO: npm não encontrado — UI web indisponível (instale Node 18+ e rode de novo)."
+fi
+
+# 5. Verificação: suíte de testes completa.
 echo "Verificando a instalação (testes)…"
 .venv/bin/python -m pytest -q --no-header 2>&1 | tail -1
 
 echo ""
 echo "✅ Instalado. Para abrir o app:"
-echo "   scripts/executar.sh"
+echo "   scripts/executar.sh web    # UI web local (recomendada)"
+echo "   scripts/executar.sh        # UI nativa (PySide6)"
 echo ""
 echo "Dados do app: ~/Library/Application Support/FotoOrganizer/"
 echo "As fotos originais nunca são modificadas."

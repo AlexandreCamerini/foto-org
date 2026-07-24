@@ -40,9 +40,14 @@ Requisitos: macOS, Python 3.12+ (`brew install python@3.12` se faltar).
 
 ```bash
 scripts/instalar.sh          # uma vez (use --llm p/ incluir o advisor Claude)
-scripts/executar.sh          # abre a interface gráfica
+scripts/executar.sh web      # abre a UI web local (recomendada; 127.0.0.1)
+scripts/executar.sh          # UI nativa (PySide6, fallback)
 scripts/atualizar.sh         # traz código novo + re-sincroniza dependências
 ```
+
+A UI web roda inteiramente na sua máquina: o servidor escuta só em
+127.0.0.1 e o navegador é apenas a janela — nenhuma foto ou metadado sai
+do Mac. Requer Node 18+ apenas para construir o frontend na instalação.
 
 A CLI usa o mesmo lançador:
 

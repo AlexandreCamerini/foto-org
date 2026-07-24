@@ -26,7 +26,14 @@ somente por último executar operações físicas.**
 
 ## Stack (decidida — não trocar sem justificar)
 
-- Python 3.12+, PySide6 (UI nativa), SQLite em WAL via SQLAlchemy 2 + Alembic.
+- Python 3.12+, SQLite em WAL via SQLAlchemy 2 + Alembic.
+- **UI: web local** (decisão de 2026-07-24, a pedido do dono do produto) —
+  FastAPI servindo apenas 127.0.0.1 (`fotoorganizer/server/`) + React/
+  Vite/TypeScript/Tailwind (`webapp/`), grade virtualizada, teclado-first.
+  A UI PySide6 (`fotoorganizer/ui/`) permanece como fallback até paridade
+  e será removida em commit próprio. Streamlit foi avaliado e rejeitado
+  (era a stack da v1: sem grade virtualizada, sem teclado, re-render por
+  interação). Empacotamento Tauri é milestone futuro.
 - Metadados: exiftool via subprocesso em batch (`-stay_open`) quando
   instalado; fallback puro-Python (Pillow + exifread + pillow-heif + rawpy).
 - Hashing: xxhash (rápido, sempre) + SHA-256 (completo, sob demanda).
