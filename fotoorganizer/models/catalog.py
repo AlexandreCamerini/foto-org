@@ -18,6 +18,16 @@ class ScanStatus(enum.StrEnum):
     ERRO = "erro"
 
 
+class SourceType(enum.StrEnum):
+    """De onde vem uma fonte de fotos. Fontes externas (catálogos de outros
+    apps) entram no MESMO catálogo — o cruzamento entre fontes é o que
+    permite usar a informação mais correta disponível para cada foto."""
+
+    PASTA = "pasta"
+    APPLE_PHOTOS = "apple_photos"
+    GOOGLE_TAKEOUT = "google_takeout"
+
+
 class ReviewStatus(enum.StrEnum):
     NAO_REVISADO = "nao_revisado"
     PENDENTE = "pendente"
@@ -29,6 +39,9 @@ class Source(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     caminho: Mapped[str] = mapped_column(Text, unique=True)
+    tipo: Mapped[SourceType] = mapped_column(
+        Enum(SourceType, native_enum=False), default=SourceType.PASTA
+    )
     apelido: Mapped[str | None]
     ativo: Mapped[bool] = mapped_column(default=True)
     disponivel: Mapped[bool] = mapped_column(default=True)

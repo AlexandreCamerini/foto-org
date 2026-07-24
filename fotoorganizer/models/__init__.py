@@ -8,6 +8,7 @@ from fotoorganizer.models.catalog import (
     ScanSession,
     ScanStatus,
     Source,
+    SourceType,
 )
 from fotoorganizer.models.duplicates import (
     DuplicateGroup,
@@ -40,7 +41,8 @@ from fotoorganizer.models.tagging import MediaTag, Tag
 
 __all__ = [
     "Base",
-    "Source", "ScanSession", "ScanStatus", "MediaFile", "MetadataEntry",
+    "Source", "SourceType", "ScanSession", "ScanStatus", "MediaFile",
+    "MetadataEntry",
     "Location", "Trip", "Event",
     "Person", "FaceEmbedding", "FaceOccurrence", "FaceState",
     "Tag", "MediaTag",
