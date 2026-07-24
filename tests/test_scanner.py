@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 
 import pytest
@@ -13,13 +14,16 @@ from tests.fixtures import make_corrupt_jpeg, make_jpeg, make_png
 
 
 class CountingExtractor(PurePythonExtractor):
-    """Conta quantos arquivos foram realmente lidos (prova do incremental)."""
+    """Conta quantos arquivos foram realmente lidos (prova do incremental).
+    Com lock: a extração roda em threads do pool do scanner."""
 
     def __init__(self):
+        self._lock = threading.Lock()
         self.chamadas = 0
 
     def extract(self, path):
-        self.chamadas += 1
+        with self._lock:
+            self.chamadas += 1
         return super().extract(path)
 
 

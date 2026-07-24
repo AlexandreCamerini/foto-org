@@ -5,12 +5,19 @@ Incremental: arquivo com (tamanho, mtime, inode) inalterados não é relido.
 Pausável/cancelável via ScanControl; commits em lote com checkpoint na
 sessão de scan permitem retomar após interrupção — a retomada re-varre e
 os inalterados são pulados a custo de um stat() cada.
+
+Extração em paralelo: ler EXIF/RAW e calcular o hash rápido são o custo
+dominante do primeiro scan (libraw leva ~0.4s por RAW) e rodam num
+ThreadPoolExecutor — Pillow, libraw e xxhash soltam o GIL. O banco continua
+sendo escrito por uma única thread (a do scan), na ordem de descoberta.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -150,38 +157,66 @@ class CatalogScanner:
         )
         conhecidos = self._carregar_conhecidos(session, source.id)
         desde_commit = 0
+        cancelado = False
+        # Janela limitada de extrações em voo: paraleliza sem acumular
+        # resultados (e memória) de milhares de arquivos à frente do escritor.
+        janela = max(self._settings.workers * 2, 4)
+        pendentes: deque[tuple[Path, object, Future]] = deque()
 
-        for path in iter_media_files(Path(source.caminho), config):
-            control.aguardar_se_pausado()
-            if control.cancelado:
-                scan.status = ScanStatus.PAUSADO
-                break
-
-            metrics.vistos += 1
-            try:
-                bytes_indexados = self._index_file(
-                    session, source.id, path, conhecidos
-                )
-                if bytes_indexados is not None:
+        def consumir(max_restantes: int) -> None:
+            nonlocal desde_commit
+            while len(pendentes) > max_restantes:
+                path, stat, futuro = pendentes.popleft()
+                try:
+                    meta, assinatura = futuro.result()
+                    self._gravar(session, source.id, path, stat, meta, assinatura)
                     metrics.indexados += 1
-                    metrics.bytes_processados += bytes_indexados
-                else:
+                    metrics.bytes_processados += stat.st_size
+                except Exception as exc:
+                    # Nada derruba a varredura inteira (aceite do M1).
+                    metrics.erros += 1
+                    log.error("scan: erro em %s: %s", path, exc)
+
+                desde_commit += 1
+                if desde_commit >= _BATCH_SIZE:
+                    self._checkpoint(session, scan, metrics, str(path))
+                    desde_commit = 0
+                if progress:
+                    progress(metrics, str(path))
+
+        with ThreadPoolExecutor(
+            max_workers=max(self._settings.workers, 1),
+            thread_name_prefix="scan-extract",
+        ) as pool:
+            for path in iter_media_files(Path(source.caminho), config):
+                control.aguardar_se_pausado()
+                if control.cancelado:
+                    cancelado = True
+                    break
+
+                metrics.vistos += 1
+                try:
+                    stat = path.stat()
+                except OSError as exc:
+                    metrics.erros += 1
+                    log.error("scan: erro em %s: %s", path, exc)
+                    continue
+
+                assinatura = conhecidos.get(str(path))
+                if assinatura is not None and self._unchanged_sig(assinatura, stat):
                     metrics.pulados += 1
-            except Exception as exc:
-                # Nada derruba a varredura inteira (aceite do M1).
-                metrics.erros += 1
-                log.error("scan: erro em %s: %s", path, exc)
+                    if progress:
+                        progress(metrics, str(path))
+                    continue
 
-            desde_commit += 1
-            if desde_commit >= _BATCH_SIZE:
-                self._checkpoint(session, scan, metrics, str(path))
-                desde_commit = 0
-            if progress:
-                progress(metrics, str(path))
+                pendentes.append((path, stat, pool.submit(self._extrair, path)))
+                consumir(janela)
 
-        else:
-            scan.status = ScanStatus.CONCLUIDO
+            # Drena o que já estava em voo — inclusive após cancelamento,
+            # para não perder trabalho de extração já pago.
+            consumir(0)
 
+        scan.status = ScanStatus.PAUSADO if cancelado else ScanStatus.CONCLUIDO
         scan.finalizado_em = datetime.now(timezone.utc).replace(tzinfo=None)
         self._checkpoint(session, scan, metrics, checkpoint_path=None)
         log.info(
@@ -225,30 +260,24 @@ class CatalogScanner:
             for caminho, tamanho, mtime, inode in rows
         }
 
-    def _index_file(
-        self,
-        session: Session,
-        source_id: int,
-        path: Path,
-        conhecidos: dict[str, tuple[int, float | None, int | None]],
-    ) -> int | None:
-        """Indexa um arquivo; retorna os bytes lidos, ou None se inalterado."""
-        stat = path.stat()
+    def _extrair(self, path: Path):
+        """Roda nas threads do pool: só leitura do arquivo, nada de DB."""
+        return self._extractor.extract(path), quick_signature(path)
+
+    def _gravar(
+        self, session: Session, source_id: int, path: Path, stat, meta,
+        assinatura: str,
+    ) -> None:
+        """Escreve o resultado da extração — sempre na thread do scan."""
         caminho = str(path)
-
-        assinatura = conhecidos.get(caminho)
-        if assinatura is not None and self._unchanged_sig(assinatura, stat):
-            return None
-
-        # Só arquivos novos/alterados pagam o SELECT individual (para obter
-        # o registro ORM a atualizar).
+        # Só arquivos novos/alterados chegam aqui e pagam o SELECT individual
+        # (para obter o registro ORM a atualizar).
         existing = session.scalar(
             select(MediaFile).where(
                 MediaFile.source_id == source_id, MediaFile.caminho == caminho
             )
         )
 
-        meta = self._extractor.extract(path)
         media = existing or MediaFile(
             source_id=source_id, caminho=caminho, pasta="", nome="", extensao="",
             tamanho=0,
@@ -261,7 +290,7 @@ class CatalogScanner:
         # macOS: st_birthtime é a criação real; st_ctime é mudança de inode.
         media.ctime = _ts(getattr(stat, "st_birthtime", stat.st_ctime))
         media.mtime = _ts(stat.st_mtime)
-        media.hash_rapido = quick_signature(path)
+        media.hash_rapido = assinatura
         media.data_capturada = meta.data_capturada
         media.make = meta.make
         media.model = meta.model
@@ -285,7 +314,6 @@ class CatalogScanner:
                         valor=valor,
                     )
                 )
-        return stat.st_size
 
     @staticmethod
     def _unchanged_sig(
