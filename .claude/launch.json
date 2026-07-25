@@ -2,15 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "foto-organizer-backend",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "-c",
-        "cd /Users/acamerini/Claude/Projects/foto-organizer/backend && /Users/acamerini/Claude/Projects/foto-organizer/.venv/bin/uvicorn app.main:app --port 8000"
-      ],
-      "port": 8000
-    },
-    {
       "name": "foto-organizer-web",
       "runtimeExecutable": "bash",
       "runtimeArgs": [
@@ -18,15 +9,6 @@
         "cd /Users/acamerini/Claude/Projects/foto-organizer && .venv/bin/python -m fotoorganizer web --porta 8765"
       ],
       "port": 8765
-    },
-    {
-      "name": "foto-organizer-streamlit",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "-c",
-        "cd /Users/acamerini/Claude/Projects/foto-organizer/streamlit_app && /Users/acamerini/Claude/Projects/foto-organizer/.venv/bin/streamlit run app.py --server.port 8511 --server.headless true"
-      ],
-      "port": 8511
     }
   ]
 }
