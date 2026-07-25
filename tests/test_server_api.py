@@ -23,7 +23,11 @@ def client(migrated_engine, tmp_path):
     scanner = CatalogScanner(factory, PurePythonExtractor(), ScannerSettings())
     scanner.scan_source(fotos)
 
-    return TestClient(create_app(settings, factory))
+    # base_url local: em produção o servidor só é alcançado em 127.0.0.1 e
+    # recusa Host de fora do loopback (ver _exigir_origem_local).
+    return TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
 
 
 def test_status_e_fontes(client):
@@ -75,7 +79,9 @@ def test_scan_em_background_indexa_e_reporta(migrated_engine, tmp_path):
         make_jpeg(fotos / f"n_{i}.jpg", seed=i)
     settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
     factory = create_session_factory(migrated_engine)
-    client = TestClient(create_app(settings, factory))
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
 
     resposta = client.post("/api/scan", json={"caminho": str(fotos)})
     assert resposta.status_code == 200
@@ -110,7 +116,9 @@ def test_import_takeout_em_background(migrated_engine, tmp_path):
     }), encoding="utf-8")
     settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
     factory = create_session_factory(migrated_engine)
-    client = TestClient(create_app(settings, factory))
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
 
     resposta = client.post(
         "/api/importar",
@@ -138,7 +146,9 @@ def test_gerar_sugestoes_e_aprovar(migrated_engine, tmp_path):
     factory = create_session_factory(migrated_engine)
     scanner = CatalogScanner(factory, PurePythonExtractor(), ScannerSettings())
     scanner.scan_source(fotos)
-    client = TestClient(create_app(settings, factory))
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
 
     assert client.post("/api/sugestoes/gerar").status_code == 200
     for _ in range(150):
@@ -193,7 +203,9 @@ def test_duplicatas_detectar_e_decidir(migrated_engine, tmp_path):
     factory = create_session_factory(migrated_engine)
     CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()) \
         .scan_source(fotos)
-    client = TestClient(create_app(settings, factory))
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
 
     assert client.post("/api/duplicatas/detectar").status_code == 200
     for _ in range(100):
@@ -230,3 +242,33 @@ def test_filtros_viagens_sugestoes_duplicatas_respondem(client):
     assert client.get(
         "/api/sugestoes", params={"status": "invalido"}
     ).status_code == 422
+
+
+# -- proteção de origem (CSRF em localhost) ----------------------------------
+def test_pagina_externa_nao_dispara_acoes(client):
+    """Uma página qualquer aberta no navegador não pode acionar o app:
+    POST sem corpo é 'simple request' e chega sem preflight."""
+    resposta = client.post(
+        "/api/duplicatas/detectar", headers={"origin": "https://evil.example"}
+    )
+    assert resposta.status_code == 403
+    assert client.get(
+        "/api/status", headers={"origin": "https://evil.example"}
+    ).status_code == 403
+
+
+def test_host_nao_local_e_recusado(client):
+    """DNS rebinding: domínio do atacante resolvendo para 127.0.0.1."""
+    assert client.get(
+        "/api/status", headers={"host": "evil.example"}
+    ).status_code == 403
+
+
+def test_origem_local_e_ausencia_de_origem_seguem_normais(client):
+    assert client.get(
+        "/api/status", headers={"origin": "http://127.0.0.1:8765"}
+    ).status_code == 200
+    assert client.get(
+        "/api/status", headers={"origin": "http://localhost:5173"}
+    ).status_code == 200
+    assert client.get("/api/status").status_code == 200  # curl/CLI

@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import asyncio
 import json as jsonlib
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -45,6 +46,23 @@ from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.thumbnails.generator import generate_thumbnail
 
 log = logging.getLogger(__name__)
+
+# Escutar só no loopback impede acesso pela rede, mas NÃO impede que uma
+# página qualquer aberta no navegador do usuário chame este servidor: POSTs
+# sem corpo são "simple requests" e o navegador os envia sem preflight.
+# Sem isto, um site poderia disparar jobs e mexer em decisões de duplicatas
+# — furando o invariante "nada acontece sem o usuário no circuito".
+_HOSTS_LOCAIS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _hostname(valor: str | None, *, com_esquema: bool) -> str | None:
+    if not valor:
+        return None
+    try:
+        # Host ("127.0.0.1:8765", "[::1]:8765") não tem esquema; Origin tem.
+        return urlsplit(valor if com_esquema else f"//{valor}").hostname
+    except ValueError:
+        return None
 
 
 class ScanBody(BaseModel):
@@ -96,6 +114,28 @@ def create_app(
     settings: Settings, session_factory: sessionmaker[Session]
 ) -> FastAPI:
     app = FastAPI(title="Foto Organizer", version=__version__)
+
+    @app.middleware("http")
+    async def _exigir_origem_local(request: Request, call_next):
+        """Recusa o que não vem da própria janela do app.
+
+        `Host` não-local denuncia DNS rebinding (domínio do atacante
+        apontando para 127.0.0.1); `Origin` presente e não-local denuncia
+        uma página de terceiros chamando o servidor — o navegador sempre
+        manda Origin nessas requisições. Sem Origin (curl, CLI, navegação
+        na própria página) segue normal."""
+        if _hostname(request.headers.get("host"), com_esquema=False) \
+                not in _HOSTS_LOCAIS:
+            return JSONResponse({"detail": "host não local"}, status_code=403)
+
+        origem = request.headers.get("origin")
+        if origem is not None and _hostname(origem, com_esquema=True) \
+                not in _HOSTS_LOCAIS:
+            log.warning("bloqueada requisição de origem externa: %s", origem)
+            return JSONResponse(
+                {"detail": "origem não permitida"}, status_code=403
+            )
+        return await call_next(request)
 
     media_repo = MediaRepository(session_factory)
     suggestion_repo = SuggestionRepository(session_factory)
