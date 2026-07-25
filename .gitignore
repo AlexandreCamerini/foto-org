@@ -8,6 +8,14 @@ venv/
 # --- Banco (dado local, não versiona) ---
 database/*.db
 
+# --- Segredos (o advisor lê ANTHROPIC_API_KEY do ambiente; nunca do repo) ---
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.toml
+
 # --- OS / editores ---
 .DS_Store
 .vscode/
