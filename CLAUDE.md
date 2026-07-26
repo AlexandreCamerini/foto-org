@@ -95,10 +95,9 @@ EXIF, confiança alta; cidade veio do nome da pasta, confiança média").
   a varredura: registrar e continuar.
 - UI segue docs/DIRECAO_DE_ARTE.md (dark-first, 3 painéis, badges de
   confiança). Não inventar estilo ad-hoc.
-- O protótipo v1 (`backend/`, `streamlit_app/`) já foi portado e removido.
-  Sobrou `database/fotos.db` (schema v1, tabela única `photos`): dado do
-  usuário, não versionar, não apagar sem pedir. O catálogo atual vive em
-  `~/Library/Application Support/FotoOrganizer/catalog.db`.
+- O protótipo v1 (`backend/`, `streamlit_app/`, `database/fotos.db`) foi
+  portado e removido por inteiro. O catálogo vive em
+  `~/Library/Application Support/FotoOrganizer/catalog.db` e é o único.
 - A UI PySide6 (`fotoorganizer/ui/`, `fotoorganizer/workers/`) é fallback e
   está pronta para sair: o webapp tem paridade de telas (incluindo
   Operações) e cobertura própria (vitest, `webapp/src/**/*.test.tsx`,

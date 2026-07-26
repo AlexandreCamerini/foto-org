@@ -81,7 +81,7 @@ docs/CONFIANCA.md).
 Fatias verticais pelo docs/ROADMAP.md (M0→M7); não avançar de milestone com
 testes quebrados. Rodar `pytest` a cada etapa; erro de leitura de arquivo nunca
 derruba a varredura (registrar e continuar). UI segue docs/DIRECAO_DE_ARTE.md
-(dark-first, 3 painéis, badges de confiança). Código v1 em `backend/` e
-`streamlit_app/` é legado de referência: portar o útil e remover em commit
-próprio. `database/fotos.db` é dado do usuário — não versionar nem apagar sem
-pedir. Commits pequenos, convencionais (feat/fix/docs/test), em português.
+(dark-first, 3 painéis, badges de confiança). O protótipo v1 (`backend/`,
+`streamlit_app/`, `database/fotos.db`) foi portado e removido; o catálogo é o
+de `~/Library/Application Support/FotoOrganizer/catalog.db`. Commits pequenos,
+convencionais (feat/fix/docs/test), em português.
