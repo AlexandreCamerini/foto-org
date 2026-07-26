@@ -86,6 +86,57 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_importar(args: argparse.Namespace) -> int:
+    """Importa catálogo externo. Existe como comando porque o Acesso Total ao
+    Disco é concedido por app: rodar daqui, no terminal do usuário, usa a
+    permissão do terminal — sem precisar autorizar o app que abriu o servidor."""
+    from fotoorganizer.metadata import PurePythonExtractor
+    from fotoorganizer.sources import (
+        ApplePhotosProvider,
+        ExternalCatalogImporter,
+        GoogleTakeoutProvider,
+    )
+    from fotoorganizer.sources.apple_photos import ApplePhotosError
+    from fotoorganizer.thumbnails import ThumbnailCache
+
+    settings, factory = _abrir_catalogo()
+    if args.fonte == "apple":
+        provider = ApplePhotosProvider(
+            Path(args.caminho).expanduser() if args.caminho else None
+        )
+    else:
+        if not args.caminho:
+            print("Informe a pasta do Takeout descompactado.")
+            return 1
+        pasta = Path(args.caminho).expanduser()
+        if not pasta.is_dir():
+            print(f"Pasta não encontrada: {pasta}")
+            return 1
+        provider = GoogleTakeoutProvider(pasta)
+
+    def progresso(metrics, _caminho: str) -> None:
+        sys.stdout.write(
+            f"\r{metrics.vistos} vistos | {metrics.importados} importados | "
+            f"{metrics.pulados} pulados | {metrics.erros} erros   "
+        )
+        sys.stdout.flush()
+
+    print(f"Importando {provider.apelido} (somente leitura) para "
+          f"{settings.db_path}")
+    importer = ExternalCatalogImporter(
+        factory, PurePythonExtractor(), settings.scanner,
+        thumb_cache=ThumbnailCache(settings.cache_dir),
+    )
+    try:
+        metrics = importer.importar(provider, progress=progresso)
+    except ApplePhotosError as exc:
+        print(f"\n{exc}")
+        return 1
+    print(f"\n{metrics.importados} importados, {metrics.pulados} pulados, "
+          f"{metrics.erros} erros")
+    return 0
+
+
 def cmd_planos(args: argparse.Namespace) -> int:
     from fotoorganizer.repositories import OperationRepository
 
@@ -232,6 +283,16 @@ def main(argv: list[str] | None = None) -> int:
     p_web = sub.add_parser("web", help="UI web local (127.0.0.1)")
     p_web.add_argument("--porta", type=int, default=8765)
     p_web.set_defaults(func=cmd_web)
+
+    p_imp = sub.add_parser(
+        "importar", help="importa Apple Fotos ou Google Takeout (read-only)"
+    )
+    p_imp.add_argument("fonte", choices=["apple", "takeout"])
+    p_imp.add_argument(
+        "caminho", nargs="?",
+        help="pasta do Takeout; para apple, biblioteca alternativa (opcional)",
+    )
+    p_imp.set_defaults(func=cmd_importar)
 
     p_planos = sub.add_parser("planos", help="lista os planos de operação")
     p_planos.set_defaults(func=cmd_planos)

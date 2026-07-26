@@ -14,6 +14,8 @@ derrubar o resto do app.
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
 from pathlib import Path
 from typing import Iterator
 
@@ -29,6 +31,34 @@ _BIBLIOTECA_PADRAO = Path(
 
 class ApplePhotosError(RuntimeError):
     """Biblioteca inacessível (permissão/ausente) ou osxphotos faltando."""
+
+
+def _app_responsavel() -> str:
+    """Nome do app no topo da árvore de processos — é a ele que o TCC do
+    macOS atribui o Acesso Total ao Disco, não ao script Python.
+
+    Saber isso economiza a hora que se perde autorizando o app errado. Em
+    qualquer falha, devolve uma descrição genérica: a mensagem de erro não
+    pode virar um segundo erro.
+    """
+    try:
+        pid, encontrado = os.getpid(), None
+        for _ in range(8):
+            saida = subprocess.run(
+                ["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                capture_output=True, text=True, timeout=2, check=False,
+            ).stdout.strip()
+            if not saida:
+                break
+            ppid, _, comm = saida.partition(" ")
+            if ".app/Contents/MacOS/" in comm:
+                encontrado = comm.split("/")[-1]  # topo vence: sobrescreve
+            if ppid.strip() in ("", "0", "1"):
+                break
+            pid = int(ppid)
+        return f"o app «{encontrado}»" if encontrado else "o app que você usa"
+    except Exception:  # pragma: no cover - diagnóstico best-effort
+        return "o app que você usa"
 
 
 def _asset_de(photo) -> ExternalAsset | None:
@@ -85,8 +115,11 @@ class ApplePhotosProvider:
         except Exception as exc:
             raise ApplePhotosError(
                 f"não consegui ler a biblioteca do Fotos em "
-                f"{self._biblioteca} — confira se o app tem Acesso Total "
-                f"ao Disco (Ajustes → Privacidade e Segurança)"
+                f"{self._biblioteca}. O macOS concede Acesso Total ao Disco "
+                f"por app, e quem precisa estar na lista é "
+                f"{_app_responsavel()} — o app que iniciou este processo, "
+                f"não o Foto Organizer. Ajustes → Privacidade e Segurança → "
+                f"Acesso Total ao Disco, e reinicie o app depois de marcar."
             ) from exc
 
         pulados_icloud = 0
