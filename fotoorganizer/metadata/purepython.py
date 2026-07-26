@@ -51,6 +51,44 @@ _EXIF_DATE_FORMAT = "%Y:%m:%d %H:%M:%S"
 # EXIF. -1 significa "não sei" e vira None em vez de "sem rotação".
 _FLIP_PARA_ORIENTACAO = {0: 1, 3: 3, 5: 8, 6: 6}
 
+# Tags que ocupam espaço e não dizem nada legível: miniatura embutida,
+# perfil de cor, bloco proprietário do fabricante. Ficam de fora da base
+# bruta — o objetivo é ter o que dá para cruzar, não o arquivo de novo.
+_TAGS_OPACAS = frozenset({
+    "MakerNote", "UserComment", "ICCProfile", "InterColorProfile",
+    "ThumbnailData", "PrintImageMatching", "XMLPacket", "ExifTool",
+    "JPEGThumbnail", "TIFFThumbnail", "ImageResources", "Padding",
+})
+_VALOR_MAX = 500
+
+
+def _valor_legivel(valor: object) -> str | None:
+    """Texto curto que representa a tag, ou None quando não vale guardar.
+
+    Blobs binários e listas gigantes entram como ruído: inflam a base e
+    ninguém cruza por eles. O corte é por tamanho, não por adivinhação de
+    tipo — uma tag desconhecida e curta continua entrando.
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, bytes):
+        return None
+    texto = str(valor).strip()
+    if not texto or len(texto) > _VALOR_MAX:
+        return None
+    return texto
+
+
+def _coletar(destino: list, namespace: str, itens) -> None:
+    """Acumula (namespace, chave, valor) descartando o ilegível."""
+    for chave, valor in itens:
+        nome = str(chave)
+        if nome in _TAGS_OPACAS:
+            continue
+        texto = _valor_legivel(valor)
+        if texto is not None:
+            destino.append((namespace, nome, texto))
+
 
 def _parse_exif_date(raw: object) -> datetime | None:
     try:
@@ -108,8 +146,22 @@ class PurePythonExtractor:
                 lente = sub.get(ExifTags.Base.LensModel)
                 meta.lente = str(lente).strip() if lente else None
 
+                # Base bruta: tudo que o arquivo diz, não só os campos que a
+                # cascata consome hoje. É o substrato das correlações que
+                # ainda não foram escritas.
+                _coletar(meta.extras, "exif", (
+                    (ExifTags.TAGS.get(k, k), v) for k, v in exif.items()
+                ))
+                _coletar(meta.extras, "exif", (
+                    (ExifTags.TAGS.get(k, k), v) for k, v in sub.items()
+                ))
+
                 gps_ifd = exif.get_ifd(ExifTags.IFD.GPSInfo)
                 if gps_ifd:
+                    _coletar(meta.extras, "gps", (
+                        (ExifTags.GPSTAGS.get(k, k), v)
+                        for k, v in gps_ifd.items()
+                    ))
                     lat = gps_ifd.get(2)
                     lat_ref = gps_ifd.get(1)
                     lon = gps_ifd.get(4)
@@ -142,6 +194,20 @@ class PurePythonExtractor:
                 modelo_lente = getattr(raw.lens, "model", "") or ""
                 meta.lente = modelo_lente.strip() or None
                 meta.orientacao = _FLIP_PARA_ORIENTACAO.get(sizes.flip)
+                # No CR3 o libraw é a única fonte: o exifread não abre
+                # ISO-BMFF. Exposição, ISO e distância focal só existem aqui.
+                outros = raw.other
+                _coletar(meta.extras, "libraw", (
+                    ("iso", getattr(outros, "iso_speed", None)),
+                    ("abertura", getattr(outros, "aperture", None)),
+                    ("obturador", getattr(outros, "shutter_speed", None)),
+                    ("distancia_focal", getattr(outros, "focal_length", None)),
+                    ("artista", getattr(outros, "artist", None)),
+                    ("ordem_disparo", getattr(outros, "shot_order", None)),
+                    ("lente_min_focal", getattr(raw.lens, "min_focal", None)),
+                    ("lente_max_focal", getattr(raw.lens, "max_focal", None)),
+                    ("flip", sizes.flip),
+                ))
         except Exception as exc:
             meta.erro = f"{type(exc).__name__}: {exc}"
 
@@ -155,6 +221,7 @@ class PurePythonExtractor:
         try:
             with path.open("rb") as fh:
                 tags = exifread.process_file(fh, details=False)
+            _coletar(meta.extras, "exif", tags.items())
             make, model = tags.get("Image Make"), tags.get("Image Model")
             meta.make = str(make).strip() if make else None
             meta.model = str(model).strip() if model else None

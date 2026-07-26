@@ -117,3 +117,37 @@ def test_raw_sem_lente_ou_rotacao_conhecida_nao_inventa(monkeypatch, tmp_path):
     meta = _extrair_raw(monkeypatch, tmp_path, "vazio.dng", flip=-1, lente="")
     assert meta.lente is None
     assert meta.orientacao is None
+
+
+# -- base bruta: tudo que o arquivo diz, não só os 8 campos tipados ----------
+def test_extras_trazem_as_tags_do_arquivo(tmp_path):
+    """O catálogo guarda 8 colunas; o arquivo carrega dezenas de tags. As
+    correlações que ainda não foram escritas precisam do resto."""
+    path = make_jpeg(
+        tmp_path / "foto.jpg", data_exif="2024:05:04 10:30:00",
+        gps=(43.95, 4.8083), make="Canon", model="EOS R6",
+        lente="RF 50mm", orientacao=6,
+    )
+    meta = PurePythonExtractor().extract(path)
+    chaves = {(ns, chave) for ns, chave, _ in meta.extras}
+    assert ("exif", "Make") in chaves
+    assert ("exif", "DateTimeOriginal") in chaves
+    assert ("exif", "LensModel") in chaves
+    assert ("gps", "GPSLatitude") in chaves
+    # Valor legível, não repr de objeto binário.
+    valores = {chave: v for _, chave, v in meta.extras}
+    assert valores["Make"] == "Canon"
+    assert len(meta.extras) > 8
+
+
+def test_valor_ilegivel_ou_gigante_fica_de_fora():
+    from fotoorganizer.metadata.purepython import _coletar, _valor_legivel
+
+    assert _valor_legivel(b"\x00\x01binario") is None
+    assert _valor_legivel("x" * 5000) is None
+    assert _valor_legivel("  Canon  ") == "Canon"
+    assert _valor_legivel(None) is None
+
+    destino: list = []
+    _coletar(destino, "exif", [("MakerNote", "seja o que for"), ("ISO", 100)])
+    assert destino == [("exif", "ISO", "100")]

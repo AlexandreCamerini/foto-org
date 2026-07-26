@@ -24,7 +24,7 @@ from pathlib import Path
 from threading import Event
 from typing import Callable
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import ScannerSettings
@@ -318,6 +318,15 @@ class CatalogScanner:
 
         if meta.extras:
             session.flush()
+            # Re-scan reescreve a base bruta do arquivo: sem isto, cada nova
+            # leitura empilharia outra cópia das mesmas dezenas de tags.
+            if existing is not None:
+                session.execute(delete(MetadataEntry).where(
+                    MetadataEntry.media_id == media.id,
+                    MetadataEntry.namespace.in_(
+                        {ns for ns, _, _ in meta.extras}
+                    ),
+                ))
             for namespace, chave, valor in meta.extras:
                 session.add(
                     MetadataEntry(
