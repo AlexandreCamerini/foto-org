@@ -5,6 +5,8 @@ import Inspector from "./components/Inspector";
 import Loupe from "./components/Loupe";
 import Duplicates from "./components/Duplicates";
 import Operations from "./components/Operations";
+import Panorama from "./components/Panorama";
+import type { Recorte } from "./components/Panorama";
 import PhotoGrid from "./components/PhotoGrid";
 import Review from "./components/Review";
 import Sidebar from "./components/Sidebar";
@@ -13,6 +15,7 @@ import { useJob } from "./hooks/useJob";
 import { useMidia } from "./hooks/useMidia";
 
 const ABAS = [
+  "Panorama",
   "Biblioteca",
   "Viagens",
   "Revisão",
@@ -22,26 +25,29 @@ const ABAS = [
 type Aba = (typeof ABAS)[number];
 
 export default function App() {
-  const [aba, setAba] = useState<Aba>("Biblioteca");
+  // Abre no Panorama: a primeira pergunta de quem tem 30 mil fotos é "em
+  // que estado isso está?", não "me mostre a grade".
+  const [aba, setAba] = useState<Aba>("Panorama");
   const [fonte, setFonte] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState("data_desc");
   const [zoom, setZoom] = useState(160);
   const [selIndex, setSelIndex] = useState<number | null>(null);
   const [loupeAberto, setLoupeAberto] = useState(false);
-  // Filtro de agrupamento (clique num card de viagem/evento).
-  const [grupo, setGrupo] = useState<{
-    trip_id?: number;
-    event_id?: number;
-    nome: string;
-  } | null>(null);
+  // Recorte da biblioteca vindo de outra aba: card de viagem/evento no
+  // Viagens, lacuna ou faceta no Panorama. Um só, e sempre visível como
+  // chip removível — filtro escondido é filtro que confunde.
+  const [recorte, setRecorte] = useState<Recorte | null>(null);
   const colunasRef = useRef(1);
 
   const filtros: FiltrosMidia = {
     busca: busca || undefined,
     source_id: fonte ?? undefined,
-    trip_id: grupo?.trip_id,
-    event_id: grupo?.event_id,
+    trip_id: recorte?.trip_id,
+    event_id: recorte?.event_id,
+    lacuna: recorte?.lacuna,
+    ano: recorte?.ano,
+    extensao: recorte?.extensao,
     ordenacao,
   };
   const midia = useMidia(filtros);
@@ -52,7 +58,7 @@ export default function App() {
   useEffect(() => {
     setSelIndex(null);
     setLoupeAberto(false);
-  }, [busca, fonte, ordenacao, grupo]);
+  }, [busca, fonte, ordenacao, recorte]);
 
   const navegar = useCallback(
     (destino: number) => {
@@ -119,10 +125,18 @@ export default function App() {
         <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
 
         <main className="flex min-w-0 flex-1 flex-col">
+          {aba === "Panorama" && (
+            <Panorama
+              aoRecortar={(novo) => {
+                setRecorte(novo);
+                setAba("Biblioteca");
+              }}
+            />
+          )}
           {aba === "Viagens" && (
             <Trips
               onAbrir={(filtro, nome) => {
-                setGrupo({ ...filtro, nome });
+                setRecorte({ ...filtro, nome });
                 setAba("Biblioteca");
               }}
             />
@@ -133,13 +147,13 @@ export default function App() {
           {aba === "Biblioteca" && (
             <>
               <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
-                {grupo && (
+                {recorte && (
                   <button
-                    onClick={() => setGrupo(null)}
+                    onClick={() => setRecorte(null)}
                     className="flex items-center gap-1 rounded-md border border-acento px-2 py-1 text-acento hover:bg-cartao"
-                    title="Limpar filtro de agrupamento"
+                    title="Limpar recorte"
                   >
-                    {grupo.nome} ✕
+                    {recorte.nome} ✕
                   </button>
                 )}
                 <input

@@ -62,7 +62,34 @@ export interface FiltrosMidia {
   ano?: number;
   trip_id?: number;
   event_id?: number;
+  lacuna?: string;
   ordenacao?: string;
+}
+
+export interface Faceta {
+  chave: string;
+  quantidade: number;
+}
+
+/** Lacuna = o que impede a foto de se organizar sozinha. Cada uma é um
+ * filtro pronto: o número na tela e o conjunto filtrado são o mesmo. */
+export interface Lacuna extends Faceta {
+  rotulo: string;
+}
+
+export interface CelulaCruzamento {
+  ano: string;
+  source_id: number;
+  quantidade: number;
+}
+
+export interface PanoramaDados {
+  total: number;
+  lacunas: Lacuna[];
+  por_ano: Faceta[];
+  por_camera: Faceta[];
+  por_extensao: Faceta[];
+  cruzamento_ano_fonte: CelulaCruzamento[];
 }
 
 export interface Agrupamento {
@@ -167,6 +194,7 @@ export const api = {
   detalhe: (id: number) => json<MediaDetalhe>(`/api/midia/${id}`),
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
+  panorama: () => json<PanoramaDados>("/api/panorama"),
   viagens: () => json<Agrupamento[]>("/api/viagens"),
   eventos: () => json<Agrupamento[]>("/api/eventos"),
   sugestoes: (status: string, offset = 0, limit = 200) =>

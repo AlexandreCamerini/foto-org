@@ -45,7 +45,7 @@ from fotoorganizer.repositories import (
     OperationRepository,
     SuggestionRepository,
 )
-from fotoorganizer.repositories.media import MediaFilters
+from fotoorganizer.repositories.media import LACUNAS, MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters
 from fotoorganizer.server.jobs import JobManager
 from fotoorganizer.thumbnails import ThumbnailCache
@@ -187,13 +187,17 @@ def create_app(
         ano: int | None = None,
         trip_id: int | None = None,
         event_id: int | None = None,
+        lacuna: str | None = None,
         ordenacao: str = "data_desc",
         offset: int = 0,
         limit: int = 200,
     ) -> dict:
+        if lacuna is not None and lacuna not in LACUNAS:
+            raise HTTPException(422, f"lacuna desconhecida: {lacuna}")
         filters = MediaFilters(
             busca=busca, extensao=extensao, source_id=source_id,
-            ano=ano, trip_id=trip_id, event_id=event_id, ordenacao=ordenacao,
+            ano=ano, trip_id=trip_id, event_id=event_id, lacuna=lacuna,
+            ordenacao=ordenacao,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
@@ -206,6 +210,10 @@ def create_app(
     @app.get("/api/midia/filtros")
     def filtros_midia() -> dict:
         return {"extensoes": media_repo.extensoes(), "anos": media_repo.anos()}
+
+    @app.get("/api/panorama")
+    def panorama() -> dict:
+        return media_repo.panorama()
 
     @app.get("/api/midia/{media_id}")
     def detalhe_midia(media_id: int) -> dict:

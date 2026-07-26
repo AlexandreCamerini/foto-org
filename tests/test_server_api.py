@@ -246,6 +246,65 @@ def test_filtros_viagens_sugestoes_duplicatas_respondem(client):
     ).status_code == 422
 
 
+# -- panorama e lacunas ------------------------------------------------------
+@pytest.fixture()
+def panorama(migrated_engine, tmp_path):
+    """Quatro fotos com buracos diferentes — o caso real em miniatura."""
+    fotos = tmp_path / "fotos"
+    make_jpeg(fotos / "completa.jpg", seed=1, gps=(43.95, 4.81))
+    make_jpeg(fotos / "sem_gps.jpg", seed=2)
+    make_jpeg(fotos / "sem_data.jpg", seed=3, data_exif=None)
+    make_jpeg(fotos / "anonima.jpg", seed=4, make=None, model=None)
+
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(
+        factory, PurePythonExtractor(), ScannerSettings()
+    ).scan_source(fotos)
+    return TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+
+def test_panorama_conta_lacunas_e_facetas(panorama):
+    dados = panorama.get("/api/panorama").json()
+    assert dados["total"] == 4
+
+    por_chave = {l["chave"]: l["quantidade"] for l in dados["lacunas"]}
+    assert por_chave["sem_data"] == 1
+    assert por_chave["sem_gps"] == 3
+    assert por_chave["sem_camera"] == 1
+    assert por_chave["sem_grupo"] == 4
+    assert por_chave["sem_sugestao"] == 4
+    assert por_chave["erro_leitura"] == 0
+    # Toda lacuna tem rótulo legível — nenhuma chave crua chega na tela.
+    assert all(l["rotulo"] for l in dados["lacunas"])
+
+    anos = {a["chave"]: a["quantidade"] for a in dados["por_ano"]}
+    assert anos == {"2024": 3, "sem data": 1}
+    cameras = {c["chave"]: c["quantidade"] for c in dados["por_camera"]}
+    assert cameras == {"TestMake TestModel": 3, "desconhecida": 1}
+
+    cruzamento = dados["cruzamento_ano_fonte"]
+    assert sum(c["quantidade"] for c in cruzamento) == 4
+    assert {c["ano"] for c in cruzamento} == {"2024", "sem data"}
+
+
+def test_lacuna_filtra_a_biblioteca(panorama):
+    """O contrato do panorama: a contagem exibida e o filtro clicado
+    devolvem o mesmo conjunto — senão o número mente."""
+    for chave, esperado in [("sem_data", 1), ("sem_gps", 3), ("sem_camera", 1)]:
+        pagina = panorama.get("/api/midia", params={"lacuna": chave}).json()
+        assert pagina["total"] == esperado, chave
+
+    assert panorama.get(
+        "/api/midia", params={"lacuna": "sem_data"}
+    ).json()["itens"][0]["nome"] == "sem_data.jpg"
+    assert panorama.get(
+        "/api/midia", params={"lacuna": "inventada"}
+    ).status_code == 422
+
+
 # -- operações físicas (plano → dry-run → execução) --------------------------
 @pytest.fixture()
 def operacoes(migrated_engine, tmp_path):

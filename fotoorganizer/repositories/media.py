@@ -8,10 +8,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from fotoorganizer.models import MediaFile, Source
+from fotoorganizer.models import (
+    ConfidenceLevel,
+    MediaFile,
+    Source,
+    Suggestion,
+)
 
 ORDENACOES = {
     "data_desc": (MediaFile.data_capturada.desc().nulls_last(), MediaFile.id.desc()),
@@ -19,6 +24,42 @@ ORDENACOES = {
     "nome": (MediaFile.nome.asc(),),
     "tamanho_desc": (MediaFile.tamanho.desc(),),
 }
+
+# O que impede uma foto de ser organizada sozinha. A chave é o filtro; o
+# rótulo é o que o usuário lê. Ordem = ordem de exibição no panorama.
+LACUNAS: dict[str, str] = {
+    "sem_data": "sem data de captura",
+    "sem_gps": "sem coordenada",
+    "sem_grupo": "fora de viagem ou evento",
+    "sem_camera": "sem câmera identificada",
+    "sem_sugestao": "sem sugestão de destino",
+    "confianca_baixa": "sugestão de confiança baixa",
+    "confianca_media": "sugestão de confiança média",
+    "erro_leitura": "erro ao ler o arquivo",
+}
+
+
+def _condicao_lacuna(chave: str):
+    """Cada lacuna vira um predicado. Subconsulta em vez de join para a
+    contagem não inflar quando a foto tem mais de uma sugestão."""
+    def com_nivel(nivel: ConfidenceLevel):
+        return MediaFile.id.in_(
+            select(Suggestion.media_id).where(Suggestion.nivel == nivel)
+        )
+
+    condicoes = {
+        "sem_data": MediaFile.data_capturada.is_(None),
+        "sem_gps": or_(MediaFile.gps_lat.is_(None), MediaFile.gps_lon.is_(None)),
+        "sem_grupo": and_(
+            MediaFile.trip_id.is_(None), MediaFile.event_id.is_(None)
+        ),
+        "sem_camera": and_(MediaFile.make.is_(None), MediaFile.model.is_(None)),
+        "sem_sugestao": MediaFile.id.not_in(select(Suggestion.media_id)),
+        "confianca_baixa": com_nivel(ConfidenceLevel.BAIXA),
+        "confianca_media": com_nivel(ConfidenceLevel.MEDIA),
+        "erro_leitura": MediaFile.erro_leitura.is_not(None),
+    }
+    return condicoes.get(chave)
 
 
 @dataclass(frozen=True)
@@ -29,6 +70,7 @@ class MediaFilters:
     ano: int | None = None
     trip_id: int | None = None
     event_id: int | None = None
+    lacuna: str | None = None
     ordenacao: str = "data_desc"
 
 
@@ -55,6 +97,10 @@ class MediaRepository:
             stmt = stmt.where(MediaFile.trip_id == filters.trip_id)
         if filters.event_id is not None:
             stmt = stmt.where(MediaFile.event_id == filters.event_id)
+        if filters.lacuna:
+            condicao = _condicao_lacuna(filters.lacuna)
+            if condicao is not None:
+                stmt = stmt.where(condicao)
         return stmt
 
     def listar(
@@ -99,6 +145,85 @@ class MediaRepository:
                 .order_by(Source.caminho)
             )
             return [(source, contagem) for source, contagem in session.execute(stmt)]
+
+    def panorama(self) -> dict:
+        """O que a base sabe e onde ela não sabe.
+
+        As lacunas vêm primeiro porque são acionáveis: cada uma é um filtro
+        pronto para o usuário atacar o conjunto. As facetas existem para
+        cruzar — o mesmo ano visto por fonte revela, por exemplo, que 2019
+        só existe no Google Fotos e nunca foi baixado.
+        """
+        ano_expr = func.strftime("%Y", MediaFile.data_capturada)
+        with self._factory() as session:
+            def contar(condicao) -> int:
+                return session.scalar(
+                    select(func.count(MediaFile.id)).where(condicao)
+                ) or 0
+
+            def facetas(expr, ordenar_por_contagem: bool = True) -> list[dict]:
+                stmt = select(expr, func.count(MediaFile.id)).group_by(expr)
+                linhas = session.execute(stmt).all()
+                chaves = [
+                    {"chave": chave, "quantidade": n} for chave, n in linhas
+                ]
+                chaves.sort(
+                    key=lambda f: (-f["quantidade"], str(f["chave"] or ""))
+                    if ordenar_por_contagem
+                    else (str(f["chave"] or ""),)
+                )
+                return chaves
+
+            cameras: dict[str, int] = {}
+            for make, model, n in session.execute(
+                select(MediaFile.make, MediaFile.model, func.count(MediaFile.id))
+                .group_by(MediaFile.make, MediaFile.model)
+            ):
+                rotulo = " ".join(p for p in (make, model) if p) or "desconhecida"
+                cameras[rotulo] = cameras.get(rotulo, 0) + n
+
+            return {
+                "total": session.scalar(select(func.count(MediaFile.id))) or 0,
+                "lacunas": [
+                    {
+                        "chave": chave,
+                        "rotulo": rotulo,
+                        "quantidade": contar(_condicao_lacuna(chave)),
+                    }
+                    for chave, rotulo in LACUNAS.items()
+                ],
+                "por_ano": [
+                    {"chave": chave or "sem data", "quantidade": n}
+                    for chave, n in sorted(
+                        session.execute(
+                            select(ano_expr, func.count(MediaFile.id))
+                            .group_by(ano_expr)
+                        ).all(),
+                        key=lambda linha: (linha[0] is None, linha[0] or ""),
+                        reverse=True,
+                    )
+                ],
+                "por_camera": [
+                    {"chave": rotulo, "quantidade": n}
+                    for rotulo, n in sorted(
+                        cameras.items(), key=lambda kv: (-kv[1], kv[0])
+                    )
+                ],
+                "por_extensao": facetas(MediaFile.extensao),
+                "cruzamento_ano_fonte": [
+                    {
+                        "ano": ano or "sem data",
+                        "source_id": source_id,
+                        "quantidade": n,
+                    }
+                    for ano, source_id, n in session.execute(
+                        select(
+                            ano_expr, MediaFile.source_id,
+                            func.count(MediaFile.id),
+                        ).group_by(ano_expr, MediaFile.source_id)
+                    )
+                ],
+            }
 
     def estatisticas(self) -> dict:
         with self._factory() as session:
