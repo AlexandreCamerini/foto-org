@@ -83,6 +83,10 @@ class MediaFile(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"))
     caminho: Mapped[str] = mapped_column(Text)
+    # Referência: a foto existe no catálogo externo (iCloud) mas não há
+    # arquivo no disco. Ela doa horário e GPS para a correlação e fica fora
+    # de grade, miniatura, duplicata e plano de cópia — não há o que copiar.
+    arquivo_ausente: Mapped[bool] = mapped_column(default=False)
     volume: Mapped[str | None]
     pasta: Mapped[str] = mapped_column(Text)
     nome: Mapped[str]

@@ -35,8 +35,19 @@ def test_conversao_completa():
     assert asset.pessoas == ("Serena",)  # vazios fora
 
 
-def test_original_so_no_icloud_e_pulado():
-    assert _asset_de(_photo(path=None)) is None
+def test_original_so_no_icloud_vira_referencia():
+    """Biblioteca em 'Otimizar armazenamento' quase não tem arquivo local, e
+    é dela que vem o GPS de celular. Descartar seria jogar fora o doador."""
+    asset = _asset_de(_photo(path=None, uuid="ABC-123"))
+    assert asset is not None
+    assert asset.caminho is None
+    assert asset.referencia == "ABC-123"
+    assert asset.gps_lat == 25.2
+    assert asset.data_capturada == datetime(2025, 11, 1, 9, 30)
+
+
+def test_sem_arquivo_e_sem_uuid_nao_da_para_referenciar():
+    assert _asset_de(_photo(path=None, uuid=None)) is None
 
 
 def test_sem_gps_e_sem_data():

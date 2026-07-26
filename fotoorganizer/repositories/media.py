@@ -79,7 +79,10 @@ class MediaRepository:
         self._factory = session_factory
 
     def _query(self, filters: MediaFilters):
-        stmt = select(MediaFile)
+        # Referências não têm arquivo: ficam fora da biblioteca visível, das
+        # contagens e de qualquer filtro. Existem só para doar GPS e horário
+        # à correlação.
+        stmt = select(MediaFile).where(MediaFile.arquivo_ausente.is_(False))
         if filters.busca:
             like = f"%{filters.busca}%"
             stmt = stmt.where(
@@ -140,7 +143,12 @@ class MediaRepository:
         with self._factory() as session:
             stmt = (
                 select(Source, func.count(MediaFile.id))
-                .outerjoin(MediaFile, MediaFile.source_id == Source.id)
+                .outerjoin(
+                    MediaFile,
+                    (MediaFile.source_id == Source.id)
+                    # A contagem da barra lateral é do que dá para abrir.
+                    & MediaFile.arquivo_ausente.is_(False),
+                )
                 .group_by(Source.id)
                 .order_by(Source.caminho)
             )
@@ -155,14 +163,16 @@ class MediaRepository:
         só existe no Google Fotos e nunca foi baixado.
         """
         ano_expr = func.strftime("%Y", MediaFile.data_capturada)
+        proprias = MediaFile.arquivo_ausente.is_(False)
         with self._factory() as session:
             def contar(condicao) -> int:
                 return session.scalar(
-                    select(func.count(MediaFile.id)).where(condicao)
+                    select(func.count(MediaFile.id)).where(proprias, condicao)
                 ) or 0
 
             def facetas(expr, ordenar_por_contagem: bool = True) -> list[dict]:
-                stmt = select(expr, func.count(MediaFile.id)).group_by(expr)
+                stmt = (select(expr, func.count(MediaFile.id))
+                        .where(proprias).group_by(expr))
                 linhas = session.execute(stmt).all()
                 chaves = [
                     {"chave": chave, "quantidade": n} for chave, n in linhas
@@ -177,13 +187,15 @@ class MediaRepository:
             cameras: dict[str, int] = {}
             for make, model, n in session.execute(
                 select(MediaFile.make, MediaFile.model, func.count(MediaFile.id))
-                .group_by(MediaFile.make, MediaFile.model)
+                .where(proprias).group_by(MediaFile.make, MediaFile.model)
             ):
                 rotulo = " ".join(p for p in (make, model) if p) or "desconhecida"
                 cameras[rotulo] = cameras.get(rotulo, 0) + n
 
             return {
-                "total": session.scalar(select(func.count(MediaFile.id))) or 0,
+                "total": session.scalar(
+                    select(func.count(MediaFile.id)).where(proprias)
+                ) or 0,
                 "lacunas": [
                     {
                         "chave": chave,
@@ -197,7 +209,7 @@ class MediaRepository:
                     for chave, n in sorted(
                         session.execute(
                             select(ano_expr, func.count(MediaFile.id))
-                            .group_by(ano_expr)
+                            .where(proprias).group_by(ano_expr)
                         ).all(),
                         key=lambda linha: (linha[0] is None, linha[0] or ""),
                         reverse=True,
@@ -220,21 +232,28 @@ class MediaRepository:
                         select(
                             ano_expr, MediaFile.source_id,
                             func.count(MediaFile.id),
-                        ).group_by(ano_expr, MediaFile.source_id)
+                        ).where(proprias).group_by(ano_expr, MediaFile.source_id)
                     )
                 ],
             }
 
     def estatisticas(self) -> dict:
         with self._factory() as session:
-            total = session.scalar(select(func.count(MediaFile.id))) or 0
-            erros = (
-                session.scalar(
-                    select(func.count(MediaFile.id)).where(
-                        MediaFile.erro_leitura.is_not(None)
-                    )
-                )
-                or 0
-            )
-            fontes = session.scalar(select(func.count(Source.id))) or 0
-            return {"total": total, "erros": erros, "fontes": fontes}
+            def contar(*filtros) -> int:
+                return session.scalar(
+                    select(func.count(MediaFile.id)).where(*filtros)
+                ) or 0
+
+            proprias = MediaFile.arquivo_ausente.is_(False)
+            referencias = MediaFile.arquivo_ausente.is_(True)
+            return {
+                "total": contar(proprias),
+                "erros": contar(proprias, MediaFile.erro_leitura.is_not(None)),
+                "fontes": session.scalar(select(func.count(Source.id))) or 0,
+                # Fotos que o app conhece sem ter o arquivo (iCloud): não
+                # entram na biblioteca, doam GPS para a correlação.
+                "referencias": contar(referencias),
+                "referencias_com_gps": contar(
+                    referencias, MediaFile.gps_lat.is_not(None)
+                ),
+            }

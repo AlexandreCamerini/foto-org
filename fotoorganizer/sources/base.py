@@ -20,9 +20,17 @@ from fotoorganizer.models import SourceType
 
 @dataclass(slots=True)
 class ExternalAsset:
-    """Um item do catálogo externo. `caminho` aponta para o arquivo real."""
+    """Um item do catálogo externo.
 
-    caminho: Path
+    `caminho` aponta para o arquivo real quando ele existe no disco. Quando
+    é `None`, o item é uma REFERÊNCIA: o catálogo externo sabe quando e onde
+    a foto foi tirada, mas o original está só na nuvem. Referência vale muito
+    para correlacionar — GPS de celular é o que localiza a foto de câmera —
+    e `referencia` dá a ela uma identidade estável no lugar do caminho.
+    """
+
+    caminho: Path | None
+    referencia: str | None = None
     data_capturada: datetime | None = None
     gps_lat: float | None = None
     gps_lon: float | None = None

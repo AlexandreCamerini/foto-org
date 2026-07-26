@@ -63,8 +63,16 @@ def _app_responsavel() -> str:
 
 def _asset_de(photo) -> ExternalAsset | None:
     """Converte um PhotoInfo (duck-typed, testável com fakes) em asset.
-    None quando não há arquivo local (original só no iCloud)."""
-    if photo.path is None:
+
+    Sem arquivo local (original só no iCloud) vira REFERÊNCIA em vez de ser
+    descartado: numa biblioteca em "Otimizar armazenamento" isso é a maioria
+    das fotos, e é justamente delas que vem o GPS que localiza as fotos de
+    câmera. Sem identidade estável (`uuid`) não há como referenciar, e aí
+    sim o item é descartado.
+    """
+    caminho = Path(photo.path) if photo.path else None
+    uuid = getattr(photo, "uuid", None)
+    if caminho is None and not uuid:
         return None
     data = photo.date
     if data is not None and data.tzinfo is not None:
@@ -72,7 +80,8 @@ def _asset_de(photo) -> ExternalAsset | None:
         data = data.replace(tzinfo=None)
     lat, lon = (photo.location or (None, None))
     return ExternalAsset(
-        caminho=Path(photo.path),
+        caminho=caminho,
+        referencia=uuid,
         data_capturada=data,
         gps_lat=lat, gps_lon=lon,
         titulo=(photo.title or None),
@@ -122,15 +131,20 @@ class ApplePhotosProvider:
                 f"Acesso Total ao Disco, e reinicie o app depois de marcar."
             ) from exc
 
-        pulados_icloud = 0
+        sem_identidade = referencias = 0
         for photo in db.photos(movies=False):
             asset = _asset_de(photo)
             if asset is None:
-                pulados_icloud += 1
+                sem_identidade += 1
                 continue
+            if asset.caminho is None:
+                referencias += 1
             yield asset
-        if pulados_icloud:
+        if referencias:
             log.info(
-                "apple_photos: %d itens sem original local (iCloud) pulados",
-                pulados_icloud,
+                "apple_photos: %d itens sem original local entraram como "
+                "referência (doam data e GPS para a correlação)", referencias,
             )
+        if sem_identidade:
+            log.info("apple_photos: %d itens sem uuid nem arquivo, ignorados",
+                     sem_identidade)

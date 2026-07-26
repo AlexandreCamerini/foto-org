@@ -75,7 +75,10 @@ def test_anos_e_extensoes(repo):
 
 def test_estatisticas(repo):
     stats = repo.estatisticas()
-    assert stats == {"total": 4, "erros": 1, "fontes": 2}
+    assert stats == {
+        "total": 4, "erros": 1, "fontes": 2,
+        "referencias": 0, "referencias_com_gps": 0,
+    }
 
 
 def test_ordenacao_tamanho(repo):

@@ -141,16 +141,24 @@ class SuggestionEngine:
             por_id = {m.id: m for m in midias}
 
             # Correlação entre fontes: fotos sem GPS herdam localização de
-            # fotos de outra origem tiradas a minutos de distância.
+            # fotos de outra origem tiradas a minutos de distância. Entram
+            # TODAS as mídias, inclusive as referências sem arquivo local —
+            # são elas que trazem GPS de celular numa biblioteca em iCloud.
             herancas = self._correlacionar(midias)
 
+            # Daqui em diante só o que o usuário pode ver e organizar: uma
+            # referência não tem arquivo para agrupar nem para copiar.
+            organizaveis = [m for m in midias if not m.arquivo_ausente]
+
             sessoes, sessao_da_media = self._montar_sessoes(
-                session, midias, herancas
+                session, organizaveis, herancas
             )
-            self._persistir_agrupamentos(session, midias, sessoes, sessao_da_media)
+            self._persistir_agrupamentos(
+                session, organizaveis, sessoes, sessao_da_media
+            )
 
             geradas = 0
-            for media in midias:
+            for media in organizaveis:
                 if media.id in decididas:
                     continue
                 drafts = self._evidencias_para(

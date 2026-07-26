@@ -133,3 +133,90 @@ def test_arquivo_inacessivel_conta_erro_e_segue(importer, tmp_path):
     ]))
     assert metrics.erros == 1
     assert metrics.importados == 1
+
+
+# -- referências sem arquivo local (biblioteca em iCloud) --------------------
+def test_referencia_entra_no_catalogo_e_fica_fora_da_biblioteca(
+    importer, tmp_path
+):
+    """Foto só na nuvem não tem arquivo, mas tem horário e GPS. Ela entra
+    para doar correlação e não aparece na grade — não há o que abrir."""
+    from fotoorganizer.repositories import MediaRepository
+    from fotoorganizer.repositories.media import MediaFilters
+
+    factory, imp = importer
+    referencia = ExternalAsset(
+        caminho=None, referencia="UUID-1",
+        data_capturada=datetime(2025, 11, 1, 9, 30),
+        gps_lat=25.2, gps_lon=55.3, titulo="Do iPhone",
+    )
+    metrics = imp.importar(FakeProvider(tmp_path / "t", [referencia]))
+    assert metrics.importados == 1
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).one()
+        assert media.arquivo_ausente is True
+        assert media.gps_lat == 25.2
+        assert media.tamanho == 0 and media.hash_rapido is None
+        assert media.caminho == "google://UUID-1"
+
+    repo = MediaRepository(factory)
+    assert repo.contar(MediaFilters()) == 0          # fora da grade
+    assert repo.estatisticas()["total"] == 0
+    assert repo.estatisticas()["referencias"] == 1
+    assert repo.estatisticas()["referencias_com_gps"] == 1
+
+
+def test_referencia_e_idempotente(importer, tmp_path):
+    factory, imp = importer
+    asset = ExternalAsset(
+        caminho=None, referencia="UUID-1",
+        data_capturada=datetime(2025, 11, 1, 9, 30), gps_lat=1.0, gps_lon=2.0,
+    )
+    provider = FakeProvider(tmp_path / "t", [asset])
+    imp.importar(provider)
+    imp.importar(provider)
+    with factory() as session:
+        assert len(list(session.scalars(select(MediaFile)))) == 1
+
+
+def test_referencia_doa_gps_para_foto_de_camera(importer, tmp_path):
+    """O caso real: câmera sem GPS herda a coordenada da foto de celular
+    tirada nos mesmos minutos, mesmo o celular não tendo arquivo local."""
+    from fotoorganizer.classification import SuggestionEngine
+    from fotoorganizer.geolocation import LocationResolver
+    from fotoorganizer.geolocation.offline import OfflineGeocoder
+    from fotoorganizer.models import Source
+
+    factory, imp = importer
+
+    # Duas referências de celular com GPS, minutos antes e depois.
+    imp.importar(FakeProvider(tmp_path / "t", [
+        ExternalAsset(caminho=None, referencia=f"U{i}",
+                      data_capturada=datetime(2025, 11, 1, 9, 30 + i),
+                      gps_lat=25.2, gps_lon=55.3)
+        for i in range(3)
+    ]))
+
+    # Uma foto de câmera, sem GPS, no meio do intervalo.
+    pasta = tmp_path / "camera"
+    arquivo = make_jpeg(pasta / "ACM_1.jpg", seed=1,
+                        data_exif="2025:11:01 09:31:00")
+    with factory() as session:
+        fonte = Source(caminho=str(pasta))
+        session.add(fonte)
+        session.flush()
+        session.add(MediaFile(
+            source_id=fonte.id, caminho=str(arquivo), pasta=str(pasta),
+            nome=arquivo.name, extensao="jpg", tamanho=arquivo.stat().st_size,
+            data_capturada=datetime(2025, 11, 1, 9, 31),
+        ))
+        session.commit()
+
+    resultado = SuggestionEngine(
+        factory, LocationResolver(OfflineGeocoder())
+    ).gerar()
+
+    assert resultado["herancas_gps"] >= 1
+    # Só a foto de câmera vira sugestão; referência não tem destino.
+    assert resultado["sugestoes"] == 1

@@ -109,6 +109,19 @@ class ExternalCatalogImporter:
             ) as pool:
                 for asset in provider.iter_assets():
                     metrics.vistos += 1
+                    if asset.caminho is None:
+                        # Referência: não há arquivo para ler nem hashear.
+                        self._gravar_referencia(
+                            session, source.id, namespace, asset
+                        )
+                        metrics.importados += 1
+                        desde_commit += 1
+                        if desde_commit >= _BATCH_SIZE:
+                            session.commit()
+                            desde_commit = 0
+                        if progress:
+                            progress(metrics, asset.referencia or "")
+                        continue
                     try:
                         stat = asset.caminho.stat()
                     except OSError as exc:
@@ -216,7 +229,38 @@ class ExternalCatalogImporter:
         if existing is None:
             session.add(media)
         session.flush()
+        self._gravar_metadados_externos(session, media, namespace, asset)
 
+    def _gravar_referencia(self, session: Session, source_id: int,
+                           namespace: str, asset: ExternalAsset) -> None:
+        """Grava um item sem arquivo local. Sem stat, sem hash, sem
+        miniatura — o valor está em `data_capturada` e no GPS, que fazem
+        dele um doador para a correlação entre fontes."""
+        caminho = f"{namespace}://{asset.referencia}"
+        existing = session.scalar(
+            select(MediaFile).where(
+                MediaFile.source_id == source_id,
+                MediaFile.caminho == caminho,
+            )
+        )
+        media = existing or MediaFile(
+            source_id=source_id, caminho=caminho, pasta="", nome="",
+            extensao="", tamanho=0,
+        )
+        media.arquivo_ausente = True
+        media.nome = asset.titulo or f"{namespace}:{asset.referencia}"
+        media.data_capturada = asset.data_capturada
+        if asset.gps_lat is not None:
+            media.gps_lat, media.gps_lon = asset.gps_lat, asset.gps_lon
+        media.indexado_em = datetime.now(timezone.utc).replace(tzinfo=None)
+        if existing is None:
+            session.add(media)
+        session.flush()
+        self._gravar_metadados_externos(session, media, namespace, asset)
+
+    @staticmethod
+    def _gravar_metadados_externos(session: Session, media: MediaFile,
+                                   namespace: str, asset: ExternalAsset) -> None:
         # Contexto que só o catálogo externo tem — regravado a cada import.
         session.execute(delete(MetadataEntry).where(
             MetadataEntry.media_id == media.id,
