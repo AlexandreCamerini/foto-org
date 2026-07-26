@@ -4,6 +4,7 @@ import type { FiltrosMidia } from "./api";
 import Inspector from "./components/Inspector";
 import Loupe from "./components/Loupe";
 import Duplicates from "./components/Duplicates";
+import Operations from "./components/Operations";
 import PhotoGrid from "./components/PhotoGrid";
 import Review from "./components/Review";
 import Sidebar from "./components/Sidebar";
@@ -11,7 +12,13 @@ import Trips from "./components/Trips";
 import { useJob } from "./hooks/useJob";
 import { useMidia } from "./hooks/useMidia";
 
-const ABAS = ["Biblioteca", "Viagens", "Revisão", "Duplicatas"] as const;
+const ABAS = [
+  "Biblioteca",
+  "Viagens",
+  "Revisão",
+  "Duplicatas",
+  "Operações",
+] as const;
 type Aba = (typeof ABAS)[number];
 
 export default function App() {
@@ -122,6 +129,7 @@ export default function App() {
           )}
           {aba === "Revisão" && <Review job={job} />}
           {aba === "Duplicatas" && <Duplicates job={job} />}
+          {aba === "Operações" && <Operations job={job} />}
           {aba === "Biblioteca" && (
             <>
               <div className="flex items-center gap-2 border-b border-borda px-3 py-2">

@@ -90,10 +90,63 @@ export interface PaginaSugestoes {
   itens: SugestaoRow[];
 }
 
+/** Plano de cópia: nada sai do lugar até dry-run + aprovação explícita. */
+export interface Plano {
+  id: number;
+  nome: string;
+  status: string;
+  dry_run_em: string | null;
+  criado_em: string;
+  total_itens: number;
+  concluidos: number;
+  com_conflito: number;
+  com_erro: number;
+}
+
+export interface ItemPlano {
+  id: number;
+  origem: string;
+  destino: string;
+  status: string;
+  conflito: string | null;
+  erro: string | null;
+}
+
+export type PlanoDetalhe = Plano & { itens: ItemPlano[] };
+
+export interface RelatorioDryRun {
+  prontos: number;
+  problemas: string[];
+  bytes_necessarios: number;
+  bytes_livres: number | null;
+  espaco_suficiente: boolean;
+}
+
+export interface LinhaAuditoria {
+  id: number;
+  quando: string;
+  acao: string;
+  resultado: string;
+  detalhe: Record<string, unknown> | null;
+}
+
 async function json<T>(url: string): Promise<T> {
   const resposta = await fetch(url);
   if (!resposta.ok) throw new Error(`${resposta.status} em ${url}`);
   return resposta.json() as Promise<T>;
+}
+
+/** POST com a mensagem do servidor preservada — o usuário precisa ler
+ * "rode o dry-run antes de executar", não "erro 409". */
+async function post<T>(url: string, body?: unknown): Promise<T> {
+  const resposta = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  const dados = await resposta.json();
+  if (!resposta.ok) throw new Error(dados.detail ?? `erro ${resposta.status}`);
+  return dados as T;
 }
 
 export const api = {
@@ -120,16 +173,17 @@ export const api = {
     json<PaginaSugestoes>(
       `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}`,
     ),
-  acaoSugestoes: async (ids: number[], acao: string) => {
-    const resposta = await fetch("/api/sugestoes/acao", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, acao }),
-    });
-    if (!resposta.ok) throw new Error(`erro ${resposta.status}`);
-    return resposta.json() as Promise<{ afetadas: number }>;
-  },
+  acaoSugestoes: (ids: number[], acao: string) =>
+    post<{ afetadas: number }>("/api/sugestoes/acao", { ids, acao }),
   duplicatas: () => json<GrupoDuplicatas[]>("/api/duplicatas"),
+  planos: () => json<Plano[]>("/api/operacoes"),
+  plano: (id: number) => json<PlanoDetalhe>(`/api/operacoes/${id}`),
+  criarPlano: (raiz_destino: string, nome?: string) =>
+    post<Plano>("/api/operacoes", { raiz_destino, nome }),
+  dryRun: (id: number) =>
+    post<RelatorioDryRun>(`/api/operacoes/${id}/dry-run`),
+  auditoria: (id: number) =>
+    json<LinhaAuditoria[]>(`/api/operacoes/${id}/auditoria`),
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
 };

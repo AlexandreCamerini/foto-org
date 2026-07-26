@@ -1,8 +1,13 @@
-"""Trabalhos em background do servidor local (scan, importação).
+"""Trabalhos em background do servidor local (scan, importação, execução).
 
 Um trabalho por vez — a mesma disciplina da UI nativa. O estado é um
 snapshot atômico consultável por polling ou SSE; o frontend invalida as
 queries quando o status muda para concluído/erro.
+
+A execução de plano é o único trabalho que escreve fora do catálogo. Ela
+mantém seu próprio controle de cancelamento (`ExecutionControl`), porque
+parar uma cópia no meio exige remover o parcial — não basta o
+`ScanControl` cooperativo dos demais.
 """
 
 from __future__ import annotations
@@ -15,6 +20,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.metadata import PurePythonExtractor
+from fotoorganizer.operations import (
+    DryRunObrigatorio,
+    ExecutionControl,
+    OperationExecutor,
+)
 from fotoorganizer.scanner import CatalogScanner, ScanControl
 from fotoorganizer.sources import (
     ApplePhotosProvider,
@@ -35,6 +45,7 @@ class JobManager:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._control = ScanControl()
+        self._exec_control: ExecutionControl | None = None
         self._estado: dict = {"status": "nenhum"}
 
     # -- consulta -----------------------------------------------------------
@@ -48,6 +59,8 @@ class JobManager:
     def cancelar(self) -> None:
         self._control.continuar()
         self._control.cancelar()
+        if self._exec_control is not None:
+            self._exec_control.cancelar()
 
     # -- partida ---------------------------------------------------------------
     def iniciar_scan(self, caminho: Path) -> bool:
@@ -73,6 +86,18 @@ class JobManager:
     def iniciar_duplicatas(self) -> bool:
         return self._iniciar(
             "duplicatas", "catálogo inteiro", self._rodar_duplicatas
+        )
+
+    def iniciar_execucao(self, plan_id: int) -> bool:
+        """Executa um plano aprovado. O controle nasce aqui, na thread do
+        pedido, para que um cancelamento imediato não se perca."""
+        if self.ocupado():
+            return False
+        controle = ExecutionControl()
+        self._exec_control = controle
+        return self._iniciar(
+            "operacao", f"plano {plan_id}", self._rodar_execucao,
+            plan_id, controle,
         )
 
     def _iniciar(self, tipo: str, alvo: str, funcao, *args) -> bool:
@@ -141,6 +166,28 @@ class JobManager:
             )
         except Exception as exc:
             log.exception("job sugestões falhou")
+            self._atualizar(status="erro", mensagem=str(exc))
+
+    def _rodar_execucao(self, plan_id: int, controle: ExecutionControl) -> None:
+        executor = OperationExecutor(self._factory)
+
+        def progresso(n: int, total: int, origem: str) -> None:
+            self._atualizar(vistos=total, processados=n,
+                            arquivo=Path(origem).name)
+
+        try:
+            stats = executor.executar(
+                plan_id, progress=progresso, control=controle
+            )
+            self._atualizar(
+                status="cancelado" if stats["cancelado"] else "concluido",
+                processados=stats["copiados"], pulados=stats["pulados"],
+                erros=stats["erros"], resultado=stats,
+            )
+        except DryRunObrigatorio as exc:
+            self._atualizar(status="erro", mensagem=str(exc))
+        except Exception as exc:
+            log.exception("job execução falhou")
             self._atualizar(status="erro", mensagem=str(exc))
 
     def _rodar_duplicatas(self) -> None:

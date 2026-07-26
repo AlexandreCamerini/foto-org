@@ -1,4 +1,13 @@
-from fotoorganizer.operations.executor import ExecutionControl, OperationExecutor
+from fotoorganizer.operations.executor import (
+    DryRunObrigatorio,
+    ExecutionControl,
+    OperationExecutor,
+)
 from fotoorganizer.operations.planner import OperationPlanner
 
-__all__ = ["OperationPlanner", "OperationExecutor", "ExecutionControl"]
+__all__ = [
+    "DryRunObrigatorio",
+    "ExecutionControl",
+    "OperationExecutor",
+    "OperationPlanner",
+]

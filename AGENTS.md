@@ -1,4 +1,4 @@
-# Foto Organizer — guia do projeto para o Codex
+# Foto Organizer — guia do projeto para o Claude Code
 
 App desktop macOS, 100% local, para catalogar, analisar e organizar (de forma
 assistida e não destrutiva) uma grande coleção pessoal de fotos.
@@ -99,10 +99,11 @@ EXIF, confiança alta; cidade veio do nome da pasta, confiança média").
   Sobrou `database/fotos.db` (schema v1, tabela única `photos`): dado do
   usuário, não versionar, não apagar sem pedir. O catálogo atual vive em
   `~/Library/Application Support/FotoOrganizer/catalog.db`.
-- A UI PySide6 (`fotoorganizer/ui/`, `fotoorganizer/workers/`) é fallback
-  até o webapp ter paridade (falta a tela de Operações); sai em commit
-  próprio, não aos pedaços.
+- A UI PySide6 (`fotoorganizer/ui/`, `fotoorganizer/workers/`) é fallback.
+  O webapp já tem paridade de telas (incluindo Operações); o que falta para
+  aposentar a PySide6 é cobertura automatizada no webapp — hoje o único
+  teste de UI do repositório é `tests/test_ui_smoke.py`, que cobre
+  justamente a camada que sairia. Adicione vitest antes; a remoção sai em
+  commit próprio, não aos pedaços.
 - Commits pequenos com mensagens convencionais (feat/fix/docs/test), em
   português como o histórico existente.
-
-## Imported Claude Cowork project instructions

@@ -4,9 +4,13 @@ Mesma regra da UI nativa: o servidor fala com repositórios/serviços,
 nunca com filesystem/DB direto nos handlers além do que os serviços
 oferecem. Nada escuta fora do loopback; nenhuma chamada externa.
 
-F1 (read-only): fontes, mídia paginada, thumb/preview, evidências,
-viagens/eventos, sugestões e duplicatas. Mutations chegam nas fatias
-seguintes (scan/import, revisão, duplicatas).
+Cobre leitura do catálogo (fontes, mídia, evidências, viagens/eventos,
+sugestões, duplicatas), os trabalhos de background e as operações físicas.
+
+Operações são o único caminho que escreve fora do catálogo, e por isso o
+único com dois passos obrigatórios antes de qualquer byte se mover: criar
+o plano e rodar o dry-run. O servidor recusa executar um plano sem
+dry-run — o executor recusa de novo, por dentro.
 """
 
 from __future__ import annotations
@@ -34,9 +38,11 @@ from fotoorganizer.models import (
     SuggestionStatus,
     Trip,
 )
+from fotoorganizer.operations import OperationExecutor, OperationPlanner
 from fotoorganizer.repositories import (
     DuplicateRepository,
     MediaRepository,
+    OperationRepository,
     SuggestionRepository,
 )
 from fotoorganizer.repositories.media import MediaFilters
@@ -81,6 +87,11 @@ class AcaoSugestoesBody(BaseModel):
 
 class PrincipalBody(BaseModel):
     media_id: int
+
+
+class PlanoBody(BaseModel):
+    raiz_destino: str
+    nome: str | None = None
 
 _PREVIEW_SIZE = 2048
 
@@ -140,6 +151,9 @@ def create_app(
     media_repo = MediaRepository(session_factory)
     suggestion_repo = SuggestionRepository(session_factory)
     duplicate_repo = DuplicateRepository(session_factory)
+    operation_repo = OperationRepository(session_factory)
+    planner = OperationPlanner(session_factory)
+    executor = OperationExecutor(session_factory)
     thumb_cache = ThumbnailCache(settings.cache_dir)
     preview_dir = settings.cache_dir / "previews"
     jobs = JobManager(settings, session_factory)
@@ -385,6 +399,95 @@ def create_app(
     def duplicata_desfazer(group_id: int) -> dict:
         duplicate_repo.desfazer_grupo(group_id)
         return {"ok": True}
+
+    # -- operações físicas (plano → dry-run → execução) ----------------------
+    def _plano_json(row) -> dict:
+        return {
+            "id": row.id,
+            "nome": row.nome,
+            "status": row.status.value,
+            "dry_run_em": row.dry_run_em.isoformat() if row.dry_run_em else None,
+            "criado_em": row.criado_em.isoformat(),
+            "total_itens": row.total_itens,
+            "concluidos": row.concluidos,
+            "com_conflito": row.com_conflito,
+            "com_erro": row.com_erro,
+        }
+
+    @app.get("/api/operacoes")
+    def listar_planos() -> list[dict]:
+        return [_plano_json(p) for p in operation_repo.listar_planos()]
+
+    @app.post("/api/operacoes")
+    def criar_plano(body: PlanoBody) -> dict:
+        raiz = Path(body.raiz_destino).expanduser()
+        if not raiz.is_absolute():
+            raise HTTPException(422, "informe um caminho absoluto de destino")
+        # A raiz pode ainda não existir (a cópia cria as pastas), mas o volume
+        # que a contém precisa existir — senão o plano nasce apontando para um
+        # disco desconectado.
+        if not raiz.is_dir() and not raiz.parent.is_dir():
+            raise HTTPException(422, f"destino indisponível: {raiz.parent}")
+
+        plan_id = planner.criar_plano(raiz, body.nome)
+        if plan_id is None:
+            raise HTTPException(
+                409, "nenhuma sugestão aprovada aguardando cópia"
+            )
+        return _plano_json(operation_repo.plano(plan_id))
+
+    @app.get("/api/operacoes/{plan_id}")
+    def detalhe_plano(plan_id: int) -> dict:
+        plano = operation_repo.plano(plan_id)
+        if plano is None:
+            raise HTTPException(404, "plano não encontrado")
+        return {
+            **_plano_json(plano),
+            "itens": [
+                {
+                    "id": item.id,
+                    "origem": item.origem,
+                    "destino": item.destino,
+                    "status": item.status.value,
+                    "conflito": item.conflito,
+                    "erro": item.erro,
+                }
+                for item in operation_repo.itens(plan_id)
+            ],
+        }
+
+    @app.get("/api/operacoes/{plan_id}/auditoria")
+    def auditoria_plano(plan_id: int) -> list[dict]:
+        if operation_repo.plano(plan_id) is None:
+            raise HTTPException(404, "plano não encontrado")
+        return [
+            {
+                "id": linha.id,
+                "quando": linha.quando.isoformat(),
+                "acao": linha.acao,
+                "resultado": linha.resultado,
+                "detalhe": linha.detalhe,
+            }
+            for linha in operation_repo.auditoria(plan_id)
+        ]
+
+    @app.post("/api/operacoes/{plan_id}/dry-run")
+    def dry_run_plano(plan_id: int) -> dict:
+        """Só lê: confere origens, destinos livres e espaço em disco."""
+        if operation_repo.plano(plan_id) is None:
+            raise HTTPException(404, "plano não encontrado")
+        return executor.dry_run(plan_id)
+
+    @app.post("/api/operacoes/{plan_id}/executar")
+    def executar_plano(plan_id: int) -> dict:
+        plano = operation_repo.plano(plan_id)
+        if plano is None:
+            raise HTTPException(404, "plano não encontrado")
+        if plano.dry_run_em is None:
+            raise HTTPException(409, "rode o dry-run antes de executar")
+        if not jobs.iniciar_execucao(plan_id):
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
 
     # -- trabalhos em background (scan/importação) ---------------------------
     @app.post("/api/scan")

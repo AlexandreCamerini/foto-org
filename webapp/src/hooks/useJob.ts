@@ -76,6 +76,8 @@ export function useJob() {
       disparar("/api/importar", { tipo: "google_takeout", caminho }),
     gerarSugestoes: () => disparar("/api/sugestoes/gerar", {}),
     detectarDuplicatas: () => disparar("/api/duplicatas/detectar", {}),
+    executarPlano: (planId: number) =>
+      disparar(`/api/operacoes/${planId}/executar`, {}),
     cancelar: () => fetch("/api/job/cancelar", { method: "POST" }),
   };
 }

@@ -1,4 +1,6 @@
-"""API local da UI web (F1 do M9) — read-only sobre o catálogo."""
+"""API local da UI web — catálogo, trabalhos de background e operações."""
+
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -242,6 +244,149 @@ def test_filtros_viagens_sugestoes_duplicatas_respondem(client):
     assert client.get(
         "/api/sugestoes", params={"status": "invalido"}
     ).status_code == 422
+
+
+# -- operações físicas (plano → dry-run → execução) --------------------------
+@pytest.fixture()
+def operacoes(migrated_engine, tmp_path):
+    """Catálogo com 2 fotos já aprovadas para cópia, e uma raiz de destino."""
+    from fotoorganizer.models import (
+        ConfidenceLevel,
+        MediaFile,
+        Suggestion,
+        SuggestionStatus,
+    )
+
+    origem = tmp_path / "fotos"
+    destino = tmp_path / "organizadas"
+    destino.mkdir()
+    for i in range(2):
+        make_jpeg(origem / f"f_{i}.jpg", seed=i)
+
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(
+        factory, PurePythonExtractor(), ScannerSettings()
+    ).scan_source(origem)
+
+    with factory() as session:
+        for media in session.query(MediaFile).all():
+            session.add(Suggestion(
+                media_id=media.id, destino_sugerido="Viagens/2024 - Teste",
+                template="t", nivel=ConfidenceLevel.ALTA,
+                status=SuggestionStatus.APROVADA, versao_logica="test",
+            ))
+        session.commit()
+
+    cliente = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+    return cliente, origem, destino
+
+
+def _aguardar_job(client) -> dict:
+    import time
+
+    for _ in range(150):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            return estado
+        time.sleep(0.1)
+    raise AssertionError("job não terminou")
+
+
+def test_plano_dry_run_e_execucao_copiam_sem_tocar_origem(operacoes):
+    client, origem, destino = operacoes
+    originais = {p: p.read_bytes() for p in sorted(origem.rglob("*.jpg"))}
+
+    plano = client.post(
+        "/api/operacoes", json={"raiz_destino": str(destino)}
+    ).json()
+    assert plano["total_itens"] == 2
+    assert plano["dry_run_em"] is None
+
+    # Executar sem dry-run é recusado pelo servidor (e pelo executor, por baixo).
+    assert client.post(
+        f"/api/operacoes/{plano['id']}/executar"
+    ).status_code == 409
+
+    relatorio = client.post(f"/api/operacoes/{plano['id']}/dry-run").json()
+    assert relatorio["prontos"] == 2
+    assert relatorio["problemas"] == []
+    assert relatorio["espaco_suficiente"]
+
+    assert client.post(
+        f"/api/operacoes/{plano['id']}/executar"
+    ).status_code == 200
+    assert _aguardar_job(client)["status"] == "concluido"
+
+    copiados = sorted((destino / "Viagens" / "2024 - Teste").glob("*.jpg"))
+    assert len(copiados) == 2
+    # Invariante 1: nenhum original mexido.
+    assert {p: p.read_bytes() for p in sorted(origem.rglob("*.jpg"))} == originais
+
+    detalhe = client.get(f"/api/operacoes/{plano['id']}").json()
+    assert detalhe["concluidos"] == 2
+    assert [i["status"] for i in detalhe["itens"]] == ["concluida"] * 2
+
+    acoes = [
+        linha["acao"]
+        for linha in client.get(
+            f"/api/operacoes/{plano['id']}/auditoria"
+        ).json()
+    ]
+    assert acoes.count("copia_verificada") == 2
+    assert {"plano_criado", "dry_run", "execucao_finalizada"} <= set(acoes)
+
+
+def test_execucao_nunca_sobrescreve_destino_que_surgiu_depois(operacoes):
+    """O destino pode ficar ocupado entre o plano e a execução — a cópia
+    exclusiva ('xb') recusa, e o arquivo alheio fica intacto."""
+    client, _origem, destino = operacoes
+    plano = client.post(
+        "/api/operacoes", json={"raiz_destino": str(destino)}
+    ).json()
+    alvo = Path(client.get(f"/api/operacoes/{plano['id']}").json()["itens"][0]
+                ["destino"])
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    alvo.write_bytes(b"arquivo de outra pessoa")
+
+    relatorio = client.post(f"/api/operacoes/{plano['id']}/dry-run").json()
+    assert relatorio["prontos"] == 1
+    assert any("já existe" in p for p in relatorio["problemas"])
+
+    client.post(f"/api/operacoes/{plano['id']}/executar")
+    assert _aguardar_job(client)["status"] == "concluido"
+
+    assert alvo.read_bytes() == b"arquivo de outra pessoa"
+    detalhe = client.get(f"/api/operacoes/{plano['id']}").json()
+    assert detalhe["com_erro"] == 1
+    assert detalhe["concluidos"] == 1
+
+
+def test_plano_exige_aprovadas_e_destino_valido(operacoes):
+    client, _origem, destino = operacoes
+
+    assert client.post(
+        "/api/operacoes", json={"raiz_destino": "relativo/nao/serve"}
+    ).status_code == 422
+    assert client.post(
+        "/api/operacoes",
+        json={"raiz_destino": str(destino / "volume" / "sumido" / "x")},
+    ).status_code == 422
+
+    assert client.post(
+        "/api/operacoes", json={"raiz_destino": str(destino)}
+    ).status_code == 200
+    # Só o que já foi COPIADO sai de planos futuros; replanejar o pendente é
+    # permitido de propósito (trocar a raiz de destino, por exemplo).
+    segundo = client.post(
+        "/api/operacoes", json={"raiz_destino": str(destino)}
+    ).json()
+    assert segundo["total_itens"] == 2
+
+    assert client.get("/api/operacoes/9999").status_code == 404
+    assert client.post("/api/operacoes/9999/dry-run").status_code == 404
 
 
 # -- proteção de origem (CSRF em localhost) ----------------------------------
