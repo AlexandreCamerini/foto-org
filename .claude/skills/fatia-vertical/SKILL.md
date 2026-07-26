@@ -27,8 +27,10 @@ para pergunta, leitura de código ou ajuste de doc solto.
    serviço → API → webapp), sem abstração especulativa: nenhuma camada
    nova sem uma segunda necessidade concreta.
 5. **Verifique com a ferramenta, não de memória:** rode
-   `scripts/verificar.sh`. Ela roda a suíte, o benchmark de cenários e o
-   build da UI web. Fatia só avança com tudo verde.
+   `scripts/verificar.sh`. Ela roda a suíte do motor, o benchmark de
+   cenários, os testes da UI (vitest) e o build. Fatia só avança com tudo
+   verde. Tela nova ou mudança de comportamento na UI entra com smoke em
+   `webapp/src/**/*.test.tsx`.
 6. **Prove na UI real** quando a fatia é observável: suba o servidor
    (`scripts/executar.sh web`), exercite o fluxo e capture a tela. Não
    peça ao usuário para conferir aquilo que você pode verificar.

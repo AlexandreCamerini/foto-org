@@ -25,7 +25,7 @@ fi
 echo "== Verificação de fatia =="
 
 # 1. Suíte de testes (invariantes, motor, API, UI offscreen).
-echo "[1/3] Testes"
+echo "[1/4] Testes do motor"
 SAIDA_TESTES=$(.venv/bin/python -m pytest -q --no-header 2>&1)
 if [ $? -eq 0 ]; then
     ok "$(echo "$SAIDA_TESTES" | tail -1)"
@@ -37,7 +37,7 @@ fi
 # 2. Qualidade das sugestões: o benchmark de cenários rotulados não pode
 #    regredir. Regra do projeto (docs/AGRUPAMENTO.md): erro novo de
 #    classificação vira cenário AQUI antes de qualquer ajuste de limiar.
-echo "[2/3] Benchmark de agrupamento"
+echo "[2/4] Benchmark de agrupamento"
 SAIDA_BENCH=$(.venv/bin/python scripts/avaliar_agrupamento.py 2>&1)
 MELHOR=$(echo "$SAIDA_BENCH" | grep '^MELHOR:' | tail -1)
 ACERTOS=$(echo "$MELHOR" | sed -n 's/.*(\([0-9]*\)\/\([0-9]*\)).*/\1/p')
@@ -49,15 +49,40 @@ else
     falha "benchmark abaixo do total (${ACERTOS:-?}/${TOTAL:-?})"
 fi
 
-# 3. UI web compila (a interface é o entregável — build quebrado é fatia
-#    quebrada, mesmo com o Python verde).
-echo "[3/3] Build da UI web"
-if [ "$RAPIDO" = "1" ]; then
-    ok "pulado (--rapido)"
-elif ! command -v npm >/dev/null 2>&1; then
-    ok "pulado (npm ausente)"
-elif [ ! -d webapp/node_modules ]; then
-    falha "webapp/node_modules ausente — rode 'cd webapp && npm install'"
+# 3 e 4. A UI é o entregável: comportamento quebrado e build quebrado são
+#    fatia quebrada, mesmo com o Python verde.
+webapp_indisponivel() {
+    if [ "$RAPIDO" = "1" ]; then echo "pulado (--rapido)"; return 0; fi
+    if ! command -v npm >/dev/null 2>&1; then echo "pulado (npm ausente)"; return 0; fi
+    if [ ! -d webapp/node_modules ]; then
+        echo "node_modules ausente — rode 'cd webapp && npm install'"
+        return 0
+    fi
+    return 1
+}
+
+echo "[3/4] Testes da UI web"
+if MOTIVO=$(webapp_indisponivel); then
+    case "$MOTIVO" in
+        pulado*) ok "$MOTIVO" ;;
+        *) falha "$MOTIVO" ;;
+    esac
+else
+    SAIDA_VITEST=$( (cd webapp && npm test 2>&1) )
+    if [ $? -eq 0 ]; then
+        ok "$(echo "$SAIDA_VITEST" | grep -E '^ *Tests ' | tail -1 | xargs)"
+    else
+        echo "$SAIDA_VITEST" | tail -25
+        falha "testes do webapp falharam"
+    fi
+fi
+
+echo "[4/4] Build da UI web"
+if MOTIVO=$(webapp_indisponivel); then
+    case "$MOTIVO" in
+        pulado*) ok "$MOTIVO" ;;
+        *) falha "$MOTIVO" ;;
+    esac
 else
     SAIDA_BUILD=$( (cd webapp && npm run build 2>&1) )
     if [ $? -eq 0 ]; then
