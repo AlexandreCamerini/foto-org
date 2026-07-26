@@ -36,6 +36,15 @@ body,
   color: var(--color-texto-2);
 }
 
+/* App teclado-first precisa mostrar onde o foco está. O acento é o token
+   de foco na direção de arte; :focus-visible não aparece no clique de
+   mouse, então não polui a navegação com ponteiro. */
+:focus-visible {
+  outline: 2px solid var(--color-acento);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

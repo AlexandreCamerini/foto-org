@@ -10,6 +10,7 @@ import type { Recorte } from "./components/Panorama";
 import PhotoGrid from "./components/PhotoGrid";
 import Review from "./components/Review";
 import Sidebar from "./components/Sidebar";
+import StatusBar from "./components/StatusBar";
 import Trips from "./components/Trips";
 import { useJob } from "./hooks/useJob";
 import { useMidia } from "./hooks/useMidia";
@@ -24,6 +25,15 @@ const ABAS = [
 ] as const;
 type Aba = (typeof ABAS)[number];
 
+const DICAS: Record<Aba, string> = {
+  Panorama: "clique numa lacuna para recortar a biblioteca · [ fontes",
+  Biblioteca: "←↑↓→ seleciona · espaço amplia · [ fontes · ] inspetor",
+  Viagens: "clique num card para ver as fotos do grupo · [ fontes",
+  Revisão: "aprove ou rejeite; o destino só sai do papel em Operações",
+  Duplicatas: "escolha a principal de cada grupo · [ fontes",
+  Operações: "plano → dry-run → cópia verificada; o original nunca é tocado",
+};
+
 export default function App() {
   // Abre no Panorama: a primeira pergunta de quem tem 30 mil fotos é "em
   // que estado isso está?", não "me mostre a grade".
@@ -34,6 +44,8 @@ export default function App() {
   const [zoom, setZoom] = useState(160);
   const [selIndex, setSelIndex] = useState<number | null>(null);
   const [loupeAberto, setLoupeAberto] = useState(false);
+  const [sidebarVisivel, setSidebarVisivel] = useState(true);
+  const [inspetorVisivel, setInspetorVisivel] = useState(true);
   // Recorte da biblioteca vindo de outra aba: card de viagem/evento no
   // Viagens, lacuna ou faceta no Panorama. Um só, e sempre visível como
   // chip removível — filtro escondido é filtro que confunde.
@@ -75,9 +87,27 @@ export default function App() {
   // Navegação por teclado — o vocabulário universal da categoria.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (aba !== "Biblioteca") return;
       const alvo = e.target as HTMLElement;
-      if (alvo.tagName === "INPUT" || alvo.tagName === "SELECT") return;
+      const digitando =
+        alvo.tagName === "INPUT" ||
+        alvo.tagName === "SELECT" ||
+        alvo.isContentEditable;
+
+      // Recolher os painéis laterais, em qualquer aba. A direção de arte
+      // pede ⌘1/⌘3, que só chegam na página no app empacotado — o
+      // navegador reserva ⌘1–⌘8 para trocar de aba. Então [ e ] são os
+      // atalhos que funcionam hoje, e ⌘1/⌘3 seguem valendo no Tauri.
+      const comando = e.metaKey || e.ctrlKey;
+      const painel =
+        (comando && (e.key === "1" || e.key === "3")) ||
+        (!digitando && !comando && (e.key === "[" || e.key === "]"));
+      if (painel) {
+        e.preventDefault();
+        if (e.key === "1" || e.key === "[") setSidebarVisivel((v) => !v);
+        else setInspetorVisivel((v) => !v);
+        return;
+      }
+      if (aba !== "Biblioteca" || digitando) return;
 
       const passo: Record<string, number> = {
         ArrowLeft: -1,
@@ -122,7 +152,9 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
+        {sidebarVisivel && (
+          <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
+        )}
 
         <main className="flex min-w-0 flex-1 flex-col">
           {aba === "Panorama" && (
@@ -174,6 +206,15 @@ export default function App() {
                 </select>
                 <div className="flex-1" />
                 <span className="text-texto-2">{total} fotos</span>
+                <input
+                  type="range"
+                  min={96}
+                  max={320}
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  title="Tamanho das miniaturas"
+                  className="w-28 accent-acento"
+                />
               </div>
 
               <div className="min-h-0 flex-1">
@@ -186,28 +227,17 @@ export default function App() {
                   onColunas={onColunas}
                 />
               </div>
-
-              <footer className="flex items-center gap-3 border-t border-borda px-3 py-1.5 text-texto-2">
-                <span className="text-texto-3">
-                  ←↑↓→ seleciona · espaço amplia · duplo clique amplia
-                </span>
-                <div className="flex-1" />
-                <span>Zoom</span>
-                <input
-                  type="range"
-                  min={96}
-                  max={320}
-                  value={zoom}
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  className="w-36 accent-acento"
-                />
-              </footer>
             </>
           )}
         </main>
 
-        <Inspector media={selecionada} />
+        {/* O inspetor descreve a foto selecionada — só existe onde há grade. */}
+        {aba === "Biblioteca" && inspetorVisivel && (
+          <Inspector media={selecionada} />
+        )}
       </div>
+
+      <StatusBar job={job} dica={DICAS[aba]} />
 
       {loupeAberto && selIndex !== null && (
         <Loupe

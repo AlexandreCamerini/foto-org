@@ -1,0 +1,89 @@
+import { useQuery } from "@tanstack/react-query";
+
+import { api } from "../api";
+import type { Job } from "../hooks/useJob";
+
+const ROTULO_JOB: Record<string, string> = {
+  scan: "Varrendo",
+  import: "Importando",
+  sugestoes: "Gerando sugestões",
+  duplicatas: "Procurando duplicatas",
+  operacao: "Copiando",
+};
+
+/** Barra de status da janela inteira (docs/DIRECAO_DE_ARTE.md): o progresso
+ * é persistente e honesto, nunca um spinner modal — e fica visível em
+ * qualquer aba, porque o trabalho continua mesmo quando o usuário sai da
+ * tela que o disparou. */
+export default function StatusBar({ job, dica }: { job: Job; dica?: string }) {
+  const { data: status } = useQuery({
+    queryKey: ["status"],
+    queryFn: api.status,
+  });
+
+  const estado = job.estado;
+  const concluido = !job.rodando && estado.status !== "nenhum";
+
+  return (
+    <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-borda bg-painel px-3">
+      {job.rodando && (
+        <>
+          <span className="h-1 w-24 overflow-hidden rounded bg-cartao">
+            <span className="block h-full w-1/3 animate-pulse rounded bg-acento" />
+          </span>
+          <span className="truncate">
+            {ROTULO_JOB[estado.tipo ?? ""] ?? "Trabalhando"}
+            {estado.alvo ? ` ${estado.alvo}` : ""}…
+          </span>
+          <span className="shrink-0 text-texto-2">
+            {estado.processados ?? 0}
+            {estado.vistos ? ` / ${estado.vistos}` : ""}
+            {estado.erros ? ` · ${estado.erros} erros` : ""}
+            {estado.arquivos_por_segundo
+              ? ` · ${estado.arquivos_por_segundo} arq/s`
+              : ""}
+          </span>
+          <button
+            onClick={() => void job.cancelar()}
+            className="shrink-0 rounded px-1 text-texto-2 hover:text-conf-baixa"
+          >
+            cancelar
+          </button>
+        </>
+      )}
+
+      {concluido && (
+        <>
+          <span
+            className={`truncate ${
+              estado.status === "erro" ? "text-conf-baixa" : "text-texto-2"
+            }`}
+          >
+            {estado.status === "erro"
+              ? estado.mensagem
+              : `Concluído: ${estado.processados ?? 0} processados` +
+                (estado.pulados ? `, ${estado.pulados} pulados` : "") +
+                (estado.erros ? `, ${estado.erros} erros` : "")}
+          </span>
+          <button
+            onClick={job.limpar}
+            title="Dispensar"
+            className="shrink-0 rounded px-1 text-texto-3 hover:text-texto"
+          >
+            ✕
+          </button>
+        </>
+      )}
+
+      {!job.rodando && !concluido && dica && (
+        <span className="truncate text-texto-3">{dica}</span>
+      )}
+
+      <div className="flex-1" />
+      <span className="shrink-0 text-texto-2">
+        {status?.total ?? 0} fotos · {status?.fontes ?? 0} fontes
+        {status?.erros ? ` · ${status.erros} erros` : ""}
+      </span>
+    </footer>
+  );
+}

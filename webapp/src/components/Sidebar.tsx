@@ -106,59 +106,9 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
         {erro && <div className="text-conf-baixa">{erro}</div>}
       </div>
 
-      {/* progresso do trabalho atual */}
-      {job.estado.status !== "nenhum" && (
-        <div className="border-t border-borda px-3 py-2">
-          {job.rodando ? (
-            <>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="truncate text-texto-2">
-                  {job.estado.tipo === "scan" ? "Varrendo" : "Importando"}…
-                </span>
-                <button
-                  onClick={() => void job.cancelar()}
-                  className="text-texto-2 hover:text-conf-baixa"
-                >
-                  cancelar
-                </button>
-              </div>
-              <div className="mb-1 h-1 overflow-hidden rounded bg-cartao">
-                <div className="h-full w-1/3 animate-pulse rounded bg-acento" />
-              </div>
-              <div className="text-texto-2">
-                {job.estado.vistos ?? 0} vistos ·{" "}
-                {job.estado.processados ?? 0} processados
-                {job.estado.erros ? ` · ${job.estado.erros} erros` : ""}
-                {job.estado.arquivos_por_segundo
-                  ? ` · ${job.estado.arquivos_por_segundo} arq/s`
-                  : ""}
-              </div>
-            </>
-          ) : (
-            <div className="flex items-start justify-between gap-2">
-              <span
-                className={
-                  job.estado.status === "erro" ? "text-conf-baixa" : "text-texto-2"
-                }
-              >
-                {job.estado.status === "erro"
-                  ? job.estado.mensagem
-                  : `Concluído: ${job.estado.processados ?? 0} processados, ` +
-                    `${job.estado.pulados ?? 0} pulados` +
-                    (job.estado.erros ? `, ${job.estado.erros} erros` : "")}
-              </span>
-              <button onClick={job.limpar} className="text-texto-3 hover:text-texto">
-                ✕
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="border-t border-borda px-3 py-2 text-texto-2">
-        {total} fotos · {status?.fontes ?? 0} fontes
-        {status?.erros ? ` · ${status.erros} erros` : ""}
-      </div>
+      {/* Progresso e totais vivem na barra de status da janela (StatusBar):
+          o trabalho continua rodando quando o usuário troca de aba, e a
+          sidebar não é o lugar de contar isso duas vezes. */}
 
       {/* modal simples de caminho */}
       {modal && (

@@ -26,8 +26,16 @@ abaixo.
 └──────────────────────────────────────────────────────────┘
 ```
 
-- Sidebar e inspetor recolhíveis (atalhos ⌘1/⌘3). Duplicatas usam vista
-  lado a lado (compare) no lugar da grade.
+- Sidebar e inspetor recolhíveis. Atalhos: **`[` e `]`** no webapp, com
+  ⌘1/⌘3 valendo em paralelo — o navegador reserva ⌘1–⌘8 para trocar de
+  aba e nunca entrega essas teclas à página, então ⌘1/⌘3 só passam a
+  funcionar no app empacotado (Tauri). Duplicatas usam vista lado a lado
+  (compare) no lugar da grade.
+- O inspetor descreve a foto selecionada: existe na Biblioteca, não nas
+  telas que não têm grade.
+- A barra de status atravessa a janela inteira, abaixo dos três painéis, e
+  é a mesma em todas as abas — o trabalho em background continua rodando
+  quando o usuário troca de tela, e o progresso precisa continuar visível.
 - Revisão de sugestões é uma lista com origem → destino e badges, não um
   formulário.
 

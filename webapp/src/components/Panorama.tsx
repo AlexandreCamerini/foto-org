@@ -34,7 +34,7 @@ function ListaFacetas({
 }) {
   return (
     <section className="min-w-0 flex-1">
-      <h3 className="mb-1.5 text-[11px] uppercase tracking-wider text-texto-2">
+      <h3 className="titulo-painel mb-1.5">
         {titulo}
       </h3>
       {itens.slice(0, 12).map((f) => (
@@ -105,7 +105,7 @@ export default function Panorama({
       </p>
 
       <section className="mb-5">
-        <h3 className="mb-1.5 text-[11px] uppercase tracking-wider text-texto-2">
+        <h3 className="titulo-painel mb-1.5">
           Lacunas
         </h3>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -128,7 +128,7 @@ export default function Panorama({
 
       {fontesComFotos.length > 0 && anos.length > 0 && (
         <section className="mb-5">
-          <h3 className="mb-1.5 text-[11px] uppercase tracking-wider text-texto-2">
+          <h3 className="titulo-painel mb-1.5">
             Ano por fonte
           </h3>
           <div className="overflow-x-auto">
