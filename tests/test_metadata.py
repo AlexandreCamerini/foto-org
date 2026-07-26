@@ -50,3 +50,70 @@ def test_extensoes_suportadas_incluem_raw_e_heif():
     assert {".jpg", ".png", ".webp", ".tiff"} <= exts
     # rawpy e pillow-heif estão nas dependências do projeto.
     assert {".dng", ".cr3", ".heic", ".hif"} <= exts
+
+
+# -- RAW: lente e orientação vêm do libraw, inclusive em CR3 ------------------
+class _FakeSizes:
+    def __init__(self, flip: int) -> None:
+        self.width, self.height, self.flip = 6000, 4000, flip
+
+
+class _FakeRaw:
+    """Dublê do rawpy: fotos RAW reais não entram no repositório, e gerar um
+    CR3 sintético não é viável — o que importa aqui é o mapeamento."""
+
+    def __init__(self, flip: int, lente: str) -> None:
+        from types import SimpleNamespace
+
+        self.other = SimpleNamespace(timestamp=datetime(2025, 11, 1, 3, 43, 37))
+        self.sizes = _FakeSizes(flip)
+        self.lens = SimpleNamespace(model=lente)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+def _extrair_raw(monkeypatch, tmp_path, nome: str, flip: int, lente: str):
+    from types import SimpleNamespace
+
+    from fotoorganizer.metadata import purepython
+
+    arquivo = tmp_path / nome
+    arquivo.write_bytes(b"nao e um raw de verdade")
+    monkeypatch.setattr(purepython, "_HAS_RAW", True)
+    monkeypatch.setattr(
+        purepython, "rawpy",
+        SimpleNamespace(imread=lambda _p: _FakeRaw(flip, lente)),
+        raising=False,
+    )
+    return PurePythonExtractor().extract(arquivo)
+
+
+def test_raw_ganha_lente_e_orientacao_do_libraw(monkeypatch, tmp_path):
+    """65% da amostra real do acervo ficava sem lente e sem orientação, e
+    toda ela era RAW — o exifread não lê CR3, o libraw lê."""
+    meta = _extrair_raw(
+        monkeypatch, tmp_path, "ACM_0001.CR3", flip=6,
+        lente="  EF24-70mm f/2.8L II USM  ",
+    )
+    assert meta.lente == "EF24-70mm f/2.8L II USM"
+    assert meta.orientacao == 6  # flip 6 (dcraw) == 90° horário (EXIF)
+    assert meta.data_capturada == datetime(2025, 11, 1, 3, 43, 37)
+    assert (meta.largura, meta.altura) == (6000, 4000)
+
+
+def test_flip_do_libraw_vira_orientacao_exif(monkeypatch, tmp_path):
+    for flip, esperado in [(0, 1), (3, 3), (5, 8), (6, 6)]:
+        meta = _extrair_raw(
+            monkeypatch, tmp_path, f"f{flip}.dng", flip=flip, lente="x"
+        )
+        assert meta.orientacao == esperado, flip
+
+
+def test_raw_sem_lente_ou_rotacao_conhecida_nao_inventa(monkeypatch, tmp_path):
+    meta = _extrair_raw(monkeypatch, tmp_path, "vazio.dng", flip=-1, lente="")
+    assert meta.lente is None
+    assert meta.orientacao is None
