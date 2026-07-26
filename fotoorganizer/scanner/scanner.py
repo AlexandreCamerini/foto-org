@@ -117,7 +117,12 @@ class CatalogScanner:
         progress: ProgressCallback | None = None,
         control: ScanControl | None = None,
         padroes_ignorados: tuple[str, ...] = (),
+        reprocessar: bool = False,
     ) -> tuple[ScanSession, ScanMetrics]:
+        """`reprocessar` relê arquivo inalterado. O scan incremental existe
+        para não repetir trabalho, mas quando a extração passa a capturar
+        algo novo o catálogo antigo fica sem esse algo — e sem esta porta
+        não haveria como preencher o que já está indexado."""
         control = control or ScanControl()
         metrics = ScanMetrics()
 
@@ -140,7 +145,8 @@ class CatalogScanner:
                 return scan, metrics
 
             session.commit()
-            self._run(session, source, scan, metrics, progress, control)
+            self._run(session, source, scan, metrics, progress, control,
+                      reprocessar)
             return scan, metrics
 
     def _run(
@@ -151,6 +157,7 @@ class CatalogScanner:
         metrics: ScanMetrics,
         progress: ProgressCallback | None,
         control: ScanControl,
+        reprocessar: bool = False,
     ) -> None:
         config = DiscoveryConfig(
             extensoes=frozenset(self._extractor.supported_extensions()),
@@ -206,7 +213,8 @@ class CatalogScanner:
                     continue
 
                 assinatura = conhecidos.get(str(path))
-                if assinatura is not None and self._unchanged_sig(assinatura, stat):
+                if (not reprocessar and assinatura is not None
+                        and self._unchanged_sig(assinatura, stat)):
                     metrics.pulados += 1
                     if progress:
                         progress(metrics, str(path))

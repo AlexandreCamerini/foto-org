@@ -168,3 +168,33 @@ def test_fonte_reutilizada_entre_scans(scanner_env, tmp_path):
     scanner.scan_source(tmp_path)
     with factory() as session:
         assert len(session.scalars(select(Source)).all()) == 1
+
+
+def test_reprocessar_relê_arquivo_inalterado(migrated_engine, tmp_path):
+    """Sem esta porta, extração nova nunca alcança o que já foi catalogado:
+    o incremental pula por (tamanho, mtime, inode) e o arquivo não mudou."""
+    from sqlalchemy import func, select
+
+    from fotoorganizer.models import MetadataEntry
+
+    fotos = tmp_path / "fotos"
+    make_jpeg(fotos / "a.jpg", seed=1)
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(factory, PurePythonExtractor(), ScannerSettings())
+
+    _, m1 = scanner.scan_source(fotos)
+    assert m1.indexados == 1
+
+    _, m2 = scanner.scan_source(fotos)
+    assert (m2.indexados, m2.pulados) == (0, 1)      # incremental preservado
+
+    _, m3 = scanner.scan_source(fotos, reprocessar=True)
+    assert (m3.indexados, m3.pulados) == (1, 0)
+
+    # Reler não pode empilhar outra cópia das mesmas tags.
+    with factory() as session:
+        antes = session.scalar(select(func.count(MetadataEntry.id)))
+    scanner.scan_source(fotos, reprocessar=True)
+    with factory() as session:
+        assert session.scalar(select(func.count(MetadataEntry.id))) == antes
+        assert antes > 0

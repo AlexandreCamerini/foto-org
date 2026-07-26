@@ -76,7 +76,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     for pasta in args.pastas:
         print(f"Varrendo {pasta} (somente leitura, catálogo em {settings.db_path})")
-        scan, metrics = scanner.scan_source(Path(pasta), progress=_print_progress)
+        scan, metrics = scanner.scan_source(
+            Path(pasta), progress=_print_progress,
+            reprocessar=args.reprocessar,
+        )
         print(
             f"\n{scan.status.value}: {metrics.indexados} indexados, "
             f"{metrics.pulados} pulados, {metrics.erros} erros, "
@@ -278,6 +281,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p_scan = sub.add_parser("scan", help="varre pastas para o catálogo (read-only)")
     p_scan.add_argument("pastas", nargs="+")
+    p_scan.add_argument(
+        "--reprocessar", action="store_true",
+        help="relê arquivos já indexados (para capturar metadados novos)",
+    )
     p_scan.set_defaults(func=cmd_scan)
 
     p_web = sub.add_parser("web", help="UI web local (127.0.0.1)")
