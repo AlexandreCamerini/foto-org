@@ -13,6 +13,7 @@ from datetime import timedelta
 from fotoorganizer.grouping.eventos import extrair_evento
 from fotoorganizer.geolocation import extrair_hierarquia_da_pasta
 from fotoorganizer.geolocation.folder_names import _normalizar
+from fotoorganizer.geolocation.paises import identificar_paises
 
 _PASTAS_VIAGEM = {"viagens", "viagem"}
 
@@ -83,7 +84,21 @@ def classificar_sessao(
         return Decisao("evento", evento, "pasta",
                        f"pasta '{evento}' indica um evento")
 
-    # 3. País reconhecido no nome das pastas.
+    # 3. Países reconhecidos no nome das pastas.
+    #
+    # Uma pasta pode listar a viagem inteira ("Dubai, Thai & Viet"), e
+    # essa lista vale mais que as pernas deduzidas do GPS: a cobertura de
+    # coordenada é irregular (nessa viagem, 106 fotos de 2.405 tinham
+    # GPS, nenhuma nos Emirados), enquanto o nome que o dono escreveu
+    # cobre a viagem toda.
+    for pasta in dados.pastas:
+        for segmento in reversed([s for s in pasta.split("/") if s]):
+            paises = identificar_paises(segmento)
+            if len(paises) >= 2:
+                return Decisao(
+                    "viagem", " – ".join(paises), "pasta",
+                    f"pasta '{segmento}' lista {len(paises)} destinos",
+                )
     for pasta in dados.pastas:
         hierarquia = extrair_hierarquia_da_pasta(pasta)
         if hierarquia.pais:

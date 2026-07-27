@@ -162,6 +162,52 @@ def canonizar_pais(nome: str | None) -> str | None:
     return _CANONICO.get(_normalizar(nome))
 
 
+# Como as pessoas listam destinos numa pasta só: "Dubai, Thai & Viet".
+# Hífen fica de fora de propósito — "Guiné-Bissau" e "Timor-Leste" o usam
+# dentro do próprio nome.
+_RE_LISTA = re.compile(r"\s*(?:,|&|\+|/|\se\s)\s*", re.IGNORECASE)
+# Abreviação só vale a partir daqui: "Viet" identifica, "Ma" não.
+_MIN_PREFIXO = 4
+
+
+def _por_prefixo(chave: str) -> str | None:
+    """"thai" → "Tailândia". Só quando UM país responde ao prefixo.
+
+    Nome de pasta abrevia ("Thai", "Viet"); exigir a grafia inteira
+    perderia a informação. A exigência de resposta única é o que impede
+    o palpite: se duas nações começam igual, nenhuma é escolhida.
+    """
+    if len(chave) < _MIN_PREFIXO:
+        return None
+    achados = {
+        pais for alias, pais in _CANONICO.items() if alias.startswith(chave)
+    }
+    return achados.pop() if len(achados) == 1 else None
+
+
+def identificar_paises(texto: str | None) -> tuple[str, ...]:
+    """Países listados num único segmento, na ordem em que aparecem.
+
+    "Dubai, Thai & Viet" → ("Emirados Árabes Unidos", "Tailândia",
+    "Vietnã"). Devolve () quando nem toda parte é país: "Serena 15 Anos"
+    não é uma lista de destinos, e meia lista reconhecida é ruído.
+    """
+    if not texto:
+        return ()
+    partes = [p for p in _RE_LISTA.split(texto) if p.strip()]
+    if len(partes) < 2:
+        return ()
+    paises: list[str] = []
+    for parte in partes:
+        chave = _normalizar(parte)
+        pais = _CANONICO.get(chave) or _por_prefixo(chave)
+        if pais is None:
+            return ()
+        if pais not in paises:
+            paises.append(pais)
+    return tuple(paises)
+
+
 # Sufixos e prefixos administrativos em inglês que o GeoNames anexa à
 # região ("Quảng Nam Province"). O nome próprio é o que interessa; o
 # rótulo administrativo em inglês só polui o destino. Não traduzimos o

@@ -79,3 +79,45 @@ def test_tabela_iso_sem_nomes_repetidos():
     """Dois códigos com o mesmo nome fundiriam países distintos."""
     nomes = list(PAISES_PT.values())
     assert len(nomes) == len(set(nomes))
+
+
+# -- pasta que lista a viagem inteira -----------------------------------
+@pytest.mark.parametrize(
+    "segmento,paises",
+    [
+        ("Dubai, Thai & Viet",
+         ("Emirados Árabes Unidos", "Tailândia", "Vietnã")),
+        ("França e Itália", ("França", "Itália")),
+        ("Peru + Bolivia", ("Peru", "Bolívia")),
+        ("Argentina/Chile", ("Argentina", "Chile")),
+        ("Portugal, Espanha", ("Portugal", "Espanha")),
+    ],
+)
+def test_pasta_lista_os_destinos_da_viagem(segmento, paises):
+    from fotoorganizer.geolocation.paises import identificar_paises
+
+    assert identificar_paises(segmento) == paises
+
+
+@pytest.mark.parametrize(
+    "segmento",
+    [
+        "Serena 15 Anos",      # evento, não lista de destinos
+        "Quizomba, Teatro",    # lista, mas de coisas que não são países
+        "Estrada Real",
+        "Guiné-Bissau",        # hífen faz parte do nome, não separa
+        "França",              # um país só não é lista
+        "",
+    ],
+)
+def test_meia_lista_ou_nenhuma_nao_vira_viagem(segmento):
+    from fotoorganizer.geolocation.paises import identificar_paises
+
+    assert identificar_paises(segmento) == ()
+
+
+def test_abreviacao_curta_demais_nao_chuta():
+    """"Ma" poderia ser Marrocos, Malta, Mali… — nenhuma é escolhida."""
+    from fotoorganizer.geolocation.paises import identificar_paises
+
+    assert identificar_paises("Ma, Ind") == ()

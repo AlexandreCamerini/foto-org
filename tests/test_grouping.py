@@ -76,3 +76,28 @@ def test_sessao_sem_gps_nenhum_fica_inteira():
     itens = [(1, _dias(0), SEM_GPS), (2, _dias(1), SEM_GPS)]
     segmentos = dividir_por_transicao_casa(itens)
     assert len(segmentos) == 1
+
+
+def test_pasta_que_lista_destinos_nomeia_a_viagem_inteira():
+    """A cobertura de GPS é irregular; o nome que o dono escreveu não é.
+
+    Caso real: 2.405 fotos em "Dubai, Thai & Viet", das quais só 106 com
+    coordenada — e nenhuma nos Emirados. A viagem saía como
+    "Tailândia – Vietnã", perdendo um país inteiro.
+    """
+    from datetime import timedelta
+
+    from fotoorganizer.grouping.classifier import DadosSessao, classificar_sessao
+
+    decisao = classificar_sessao(DadosSessao(
+        pastas=("/Users/x/Pictures/Dubai, Thai & Viet",),
+        duracao=timedelta(days=20),
+        pais_dominante="Tailândia",
+        dist_mediana_casa_km=None,
+        periodo_curto="Viagem de 01-11 a 21-11",
+        paises_no_tempo=("Tailândia", "Vietnã"),
+    ))
+    assert decisao.tipo == "viagem"
+    assert decisao.rotulo == "Emirados Árabes Unidos – Tailândia – Vietnã"
+    assert decisao.origem == "pasta"
+    assert "lista 3 destinos" in decisao.justificativa
