@@ -38,10 +38,20 @@ evidências (docs/CONFIANCA.md).
 trazem o bloco GPS da EXIF presente e *vazio* — só `GPSVersionID`, sem
 latitude nem longitude. A câmera escreve o compartimento e não preenche.
 
-A consequência é que **ampliar a extração de EXIF nunca vai dar localização
-para este acervo.** Câmeras dedicadas sem GPS não gravam onde a foto foi
-tirada, e é disso que o acervo é feito. Os caminhos que restam para
-localizar uma foto são dois, ambos já construídos:
+> ⚠️ **Correção (2026-07-26).** A frase original aqui dizia que "ampliar a
+> extração nunca vai dar localização para este acervo". Isso extrapolou a
+> amostra. As 300 fotos vieram de três pastas de material de câmera — uma
+> fatia do acervo, não o acervo. O dono confirmou que **há partes ainda sem
+> acesso onde o GPS próprio existe**, e material de celular grava coordenada
+> por padrão.
+>
+> O que a medição sustenta é mais estreito: *nas pastas medidas*, de câmera
+> dedicada, o GPS da EXIF vem vazio. A leitura de GPS continua sendo caminho
+> de primeira classe e o sistema deve tratá-la assim — inclusive quando a
+> amostra disponível hoje não a exercita.
+
+Para o material de câmera dedicada especificamente, os caminhos de
+localização são dois, ambos já construídos:
 
 1. **Correlação entre fontes** (`grouping/correlacao.py`): fotos de celular
    tiradas nos mesmos minutos *têm* GPS, e a herança por proximidade

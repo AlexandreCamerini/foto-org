@@ -61,11 +61,50 @@ Além dos sidecars, **XMP embutido aparece em praticamente todo JPG**
 Este é um eixo que o produto não tem hoje: **qualidade e seleção**, ortogonal
 a onde e quando a foto foi tirada.
 
-## 3. IPTC — não capturado
+### XMP embutido — medido em todo o acervo
 
-Presente em ~29% dos JPG amostrados. Carrega legenda, crédito, palavras-chave
-e localização escritos por quem editou. Volume ainda não medido em todo o
-acervo.
+**1.528 de 1.528 JPG (100%)** carregam XMP embutido. Campos por frequência:
+
+| Campo | Ocorrências | O que é |
+|---|---|---|
+| `xmp:Rating` | 2.727 | estrelas |
+| `dc:creator` | 658 | autoria |
+| `dc:subject` / `lr:hierarchicalSubject` | 638 | palavras-chave |
+| `crs:Exposure`, `Shadows`, `Highlights`, `Blacks`, `Whites`, `WhiteBalance`, `ToneCurvePV`, `ProcessVersion` | 366–2.928 | ajustes de revelação do Lightroom |
+
+Os campos `crs:` são um sinal indireto valioso: a foto **foi trabalhada no
+Lightroom**. Foto revelada é foto que alguém escolheu — separa o material
+tratado do bruto sem depender de estrela ou rótulo.
+
+## 3. IPTC — não capturado, medido em todo o acervo
+
+**322 de 1.528 JPG (21%)**, 8 campos distintos:
+
+| Tag | Fotos | Conteúdo real |
+|---|---|---|
+| `(2,80)` By-line | 322 | `Alexandre Camerini` |
+| `(2,55)` Date Created | 322 | `20260509` |
+| `(2,60)` Time Created | 322 | `172545-0300` — **com fuso horário** |
+| `(2,25)` Keywords | 319 | `Blurred` |
+| `(2,62)` Digital Creation Date | 3 | `20250524` |
+| `(2,63)` Digital Creation Time | 3 | `154958` |
+
+O horário IPTC vem **com deslocamento de fuso** (`-0300`), assim como o
+`OffsetTimeOriginal` da EXIF. Dois caminhos independentes para a mesma
+informação que hoje é estimada por inferência.
+
+## 3b. O buraco de cobertura: CR3
+
+**Os 2.852 CR3 (63% do acervo) são ilegíveis pelo Pillow** — nem XMP nem
+IPTC saem por esse caminho. Hoje o único acesso a eles é o libraw, que dá
+exposição e lente mas não metadado editorial.
+
+Consequência prática: qualquer sinal de curadoria extraído via Pillow
+alcança no máximo 34% do acervo. Para os CR3, a curadoria do Lightroom vive
+nos **sidecars `.xmp`** — que é justamente onde os 605 arquivos estão.
+
+*(116 arquivos do catálogo não estavam no disco durante a medição: são os
+dois volumes externos desmontados.)*
 
 ## 4. Nome de arquivo — sinal morto neste acervo
 
@@ -124,16 +163,32 @@ pronto que a classificação ignora.
 
 ## Cobertura cruzada — o que limita cada sinal
 
-| Sinal | Alcance no acervo |
+| Sinal | Alcance no acervo medido |
 |---|---|
 | Nome de pasta | 100% |
 | EXIF data | 100% |
-| EXIF rico (serial, fuso, exposição) | 34% (só JPG/DNG) |
+| XMP embutido | 34% (todo JPG; CR3 é ilegível pelo Pillow) |
+| EXIF rico (serial, fuso, exposição) | 34% |
 | libraw (ISO, exposição) | 63% (só RAW) |
-| XMP curadoria | 13% (605 de 4.496) |
+| IPTC | 7% (322 de 4.496) |
+| XMP sidecar | 13% (605 de 4.496) |
 | GPS herdado ±10 min | 3,5% |
-| GPS próprio | 0% |
+| GPS próprio | 0% *nesta fatia* |
 
 Nenhum sinal isolado cobre o acervo. É por isso que a decisão tem de ser por
 **acúmulo de evidências**, e não por eleger um mecanismo — que foi o erro de
 condução corrigido aqui.
+
+## Este inventário mede uma fatia, não o acervo
+
+As 4.496 fotos com arquivo são o que está acessível hoje: cinco pastas, das
+quais duas em volumes desmontados. **O acervo do dono é maior**, e as partes
+ausentes têm perfil diferente — material de celular grava GPS por padrão, e
+outras câmeras podem preencher campos que estas deixam vazios.
+
+Regra que decorre disso, e que vale para toda extração daqui em diante:
+**um sinal ausente na amostra não é um sinal ausente no acervo.** A
+extração deve tratar cada fonte de metadado como primeira classe mesmo
+quando os arquivos disponíveis hoje não a exercitam — e os testes cobrem
+esse caso com fixtures sintéticas, que é justamente para isso que elas
+existem.
