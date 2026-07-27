@@ -52,7 +52,9 @@ def test_import_takeout_ponta_a_ponta(window, tmp_path, qtbot):
         "geoData": {"latitude": 25.2, "longitude": 55.3},
     }), encoding="utf-8")
 
-    window._iniciar_import(GoogleTakeoutProvider(raiz))
+    # `ler_arquivos=True`: a grade só mostra acervo, e o padrão do Takeout
+    # é entrar como referência (doador de sinais, não foto catalogada).
+    window._iniciar_import(GoogleTakeoutProvider(raiz, ler_arquivos=True))
     with qtbot.waitSignal(window._import_worker.terminado, timeout=15000):
         pass
 

@@ -115,7 +115,7 @@ def cmd_importar(args: argparse.Namespace) -> int:
         if not pasta.is_dir():
             print(f"Pasta não encontrada: {pasta}")
             return 1
-        provider = GoogleTakeoutProvider(pasta)
+        provider = GoogleTakeoutProvider(pasta, ler_arquivos=args.ler_arquivos)
 
     def progresso(metrics, _caminho: str) -> None:
         sys.stdout.write(
@@ -298,6 +298,11 @@ def main(argv: list[str] | None = None) -> int:
     p_imp.add_argument(
         "caminho", nargs="?",
         help="pasta do Takeout; para apple, biblioteca alternativa (opcional)",
+    )
+    p_imp.add_argument(
+        "--ler-arquivos", action="store_true",
+        help="takeout: abrir cada imagem (EXIF, hash, miniatura). Por padrão "
+             "só o sidecar e a entrada de diretório são lidos",
     )
     p_imp.set_defaults(func=cmd_importar)
 

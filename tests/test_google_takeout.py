@@ -77,7 +77,7 @@ def test_variante_supplemental_metadata_e_arquivo_sem_sidecar(tmp_path):
     }), encoding="utf-8")
     make_jpeg(raiz / "Album" / "IMG_5.jpg")  # sem sidecar: entra mesmo assim
 
-    assets = {a.caminho.name: a for a in GoogleTakeoutProvider(raiz).iter_assets()}
+    assets = {a.nome: a for a in GoogleTakeoutProvider(raiz).iter_assets()}
     assert assets["IMG_4.jpg"].gps_lat == 1.0
     assert assets["IMG_5.jpg"].gps_lat is None
 
@@ -115,3 +115,45 @@ def test_integracao_takeout_no_catalogo(migrated_engine, tmp_path):
             ))
         }
         assert {"album", "favorito", "gps"} <= chaves
+
+
+def test_takeout_entra_como_doador_sem_abrir_a_imagem(migrated_engine, tmp_path):
+    """Por padrão o Takeout doa sinais e não vira acervo: nome e tamanho
+    vêm da entrada de diretório, mas nenhum byte de imagem é lido — sem
+    hash, sem EXIF, sem miniatura."""
+    raiz = _takeout(tmp_path)
+    foto = make_jpeg(raiz / "Viagem Dubai" / "IMG_8.jpg", data_exif=None)
+    _sidecar(foto, lat=25.2, lon=55.3)
+
+    factory = create_session_factory(migrated_engine)
+    imp = ExternalCatalogImporter(factory, PurePythonExtractor(),
+                                  ScannerSettings())
+    imp.importar(GoogleTakeoutProvider(raiz))
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).one()
+        assert media.arquivo_ausente is True
+        assert media.hash_rapido is None  # não houve leitura do arquivo
+        assert media.nome == "IMG_8.jpg"
+        assert media.extensao == "jpg"
+        assert media.tamanho == foto.stat().st_size
+        assert media.caminho == "google://Viagem Dubai/IMG_8.jpg"
+
+
+def test_ler_arquivos_cataloga_de_verdade(migrated_engine, tmp_path):
+    """Quando o Takeout *é* o acervo, o modo explícito volta a abrir a
+    imagem e o item deixa de ser referência."""
+    raiz = _takeout(tmp_path)
+    foto = make_jpeg(raiz / "Album" / "IMG_9.jpg")
+    _sidecar(foto, lat=25.2, lon=55.3)
+
+    factory = create_session_factory(migrated_engine)
+    imp = ExternalCatalogImporter(factory, PurePythonExtractor(),
+                                  ScannerSettings())
+    imp.importar(GoogleTakeoutProvider(raiz, ler_arquivos=True))
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).one()
+        assert media.arquivo_ausente is False
+        assert media.hash_rapido is not None
+        assert media.caminho == str(foto)

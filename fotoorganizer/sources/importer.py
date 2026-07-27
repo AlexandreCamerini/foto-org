@@ -233,9 +233,13 @@ class ExternalCatalogImporter:
 
     def _gravar_referencia(self, session: Session, source_id: int,
                            namespace: str, asset: ExternalAsset) -> None:
-        """Grava um item sem arquivo local. Sem stat, sem hash, sem
+        """Grava um item sem abrir o arquivo. Sem EXIF, sem hash, sem
         miniatura — o valor está em `data_capturada` e no GPS, que fazem
-        dele um doador para a correlação entre fontes."""
+        dele um doador para a correlação entre fontes.
+
+        Nome e tamanho entram quando o provider os conhece: são informação
+        do arquivo, não conteúdo, e casam cópias entre fontes sem leitura.
+        """
         caminho = f"{namespace}://{asset.referencia}"
         existing = session.scalar(
             select(MediaFile).where(
@@ -248,7 +252,13 @@ class ExternalCatalogImporter:
             extensao="", tamanho=0,
         )
         media.arquivo_ausente = True
-        media.nome = asset.titulo or f"{namespace}:{asset.referencia}"
+        media.nome = (
+            asset.nome or asset.titulo or f"{namespace}:{asset.referencia}"
+        )
+        if asset.nome and "." in asset.nome:
+            media.extensao = asset.nome.rsplit(".", 1)[-1].lower()
+        if asset.tamanho is not None:
+            media.tamanho = asset.tamanho
         media.data_capturada = asset.data_capturada
         if asset.gps_lat is not None:
             media.gps_lat, media.gps_lon = asset.gps_lat, asset.gps_lon

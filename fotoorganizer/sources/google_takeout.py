@@ -83,8 +83,23 @@ def _data(dados: dict) -> datetime | None:
 
 
 class GoogleTakeoutProvider:
-    def __init__(self, raiz: Path) -> None:
+    """Lê a pasta do Takeout.
+
+    Por padrão **não abre as imagens**: o Takeout é uma exportação, quase
+    sempre de fotos que o dono já tem em outro lugar, e costuma ter dezenas
+    de GB. Ler cada arquivo significaria extrair EXIF, hashear e gerar
+    miniatura de tudo para produzir uma biblioteca duplicada que será
+    apagada. O que interessa é o sidecar JSON — em especial o `geoData`,
+    que traz coordenada mesmo quando o export removeu o EXIF.
+
+    Então os itens entram como referência: nome, tamanho e o que o Google
+    sabe. `ler_arquivos=True` restaura o comportamento de catalogar de
+    verdade, para quando o Takeout *for* o acervo.
+    """
+
+    def __init__(self, raiz: Path, ler_arquivos: bool = False) -> None:
         self._raiz = Path(raiz).expanduser()
+        self._ler_arquivos = ler_arquivos
 
     @property
     def tipo(self) -> SourceType:
@@ -123,8 +138,21 @@ class GoogleTakeoutProvider:
                 for p in dados.get("people", ())
                 if p.get("name", "").strip()
             )
+            # stat() lê a entrada de diretório, não o arquivo: o tamanho é
+            # informação sobre a foto, não a foto.
+            try:
+                tamanho = media.stat().st_size
+            except OSError:
+                tamanho = None
+
             yield ExternalAsset(
-                caminho=media,
+                caminho=media if self._ler_arquivos else None,
+                referencia=(
+                    None if self._ler_arquivos
+                    else str(media.relative_to(self._raiz))
+                ),
+                nome=media.name,
+                tamanho=tamanho,
                 data_capturada=_data(dados),
                 gps_lat=lat, gps_lon=lon,
                 descricao=(dados.get("description") or "").strip() or None,
