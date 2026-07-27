@@ -24,7 +24,11 @@ from fotoorganizer.classification.confidence import (
     elo_mais_fraco,
     nivel_para_score,
 )
-from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_destino
+from fotoorganizer.classification.templates import (
+    DESTINO_NAO_CLASSIFICADO,
+    TEMPLATE_PADRAO,
+    render_destino,
+)
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
 from fotoorganizer.grouping.datas import data_no_caminho, rotulo_mes
 from fotoorganizer.geolocation.folder_names import _normalizar
@@ -555,17 +559,26 @@ class SuggestionEngine:
         return None
 
     @staticmethod
-    def _mes_ano(media: MediaFile, evidencias: dict) -> str | None:
-        """"mai.2025" a partir da melhor data disponível — a de captura,
-        ou a que a própria pasta escreve quando não há EXIF. Devolve None
-        quando só se conhece o ano: mês inventado não é evidência."""
+    def _destino_nao_classificado(media: MediaFile, evidencias: dict) -> str:
+        """Ramo das fotos que nenhum sinal nomeia, quebrado por ano e mês.
+
+        Um balde único com milhares de fotos não é revisável; por mês, é.
+        A data vem da melhor fonte disponível — a de captura, ou a que a
+        própria pasta escreve quando não há EXIF. Conhecendo só o ano,
+        para no ano: mês inventado não é evidência. Sem data alguma, a
+        foto vai para "sem data", que é uma lacuna a resolver e não um
+        lugar definitivo.
+        """
+        raiz = DESTINO_NAO_CLASSIFICADO
         if "data" in evidencias:
             dt = datetime.fromisoformat(evidencias["data"].valor)
-            return rotulo_mes(dt.year, dt.month)
+            return f"{raiz}/{dt.year}/{rotulo_mes(dt.year, dt.month)}"
         data = data_no_caminho(media.pasta)
-        if data is not None and data.mes is not None:
-            return rotulo_mes(data.ano, data.mes)
-        return None
+        if data is None:
+            return f"{raiz}/sem data"
+        if data.mes is None:
+            return f"{raiz}/{data.ano}"
+        return f"{raiz}/{data.ano}/{rotulo_mes(data.ano, data.mes)}"
 
     # -- persistência de sugestões ------------------------------------------
     def _midias_com_decisao(self, session: Session) -> set[int]:
@@ -604,13 +617,7 @@ class SuggestionEngine:
         campos = {campo: ev.valor for campo, ev in evidencias.items()}
         if "data" in evidencias:
             campos["ano"] = str(datetime.fromisoformat(evidencias["data"].valor).year)
-        # Quando NADA além da data nomeia a foto, o destino seria uma pasta
-        # com o ano e mais nada — que não organiza, só recria o problema com
-        # outro nome. Aí a data ganha o mês, no formato do próprio acervo.
-        if not any(campos.get(campo) for campo in _CAMPOS_QUE_NOMEIAM):
-            mes_ano = self._mes_ano(media, evidencias)
-            if mes_ano is not None:
-                campos["ano"] = mes_ano
+        sem_nome = not any(campos.get(campo) for campo in _CAMPOS_QUE_NOMEIAM)
         # Evita "2024 - França/França/…".
         if campos.get("viagem") and campos.get("pais") == campos["viagem"]:
             campos["pais"] = None
@@ -618,6 +625,16 @@ class SuggestionEngine:
         # ("Eventos/2026/Serena 15 Anos", não ".../Serena 15 Anos/São Paulo").
         if campos.get("evento"):
             campos["pais"] = campos["regiao"] = campos["cidade"] = None
+
+        if sem_nome:
+            # Nada nomeia a foto: em vez do template (que renderiza só o
+            # ano, ou nada), o ramo de não classificadas por ano e mês.
+            destino = self._destino_nao_classificado(media, evidencias)
+            usados = (
+                {"data": evidencias["data"]} if "data" in evidencias else {}
+            )
+            self._salvar_sugestao(session, media, destino, usados)
+            return
 
         destino = render_destino(self._template, campos)
         usados = {
@@ -633,6 +650,10 @@ class SuggestionEngine:
             # não SOBE score: docs/CONFIANCA.md proíbe soma de confianças.
             usados.pop("ano", None)
 
+        self._salvar_sugestao(session, media, destino, usados)
+
+    def _salvar_sugestao(self, session: Session, media: MediaFile,
+                         destino: str, usados: dict[str, Evidence]) -> None:
         nivel, _score = elo_mais_fraco([ev.score for ev in usados.values()])
         sugestao = Suggestion(
             media_id=media.id, destino_sugerido=destino, template=self._template,

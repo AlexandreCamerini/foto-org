@@ -1,7 +1,9 @@
 # Foto Organizer — guia do projeto para o Claude Code
 
-App desktop macOS, 100% local, para catalogar, analisar e organizar (de forma
-assistida e não destrutiva) uma grande coleção pessoal de fotos.
+App desktop macOS, local-first, para catalogar, analisar e organizar (de forma
+assistida e não destrutiva) uma grande coleção pessoal de fotos. O núcleo
+funciona integralmente offline; recursos de nuvem são opcionais e nunca são
+pré-requisito para catalogar, revisar ou executar operações.
 
 Princípio central: **primeiro catalogar, depois sugerir, então revisar e
 somente por último executar operações físicas.**
@@ -14,8 +16,11 @@ somente por último executar operações físicas.**
    explícita do usuário; a execução é "copiar" por padrão, nunca "mover".
 3. Nunca sobrescrever arquivo existente no destino. Verificar hash antes e
    depois de cada cópia. Registrar tudo em audit log.
-4. Nenhum dado sai da máquina por padrão. Serviços externos (geocoding,
-   visão, etc.) são opt-in explícito, com indicação visual do que será enviado.
+4. Nenhum dado sai da máquina por padrão. Serviços externos e sincronização
+   são opt-in explícito, desligados inicialmente e com indicação visual prévia
+   de quais dados serão enviados, finalidade, destino e forma de revogação.
+   Aplicar minimização de dados, criptografia em trânsito e nunca sincronizar
+   fotos/RAW ou embeddings faciais sem consentimento específico e separado.
 5. Subprocessos sempre sem `shell=True`, com argumentos em lista e caminhos
    validados (proteção contra path traversal). Não atravessar symlinks por
    padrão.
@@ -27,6 +32,10 @@ somente por último executar operações físicas.**
 ## Stack (decidida — não trocar sem justificar)
 
 - Python 3.12+, SQLite em WAL via SQLAlchemy 2 + Alembic.
+- SQLite continua sendo a fonte local de verdade e o modo padrão. Railway/
+  Postgres pode ser adicionado como adaptador opcional para sincronização,
+  backup de metadados ou colaboração — nunca como dependência do fluxo local.
+  Binários ficam locais ou em object storage próprio; não vão para o Postgres.
 - **UI: web local** (decisão de 2026-07-24, a pedido do dono do produto) —
   FastAPI servindo apenas 127.0.0.1 (`fotoorganizer/server/`) + React/
   Vite/TypeScript/Tailwind (`webapp/`), grade virtualizada, teclado-first.
@@ -58,6 +67,7 @@ fotoorganizer/
   database/       engine, migrações Alembic
   models/         ORM + dataclasses de domínio
   repositories/   acesso a dados (uma classe por agregado)
+  sync/           sincronização opcional, incremental e revogável
   scanner/        descoberta incremental de arquivos, checkpoints, pause/resume
   metadata/       extratores (ExifToolExtractor | PurePythonExtractor)
   thumbnails/     geração + cache
@@ -76,7 +86,8 @@ docs/             ARQUITETURA, ROADMAP, DIRECAO_DE_ARTE, PRIVACIDADE, CONFIANCA
 ```
 
 Componentes substituíveis (`Protocol`): MetadataExtractor, VisionProvider,
-FaceRecognitionProvider, GeocodingProvider.
+FaceRecognitionProvider, GeocodingProvider e SyncProvider. O adaptador de
+nuvem deve ficar na infraestrutura; domínio e UI não dependem do Railway.
 
 ## Modelo de evidências e confiança
 
@@ -89,12 +100,26 @@ EXIF, confiança alta; cidade veio do nome da pasta, confiança média").
 
 ## Método de trabalho
 
+- Siga `docs/METODO_DE_TRABALHO.md` para decisões gerais de arquitetura, UX,
+  performance e custo; este arquivo prevalece nas regras específicas e nos
+  invariantes de segurança do Foto Organizer.
 - Trabalhe em fatias verticais pelo docs/ROADMAP.md (M0→M7). Não avance de
   milestone com testes quebrados.
 - Rode `pytest` após cada etapa. Erros de leitura de arquivo nunca derrubam
   a varredura: registrar e continuar.
 - UI segue docs/DIRECAO_DE_ARTE.md (dark-first, 3 painéis, badges de
   confiança). Não inventar estilo ad-hoc.
+- Validar UX no fluxo real, não só por build: estados de loading, vazio, erro,
+  progresso, cancelamento e retomada; navegação por teclado; foco visível;
+  grade virtualizada; feedback imediato sem bloquear a interface.
+- Tratar performance como requisito mensurável. Antes de otimizar, registrar
+  baseline com catálogo representativo; depois comparar tempo, memória e
+  responsividade. Processar incrementalmente, em batch e com workers limitados;
+  evitar N+1, reprocessamento e carregamento de imagens em resolução completa.
+- Escolher infraestrutura pelo menor custo total que atenda ao caso real:
+  SQLite local primeiro; Railway somente quando sync, backup remoto ou
+  colaboração justificarem latência, operação e custo recorrente. Toda adoção
+  de nuvem exige estimativa simples de custo, volume e estratégia de saída.
 - O protótipo v1 (`backend/`, `streamlit_app/`, `database/fotos.db`) foi
   portado e removido por inteiro. O catálogo vive em
   `~/Library/Application Support/FotoOrganizer/catalog.db` e é o único.

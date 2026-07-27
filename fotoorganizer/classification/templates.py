@@ -6,7 +6,9 @@ Regras de renderização:
   separadores ("2024 - ", " - ") são aparadas;
 - cada segmento é normalizado para nome de diretório seguro (caracteres
   inválidos, comprimento, pontos/espaços nas bordas);
-- se tudo ficar vazio, o destino é "Não classificado" — nunca inventa.
+- se tudo ficar vazio, o destino é "Não classificadas" — nunca inventa.
+  Quem enche esse ramo por ano e mês é o motor (classification/engine.py),
+  que tem a data; aqui só existe a raiz.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import unicodedata
 
 TEMPLATE_PADRAO = "{categoria}/{ano} - {viagem}/{evento}/{pais}/{regiao}/{cidade}"
 
-DESTINO_NAO_CLASSIFICADO = "Não classificado"
+DESTINO_NAO_CLASSIFICADO = "Não classificadas"
 
 _MAX_SEGMENTO = 80
 # Inválidos em APFS/exFAT/NTFS + controles. "/" separa segmentos, nunca

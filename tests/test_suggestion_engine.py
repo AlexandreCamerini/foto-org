@@ -426,9 +426,9 @@ def test_pastas_tecnicas_sem_sinal_ficam_neutras(migrated_engine):
     sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
     campos = {e.campo for e in evidencias}
     assert "viagem" not in campos and "evento" not in campos
-    # Nada nomeia a foto: sobra a data, e ela vai até onde a evidência
-    # alcança — mês, não só o ano. Nenhum nome é inventado.
-    assert sugestao.destino_sugerido == "mai.2025"
+    # Nada nomeia a foto: vai para o ramo de não classificadas, quebrado
+    # por ano e mês. Nenhum nome é inventado.
+    assert sugestao.destino_sugerido == "Não classificadas/2025/mai.2025"
 
 
 def test_advisor_llm_apoia_sessao_neutra(migrated_engine):
@@ -547,9 +547,10 @@ def test_data_da_pasta_que_diverge_do_exif_e_denunciada(migrated_engine):
     assert "DIVERGE do EXIF (2019)" in ano.justificativa
 
 
-def test_pasta_que_e_so_data_vira_mes_ponto_ano(migrated_engine):
+def test_nao_classificadas_quebram_por_ano_e_mes(migrated_engine):
     """Sem categoria, evento ou lugar, o destino seria a pasta "2025" —
-    que não organiza nada. Vira "mai.2025", o formato do próprio acervo."""
+    um balde que não é revisável. Vai para o ramo de não classificadas,
+    quebrado por ano e mês no formato do próprio acervo."""
     factory = create_session_factory(migrated_engine)
     with factory() as session:
         fonte = Source(caminho="/fotos")
@@ -564,7 +565,7 @@ def test_pasta_que_e_so_data_vira_mes_ponto_ano(migrated_engine):
 
     SuggestionEngine(factory).gerar()
     sugestao, _ev = _sugestao_de(factory, "x0.jpg")
-    assert sugestao.destino_sugerido == "mai.2025"
+    assert sugestao.destino_sugerido == "Não classificadas/2025/mai.2025"
 
 
 def test_mes_nao_invade_destino_que_ja_tem_nome(migrated_engine):
