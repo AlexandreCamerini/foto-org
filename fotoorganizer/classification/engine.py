@@ -620,9 +620,17 @@ class SuggestionEngine:
         sem_nome = not any(campos.get(campo) for campo in _CAMPOS_QUE_NOMEIAM)
         # ("2024 - França/França" é evitado pelo próprio render_destino,
         # que não repete valor já visto acima no caminho.)
-        # Evento local não ganha hierarquia geográfica no destino
-        # ("Eventos/2026/Serena 15 Anos", não ".../Serena 15 Anos/São Paulo").
-        if campos.get("evento"):
+        #
+        # UMA VIAGEM É UMA PASTA. Viagem ou evento já nomeiam o destino;
+        # país/região/cidade não descem abaixo deles. O motivo não é
+        # estético: a geocodificação depende de a foto ter GPS, e a
+        # cobertura é irregular — das 2.405 fotos de uma mesma viagem no
+        # acervo, 106 tinham coordenada. Deixar a hierarquia descer
+        # partia a viagem em três pastas conforme QUAL foto por acaso
+        # gravou GPS, que é acidente de equipamento, não organização.
+        # O lugar continua gravado como evidência e visível no inspetor;
+        # ele só não vira pasta.
+        if campos.get("viagem") or campos.get("evento"):
             campos["pais"] = campos["regiao"] = campos["cidade"] = None
 
         if sem_nome:

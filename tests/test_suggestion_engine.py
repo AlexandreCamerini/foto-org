@@ -92,10 +92,13 @@ def test_gps_gera_destino_com_alta_e_justificativas(ambiente):
 
     sugestao, evidencias = _sugestao_de(factory, "franca_0.jpg")
     assert "França" in sugestao.destino_sugerido
-    assert "Avignon" in sugestao.destino_sugerido
     assert "2024" in sugestao.destino_sugerido
+    # A viagem é UMA pasta: a cidade não vira nível abaixo dela, mas
+    # continua registrada como evidência (e visível no inspetor).
+    assert "Avignon" not in sugestao.destino_sugerido
 
     por_campo = {e.campo: e for e in evidencias}
+    assert por_campo["cidade"].valor == "Avignon"
     assert por_campo["data"].origem == "exif"
     assert por_campo["data"].nivel == ConfidenceLevel.ALTA
     assert por_campo["pais"].origem == "geocoding_offline"
@@ -150,13 +153,18 @@ def test_viagem_nomeada_pelo_pais_dominante(ambiente):
     assert "França" in nomes
 
 
-def test_destino_nao_duplica_ano_nem_pais(ambiente):
+def test_uma_viagem_e_uma_pasta_so(ambiente):
     factory, engine = ambiente
     engine.gerar()
-    sugestao, _ = _sugestao_de(factory, "franca_0.jpg")
-    # "{ano} - {viagem}" compõe "2024 - França"; {pais} some por ser igual
-    # ao rótulo da viagem — nada de "2024 - 2024" nem "França/França".
-    assert sugestao.destino_sugerido == "Viagens/2024 - França/Provence/Avignon"
+    # "{ano} - {viagem}" compõe "2024 - França"; nada de "2024 - 2024"
+    # nem "França/França". E a geografia não desce abaixo da viagem: as
+    # fotos da mesma viagem caem TODAS na mesma pasta, tenham GPS ou não.
+    destinos = {
+        _sugestao_de(factory, nome)[0].destino_sugerido
+        for nome in ["franca_0.jpg", "franca_1.jpg", "franca_2.jpg",
+                     "sem_gps.jpg"]
+    }
+    assert destinos == {"Viagens/2024 - França"}
 
 
 def test_gps_herdado_de_outra_fonte_gera_evidencia_e_destino(migrated_engine):
