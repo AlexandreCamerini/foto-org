@@ -149,3 +149,13 @@ def data_no_caminho(caminho: str) -> DataDaPasta | None:
 
 def _precisao(data: DataDaPasta) -> int:
     return (data.mes is not None) + (data.dia is not None)
+
+
+_ABREV_MES = ("jan", "fev", "mar", "abr", "mai", "jun",
+              "jul", "ago", "set", "out", "nov", "dez")
+
+
+def rotulo_mes(ano: int, mes: int) -> str:
+    """"jun.2026" — o formato que o dono já usa no próprio acervo
+    ("Pantanal Jul.2023"), em minúsculas para não competir com o nome."""
+    return f"{_ABREV_MES[mes - 1]}.{ano}"

@@ -26,7 +26,7 @@ from fotoorganizer.classification.confidence import (
 )
 from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_destino
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
-from fotoorganizer.grouping.datas import data_no_caminho
+from fotoorganizer.grouping.datas import data_no_caminho, rotulo_mes
 from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import (
@@ -75,6 +75,9 @@ _CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",
                      "familia": "Família", "família": "Família",
                      "eventos": "Eventos", "evento": "Eventos"}
 _MIN_FOTOS_SESSAO = 2
+# Campos que dão nome ao destino. Sem nenhum deles, sobra só a data.
+_CAMPOS_QUE_NOMEIAM = ("categoria", "viagem", "evento", "pais", "regiao",
+                       "cidade")
 # Fotos geocodificadas mínimas para um país contar como perna da viagem —
 # uma escala de aeroporto com 1-2 fotos não nomeia a viagem.
 _MIN_FOTOS_PERNA = 3
@@ -551,6 +554,19 @@ class SuggestionEngine:
                               "sugerido por LLM a partir de metadados")
         return None
 
+    @staticmethod
+    def _mes_ano(media: MediaFile, evidencias: dict) -> str | None:
+        """"mai.2025" a partir da melhor data disponível — a de captura,
+        ou a que a própria pasta escreve quando não há EXIF. Devolve None
+        quando só se conhece o ano: mês inventado não é evidência."""
+        if "data" in evidencias:
+            dt = datetime.fromisoformat(evidencias["data"].valor)
+            return rotulo_mes(dt.year, dt.month)
+        data = data_no_caminho(media.pasta)
+        if data is not None and data.mes is not None:
+            return rotulo_mes(data.ano, data.mes)
+        return None
+
     # -- persistência de sugestões ------------------------------------------
     def _midias_com_decisao(self, session: Session) -> set[int]:
         stmt = select(Suggestion.media_id).where(
@@ -588,6 +604,13 @@ class SuggestionEngine:
         campos = {campo: ev.valor for campo, ev in evidencias.items()}
         if "data" in evidencias:
             campos["ano"] = str(datetime.fromisoformat(evidencias["data"].valor).year)
+        # Quando NADA além da data nomeia a foto, o destino seria uma pasta
+        # com o ano e mais nada — que não organiza, só recria o problema com
+        # outro nome. Aí a data ganha o mês, no formato do próprio acervo.
+        if not any(campos.get(campo) for campo in _CAMPOS_QUE_NOMEIAM):
+            mes_ano = self._mes_ano(media, evidencias)
+            if mes_ano is not None:
+                campos["ano"] = mes_ano
         # Evita "2024 - França/França/…".
         if campos.get("viagem") and campos.get("pais") == campos["viagem"]:
             campos["pais"] = None

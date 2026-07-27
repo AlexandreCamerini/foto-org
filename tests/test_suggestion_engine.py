@@ -426,7 +426,9 @@ def test_pastas_tecnicas_sem_sinal_ficam_neutras(migrated_engine):
     sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
     campos = {e.campo for e in evidencias}
     assert "viagem" not in campos and "evento" not in campos
-    assert sugestao.destino_sugerido == "2025"  # só o ano — não inventa
+    # Nada nomeia a foto: sobra a data, e ela vai até onde a evidência
+    # alcança — mês, não só o ano. Nenhum nome é inventado.
+    assert sugestao.destino_sugerido == "mai.2025"
 
 
 def test_advisor_llm_apoia_sessao_neutra(migrated_engine):
@@ -543,3 +545,43 @@ def test_data_da_pasta_que_diverge_do_exif_e_denunciada(migrated_engine):
     _sug, evidencias = _sugestao_de(factory, "a.jpg")
     ano = next(e for e in evidencias if e.campo == "ano")
     assert "DIVERGE do EXIF (2019)" in ano.justificativa
+
+
+def test_pasta_que_e_so_data_vira_mes_ponto_ano(migrated_engine):
+    """Sem categoria, evento ou lugar, o destino seria a pasta "2025" —
+    que não organiza nada. Vira "mai.2025", o formato do próprio acervo."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"x{i}.jpg", "/fotos/2025_05_24",
+                data=datetime(2025, 5, 24, 11, i),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, _ev = _sugestao_de(factory, "x0.jpg")
+    assert sugestao.destino_sugerido == "mai.2025"
+
+
+def test_mes_nao_invade_destino_que_ja_tem_nome(migrated_engine):
+    """Havendo evento, o nível continua sendo o ano: "Teatro" atravessa o
+    ano inteiro e não pode ser fatiado em doze pastas."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"t{i}.jpg", "/fotos/2026/Teatro",
+                data=datetime(2026, 6, 2, 20, i),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, _ev = _sugestao_de(factory, "t0.jpg")
+    assert sugestao.destino_sugerido == "Eventos/2026/Teatro"
