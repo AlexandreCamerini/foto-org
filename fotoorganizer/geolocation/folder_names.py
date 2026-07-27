@@ -13,6 +13,8 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from fotoorganizer.geolocation.paises import canonizar_pais
+
 _PAISES_RAW = [
     "Brasil", "Brazil", "Portugal", "Espanha", "Spain", "França", "France",
     "Itália", "Italy", "Alemanha", "Germany", "Reino Unido", "United Kingdom",
@@ -47,7 +49,13 @@ PAISES_NORMALIZADOS: dict[str, str] = {_normalizar(p): p for p in _PAISES_RAW}
 
 
 def identificar_pais(segmento: str) -> str | None:
-    return PAISES_NORMALIZADOS.get(_normalizar(segmento))
+    """Nome canônico em português do país escrito no segmento, ou None.
+
+    Devolve SEMPRE a grafia canônica: uma pasta "France" e outra "França"
+    dão "França" nas duas, senão o destino ganharia duas pastas para o
+    mesmo país — e o mesmo valeria contra o "France" do dataset offline.
+    """
+    return canonizar_pais(segmento)
 
 
 @dataclass(frozen=True, slots=True)

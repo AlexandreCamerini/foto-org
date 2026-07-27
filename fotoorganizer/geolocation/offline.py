@@ -10,15 +10,23 @@ from __future__ import annotations
 import logging
 
 from fotoorganizer.geolocation.base import GeoResult
+from fotoorganizer.geolocation.paises import limpar_regiao, pais_por_codigo
 
 log = logging.getLogger(__name__)
 
-FONTE = "offline:reverse_geocode"
+# /2: país canonizado pelo código ISO e região sem rótulo administrativo
+# em inglês. Bump obrigatório a cada mudança de nomenclatura — é o que
+# reescreve os lugares já em cache (ver GeocodingProvider.fonte).
+FONTE = "offline:reverse_geocode/2"
 
 
 class OfflineGeocoder:
     def __init__(self) -> None:
         self._modulo = None
+
+    @property
+    def fonte(self) -> str:
+        return FONTE
 
     def _carregar(self):
         if self._modulo is None:
@@ -35,9 +43,15 @@ class OfflineGeocoder:
         except Exception as exc:
             log.warning("geocoding offline falhou para %s,%s: %s", lat, lon, exc)
             return None
+        # O dataset é GeoNames em inglês. O código ISO é a chave estável
+        # para o nome em português; se vier um código desconhecido, o nome
+        # original entra como está — melhor em inglês do que ausente.
+        pais = pais_por_codigo(resultado.get("country_code"))
         return GeoResult(
-            pais=resultado.get("country") or None,
-            regiao=resultado.get("state") or None,
+            pais=pais or resultado.get("country") or None,
+            # Cidade fica no idioma local: "Hoi An" e "Chiang Mai" são os
+            # nomes certos dos lugares, não erros de tradução.
+            regiao=limpar_regiao(resultado.get("state")),
             cidade=resultado.get("city") or None,
             fonte=FONTE,
         )

@@ -70,6 +70,48 @@ def test_geocoder_offline_real():
 
     resultado = OfflineGeocoder().resolve(43.95, 4.8083)
     assert resultado is not None
-    assert resultado.pais == "France"
+    # O dataset é GeoNames em inglês; o país sai canonizado pelo código
+    # ISO. A cidade fica como é: endônimo não é erro de tradução.
+    assert resultado.pais == "França"
     assert resultado.cidade == "Avignon"
     assert resultado.fonte.startswith("offline:")
+
+
+def test_cache_de_lugar_e_reescrito_quando_a_nomenclatura_muda(migrated_engine):
+    """Mudar o nome do país não pode valer só para coordenadas novas: as
+    fotos já resolvidas apontam para a linha em cache."""
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.geolocation import GeoResult, LocationResolver
+
+    class Provedor:
+        def __init__(self, pais, fonte):
+            self.pais, self._fonte = pais, fonte
+
+        @property
+        def fonte(self):
+            return self._fonte
+
+        def resolve(self, lat, lon):
+            return GeoResult(self.pais, None, "Avignon", self._fonte)
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        antigo = LocationResolver(Provedor("France", "offline:x/1"))
+        location = antigo.resolve(session, 43.95, 4.8083)
+        id_original = location.id
+        assert location.pais == "France"
+
+        novo = LocationResolver(Provedor("França", "offline:x/2"))
+        atualizado = novo.resolve(session, 43.95, 4.8083)
+        # Mesma linha (as fotos continuam apontando para ela), nome novo.
+        assert atualizado.id == id_original
+        assert atualizado.pais == "França"
+
+        # Sem mudança de versão, o cache continua valendo (sem consulta).
+        class Mudo(Provedor):
+            def resolve(self, lat, lon):
+                raise AssertionError("não devia consultar o provedor")
+
+        assert Mudo("x", "offline:x/2").fonte == "offline:x/2"
+        estavel = LocationResolver(Mudo("x", "offline:x/2"))
+        assert estavel.resolve(session, 43.95, 4.8083).pais == "França"
