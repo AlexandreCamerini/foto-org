@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from fotoorganizer.geolocation.folder_names import _normalizar, identificar_pais
+from fotoorganizer.grouping.datas import separar_data
 
 # Palavras que indicam evento (comparadas sem acento/caixa).
 _KEYWORDS_EVENTO = {
@@ -26,6 +27,11 @@ _RE_TECNICO = re.compile(
     r"|\d{1,2}([-_ .]\d{1,2})?"          # 05, 05_24
     r"|img[-_ ]?\d*|dsc[-_ ]?\d*|dcim"
     r"|originals?|exports?|edits?|edicoes|raw|jpe?g|selecao|selects?"
+    # Etapas de workflow de revelação: dizem em que ponto do tratamento a
+    # foto está, não do que ela é. Vivem na folha, logo abaixo do nome de
+    # verdade ("Dubai, Thai & Viet/[Developed]").
+    r"|developed|revelad[ao]s?|tratad[ao]s?|finalizad[ao]s?|culling"
+    r"|picks?|rejects?|descartes?|lixo|previews?|thumbs?|cache|sidecars?"
     r"|fotos?|photos?|imagens|camera|backup|nova pasta|sem titulo|untitled"
     r"|pictures|users|home|volumes|desktop|documents|downloads|library"
     r")\]?$"
@@ -37,6 +43,16 @@ _PROFUNDIDADE_ALBUM = 3
 
 _CATEGORIAS = {"viagens", "viagem", "familia", "eventos", "album", "albuns"}
 
+# Pastas de arrumação: dizem o que o dono FEZ com as fotos, não do que
+# elas são. "Portfolio/Fotos Organizadas/Visconde de Maua - Abril 2015"
+# é sobre Visconde de Mauá; as duas primeiras são prateleiras.
+_PASTAS_CONTEINER = {
+    "portfolio", "portifolio", "fotos organizadas", "organizadas",
+    "organizado", "acervo", "catalogo", "biblioteca", "galeria",
+    "colecao", "colecoes", "arquivo", "arquivos", "diversos", "geral",
+    "varios", "outros", "misc", "temp", "tmp", "novo", "novas",
+}
+
 
 def keyword_de_evento(segmento: str) -> bool:
     norm = _normalizar(segmento)
@@ -46,24 +62,39 @@ def keyword_de_evento(segmento: str) -> bool:
 
 
 def pasta_tecnica(segmento: str) -> bool:
-    return bool(_RE_TECNICO.match(_normalizar(segmento)))
+    norm = _normalizar(segmento)
+    if _RE_TECNICO.match(norm):
+        return True
+    # Contêiner de software com extensão no nome da pasta ("Pictures.wrp2",
+    # "Backup.photoslibrary"): o miolo é que diz o que é.
+    sem_extensao = re.sub(r"\.[a-z0-9]{1,16}$", "", norm)
+    return sem_extensao != norm and bool(_RE_TECNICO.match(sem_extensao))
 
 
 def nome_de_album(segmento: str) -> bool:
-    """Segmento que nomeia conteúdo: não técnico, não país, não categoria."""
+    """Segmento que nomeia conteúdo: não técnico, não país, não categoria,
+    não prateleira de arrumação."""
     norm = _normalizar(segmento)
     if not norm or pasta_tecnica(segmento):
         return False
     if identificar_pais(segmento) is not None:
         return False
-    return norm not in _CATEGORIAS
+    return norm not in _CATEGORIAS and norm not in _PASTAS_CONTEINER
 
 
 def extrair_evento(pastas: list[str]) -> tuple[str | None, bool]:
     """Devolve (nome do evento, veio_de_keyword) a partir dos caminhos das
     pastas de uma sessão. Prefere o segmento mais fundo com keyword; senão
-    o nome de álbum mais fundo. (None, False) quando só há pastas técnicas."""
-    candidato_album: str | None = None
+    o nome de álbum mais fundo. (None, False) quando só há pastas técnicas.
+
+    A profundidade decide porque o caminho vai do geral ao específico: a
+    pasta folha fala da foto, as de cima falam de onde ela foi guardada.
+    Em "Portfolio/Fotos Organizadas/Visconde de Maua - Abril 2015" o nome
+    é o último — e sem a data, que é evidência à parte (grouping/datas.py).
+    """
+    melhor_keyword: tuple[int, str] | None = None
+    melhor_album: tuple[int, str] | None = None
+
     for pasta in pastas:
         segmentos = [s for s in pasta.split("/") if s]
         for i, segmento in enumerate(segmentos):
@@ -71,9 +102,18 @@ def extrair_evento(pastas: list[str]) -> tuple[str | None, bool]:
             if i > 0 and _normalizar(segmentos[i - 1]) in ("users", "home"):
                 continue
             nivel = len(segmentos) - 1 - i  # 0 = folha
-            if keyword_de_evento(segmento) and nome_de_album(segmento):
-                return segmento.strip(), True
-            if (candidato_album is None and nivel < _PROFUNDIDADE_ALBUM
-                    and nome_de_album(segmento)):
-                candidato_album = segmento.strip()
-    return candidato_album, False
+            nome, _data = separar_data(segmento)
+            if not nome or not nome_de_album(nome):
+                continue
+            nome = nome.strip()
+            if keyword_de_evento(nome):
+                if melhor_keyword is None or nivel < melhor_keyword[0]:
+                    melhor_keyword = (nivel, nome)
+            elif nivel < _PROFUNDIDADE_ALBUM and (
+                melhor_album is None or nivel < melhor_album[0]
+            ):
+                melhor_album = (nivel, nome)
+
+    if melhor_keyword is not None:
+        return melhor_keyword[1], True
+    return (melhor_album[1] if melhor_album else None), False

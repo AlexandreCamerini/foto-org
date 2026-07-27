@@ -487,3 +487,59 @@ def test_advisor_nulo_nao_opina():
     advisor = NullAdvisor()
     assert advisor.local is True
     assert advisor.classificar(cluster) is None
+
+
+# -- data e nome no mesmo segmento de pasta -----------------------------
+def test_pasta_com_lugar_e_data_nomeia_o_evento_e_confirma_o_ano(
+    migrated_engine,
+):
+    """Caso real: "Visconde de Maua - Abril 2015" sob duas pastas de
+    arrumação. O nome vem da folha (não de "Portfolio"), a data vira
+    evidência própria e o ano do EXIF continua mandando no destino."""
+    factory = create_session_factory(migrated_engine)
+    pasta = ("/Volumes/photo/Portfolio/Fotos Organizadas/"
+             "Visconde de Maua - Abril 2015")
+    with factory() as session:
+        fonte = Source(caminho="/Volumes/photo")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"1W0B328{i}.dng", pasta,
+                data=datetime(2015, 4, 18, 14, i),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, evidencias = _sugestao_de(factory, "1W0B3280.dng")
+
+    assert sugestao.destino_sugerido == "Eventos/2015/Visconde de Maua"
+
+    por_campo = {e.campo: e for e in evidencias}
+    assert por_campo["evento"].valor == "Visconde de Maua"
+    # A data da pasta é registrada e diz que confere com o EXIF.
+    assert por_campo["ano"].valor == "2015"
+    assert por_campo["ano"].origem == "pasta"
+    assert "Abril 2015" in por_campo["ano"].justificativa
+    assert "confere com o EXIF" in por_campo["ano"].justificativa
+    # ...mas não entra no cálculo do elo mais fraco: quem deu o ano ao
+    # destino foi o EXIF.
+    assert "ano" not in {e.campo for e in sugestao.evidencias}
+
+
+def test_data_da_pasta_que_diverge_do_exif_e_denunciada(migrated_engine):
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "a.jpg", "/fotos/Pantanal Jul.2023",
+            data=datetime(2019, 7, 2, 9, 0),
+        ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    _sug, evidencias = _sugestao_de(factory, "a.jpg")
+    ano = next(e for e in evidencias if e.campo == "ano")
+    assert "DIVERGE do EXIF (2019)" in ano.justificativa

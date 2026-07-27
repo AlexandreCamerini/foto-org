@@ -26,6 +26,7 @@ from fotoorganizer.classification.confidence import (
 )
 from fotoorganizer.classification.templates import TEMPLATE_PADRAO, render_destino
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
+from fotoorganizer.grouping.datas import data_no_caminho
 from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import (
@@ -416,6 +417,22 @@ class SuggestionEngine:
                 "sem EXIF; data de modificação do arquivo (pouco confiável)",
             ))
 
+        # Data escrita no nome da pasta ("… - Abril 2015"): segunda
+        # testemunha do ano, independente do EXIF. Quando as duas
+        # concordam, o ano deixa de depender de uma fonte só; quando
+        # divergem, a divergência aparece na justificativa em vez de
+        # sumir. O EXIF continua mandando no destino (ver campos["ano"]).
+        data_pasta = data_no_caminho(media.pasta)
+        if data_pasta is not None:
+            just = f"'{data_pasta.texto}' escrito no nome da pasta"
+            if media.data_capturada is not None:
+                if media.data_capturada.year == data_pasta.ano:
+                    just += " — confere com o EXIF"
+                else:
+                    just += (f" — DIVERGE do EXIF "
+                             f"({media.data_capturada.year})")
+            drafts.append(_Draft("ano", "pasta", str(data_pasta.ano), just))
+
         drafts.extend(
             self._evidencias_geo(session, media, sessao, herancas, por_id)
         )
@@ -586,6 +603,12 @@ class SuggestionEngine:
         }
         if "{ano}" in self._template and "data" in evidencias:
             usados["data"] = evidencias["data"]
+            # O ano do destino veio do EXIF; o da pasta é testemunha, não
+            # fonte. Continua gravado como evidência (o usuário vê a
+            # confirmação ou a divergência), mas não puxa o elo mais fraco
+            # para baixo por algo que não decidiu nada. Concordância também
+            # não SOBE score: docs/CONFIANCA.md proíbe soma de confianças.
+            usados.pop("ano", None)
 
         nivel, _score = elo_mais_fraco([ev.score for ev in usados.values()])
         sugestao = Suggestion(
