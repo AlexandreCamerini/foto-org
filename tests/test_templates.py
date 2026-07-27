@@ -3,7 +3,10 @@ from fotoorganizer.classification import (
     render_destino,
     resolver_colisao,
 )
-from fotoorganizer.classification.templates import DESTINO_NAO_CLASSIFICADO
+from fotoorganizer.classification.templates import (
+    DESTINO_NAO_CLASSIFICADO,
+    TEMPLATE_PADRAO,
+)
 
 
 def test_render_completo():
@@ -49,3 +52,37 @@ def test_colisao_recebe_sufixo():
     existentes = {"IMG_001.jpg", "IMG_001.jpg (2)"}
     assert resolver_colisao("IMG_001.jpg", existentes) == "IMG_001.jpg (3)"
     assert resolver_colisao("nova.jpg", existentes) == "nova.jpg"
+
+
+# -- não repetir valor que já apareceu acima ----------------------------
+def test_pais_nao_repete_dentro_do_rotulo_da_viagem():
+    """"2025 - Tailândia – Vietnã/Tailândia" não informa nada."""
+    destino = render_destino(TEMPLATE_PADRAO, {
+        "categoria": "Viagens", "ano": "2025",
+        "viagem": "Tailândia – Vietnã", "pais": "Tailândia",
+        "regiao": "Chiang Mai", "cidade": "Chiang Mai",
+    })
+    assert destino == "Viagens/2025 - Tailândia – Vietnã/Chiang Mai"
+
+
+def test_cidade_igual_a_regiao_aparece_uma_vez():
+    destino = render_destino("{pais}/{regiao}/{cidade}", {
+        "pais": "Brasil", "regiao": "Rio de Janeiro",
+        "cidade": "Rio de Janeiro",
+    })
+    assert destino == "Brasil/Rio de Janeiro"
+
+
+def test_supressao_compara_parte_inteira_nao_pedaco_de_palavra():
+    """"York" sob "New York" é outro lugar — não pode sumir."""
+    destino = render_destino("{pais}/{regiao}/{cidade}", {
+        "pais": "Estados Unidos", "regiao": "New York", "cidade": "York",
+    })
+    assert destino == "Estados Unidos/New York/York"
+
+
+def test_supressao_ignora_acento_e_caixa():
+    destino = render_destino("{viagem}/{pais}", {
+        "viagem": "FRANCA", "pais": "França",
+    })
+    assert destino == "FRANCA"

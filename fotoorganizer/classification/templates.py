@@ -6,6 +6,10 @@ Regras de renderização:
   separadores ("2024 - ", " - ") são aparadas;
 - cada segmento é normalizado para nome de diretório seguro (caracteres
   inválidos, comprimento, pontos/espaços nas bordas);
+- valor que já apareceu acima no caminho não repete: "2025 - Tailândia –
+  Vietnã/Tailândia/Chiang Mai/Chiang Mai" vira "2025 - Tailândia –
+  Vietnã/Chiang Mai". A comparação é por parte inteira, nunca por
+  pedaço de palavra — senão "York" sumiria sob "New York";
 - se tudo ficar vazio, o destino é "Não classificadas" — nunca inventa.
   Quem enche esse ramo por ano e mês é o motor (classification/engine.py),
   que tem a data; aqui só existe a raiz.
@@ -39,7 +43,32 @@ def normalizar_segmento(texto: str, max_len: int = _MAX_SEGMENTO) -> str:
     return texto
 
 
-def _render_segmento(segmento: str, campos: dict[str, str | None]) -> str:
+# Separadores que compõem um segmento a partir de vários valores
+# ("2025 - Tailândia – Vietnã"). Quebrar por eles dá as partes que contam
+# como "já apareceu".
+_RE_PARTES = re.compile(r"\s+[-–—]\s+")
+
+
+def _chave(texto: str) -> str:
+    """Forma comparável: sem acento, sem caixa, espaços colapsados."""
+    sem_acento = (
+        unicodedata.normalize("NFKD", texto)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    return re.sub(r"\s+", " ", sem_acento).strip().lower()
+
+
+def _partes(segmento: str) -> set[str]:
+    return {
+        chave for parte in _RE_PARTES.split(segmento)
+        if (chave := _chave(parte))
+    }
+
+
+def _render_segmento(
+    segmento: str, campos: dict[str, str | None], vistos: set[str]
+) -> str:
     tinha_placeholder = False
     preencheu_algum = False
 
@@ -47,7 +76,10 @@ def _render_segmento(segmento: str, campos: dict[str, str | None]) -> str:
         nonlocal tinha_placeholder, preencheu_algum
         tinha_placeholder = True
         valor = campos.get(match.group(1))
-        if valor:
+        # Valor que já apareceu acima no caminho não repete: a pasta
+        # "Tailândia" dentro de "2025 - Tailândia – Vietnã" não informa
+        # nada e só afunda a árvore.
+        if valor and _chave(str(valor)) not in vistos:
             preencheu_algum = True
             return str(valor)
         return ""
@@ -62,11 +94,13 @@ def _render_segmento(segmento: str, campos: dict[str, str | None]) -> str:
 
 
 def render_destino(template: str, campos: dict[str, str | None]) -> str:
-    segmentos = [
-        renderizado
-        for seg in template.split("/")
-        if (renderizado := _render_segmento(seg, campos))
-    ]
+    vistos: set[str] = set()
+    segmentos: list[str] = []
+    for seg in template.split("/"):
+        renderizado = _render_segmento(seg, campos, vistos)
+        if renderizado:
+            segmentos.append(renderizado)
+            vistos |= _partes(renderizado)
     return "/".join(segmentos) if segmentos else DESTINO_NAO_CLASSIFICADO
 
 

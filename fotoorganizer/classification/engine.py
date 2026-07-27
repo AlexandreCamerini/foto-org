@@ -618,9 +618,8 @@ class SuggestionEngine:
         if "data" in evidencias:
             campos["ano"] = str(datetime.fromisoformat(evidencias["data"].valor).year)
         sem_nome = not any(campos.get(campo) for campo in _CAMPOS_QUE_NOMEIAM)
-        # Evita "2024 - França/França/…".
-        if campos.get("viagem") and campos.get("pais") == campos["viagem"]:
-            campos["pais"] = None
+        # ("2024 - França/França" é evitado pelo próprio render_destino,
+        # que não repete valor já visto acima no caminho.)
         # Evento local não ganha hierarquia geográfica no destino
         # ("Eventos/2026/Serena 15 Anos", não ".../Serena 15 Anos/São Paulo").
         if campos.get("evento"):
