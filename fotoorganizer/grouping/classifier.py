@@ -91,13 +91,18 @@ def classificar_sessao(
     # coordenada é irregular (nessa viagem, 106 fotos de 2.405 tinham
     # GPS, nenhuma nos Emirados), enquanto o nome que o dono escreveu
     # cobre a viagem toda.
+    # Detecta com a tabela canônica, mas NOMEIA com as palavras do dono:
+    # "Dubai, Thai & Viet" diz o mesmo que "Emirados Árabes Unidos –
+    # Tailândia – Vietnã" em menos da metade do comprimento, e é como ele
+    # já chama a viagem. Os países reconhecidos ficam na justificativa.
     for pasta in dados.pastas:
         for segmento in reversed([s for s in pasta.split("/") if s]):
             paises = identificar_paises(segmento)
             if len(paises) >= 2:
                 return Decisao(
-                    "viagem", " – ".join(paises), "pasta",
-                    f"pasta '{segmento}' lista {len(paises)} destinos",
+                    "viagem", segmento.strip(), "pasta",
+                    f"pasta '{segmento}' lista {len(paises)} destinos: "
+                    f"{', '.join(paises)}",
                 )
     for pasta in dados.pastas:
         hierarquia = extrair_hierarquia_da_pasta(pasta)

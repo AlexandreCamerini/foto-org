@@ -98,6 +98,11 @@ def test_pasta_que_lista_destinos_nomeia_a_viagem_inteira():
         paises_no_tempo=("Tailândia", "Vietnã"),
     ))
     assert decisao.tipo == "viagem"
-    assert decisao.rotulo == "Emirados Árabes Unidos – Tailândia – Vietnã"
+    # Nomeia com as palavras do dono, não com a expansão canônica:
+    # diz o mesmo em menos da metade do comprimento.
+    assert decisao.rotulo == "Dubai, Thai & Viet"
     assert decisao.origem == "pasta"
+    # Os países reconhecidos ficam na justificativa, para o "por quê?"
+    # mostrar que os Emirados foram vistos mesmo sem GPS.
     assert "lista 3 destinos" in decisao.justificativa
+    assert "Emirados Árabes Unidos" in decisao.justificativa
