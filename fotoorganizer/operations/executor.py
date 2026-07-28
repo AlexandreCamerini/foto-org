@@ -118,6 +118,21 @@ class OperationExecutor:
                 "espaco_suficiente": livre is None or livre > bytes_necessarios,
             }
 
+    @staticmethod
+    def _prontos_no_ultimo_dry_run(session: Session, plan_id: int) -> int | None:
+        """Quantos arquivos o último dry-run considerou copiáveis.
+
+        None quando não há veredito registrado (plano de versão anterior) —
+        aí a porta antiga vale e a decisão fica com o usuário.
+        """
+        detalhe = session.scalar(
+            select(AuditLog.detalhe)
+            .where(AuditLog.plan_id == plan_id, AuditLog.acao == "dry_run")
+            .order_by(AuditLog.id.desc())
+            .limit(1)
+        )
+        return detalhe.get("prontos") if detalhe else None
+
     # -- execução -----------------------------------------------------------
     def executar(
         self,
@@ -131,6 +146,17 @@ class OperationExecutor:
             if plano.dry_run_em is None:
                 raise DryRunObrigatorio(
                     "execute o dry-run antes de qualquer operação física"
+                )
+            # Exigir que o dry-run tenha acontecido não basta: ele precisa
+            # ter aprovado alguma coisa. Um plano cujas origens estão todas
+            # num volume desmontado passava nesta porta e "executava" 97
+            # itens sem copiar nenhum.
+            prontos = self._prontos_no_ultimo_dry_run(session, plan_id)
+            if prontos == 0:
+                raise DryRunObrigatorio(
+                    "o último dry-run não encontrou nenhum arquivo copiável "
+                    "— verifique as origens (volume desmontado?) e rode o "
+                    "dry-run de novo"
                 )
             plano.status = OperationStatus.EXECUTANDO
             session.add(AuditLog(plan_id=plan_id, acao="execucao_iniciada",

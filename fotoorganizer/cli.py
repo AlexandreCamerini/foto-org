@@ -149,12 +149,32 @@ def cmd_planos(args: argparse.Namespace) -> int:
         print("Nenhum plano. Crie um com: fotoorganizer plano <raiz-destino>")
         return 0
     for p in planos:
-        dry = p.dry_run_em.strftime("%d/%m %H:%M") if p.dry_run_em else "—"
         print(f"[{p.id}] {p.nome}\n"
               f"     {p.status.value} · {p.total_itens} itens · "
               f"{p.concluidos} copiados · {p.com_conflito} conflitos · "
-              f"{p.com_erro} erros · dry-run: {dry}")
+              f"{p.com_erro} erros de execução\n"
+              f"     {_veredito_legivel(p)}")
     return 0
+
+
+def _veredito_legivel(p) -> str:
+    """O que o dry-run disse — a linha que decide se dá para executar.
+
+    Sem ela o resumo mostrava "0 erros · dry-run: ✓" para um plano com as
+    97 origens num volume desmontado, que lê como "pronto para copiar".
+    """
+    if p.dry_run_em is None:
+        return "dry-run: não rodado (obrigatório antes de copiar)"
+    quando = p.dry_run_em.strftime("%d/%m %H:%M")
+    if p.prontos is None:
+        return f"dry-run {quando}: sem veredito registrado"
+    if not p.prontos:
+        return (f"dry-run {quando}: NENHUM arquivo copiável "
+                f"({p.problemas} problemas) — não há o que executar")
+    if p.problemas:
+        return (f"dry-run {quando}: {p.prontos} de {p.total_itens} prontos, "
+                f"{p.problemas} com problema")
+    return f"dry-run {quando}: {p.prontos} prontos, sem problemas"
 
 
 def cmd_plano(args: argparse.Namespace) -> int:

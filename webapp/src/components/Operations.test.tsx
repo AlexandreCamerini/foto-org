@@ -22,7 +22,7 @@ function jobParado(sobrescrever: Partial<Job> = {}): Job {
   } as Job;
 }
 
-function plano(dry_run_em: string | null) {
+function plano(dry_run_em: string | null, veredito: object = {}) {
   return {
     id: 1,
     nome: "Cópia para /destino",
@@ -33,6 +33,11 @@ function plano(dry_run_em: string | null) {
     concluidos: 0,
     com_conflito: 0,
     com_erro: 0,
+    // Sem dry-run não há veredito; com dry-run, o padrão é tudo pronto.
+    prontos: dry_run_em ? 2 : null,
+    problemas: dry_run_em ? 0 : null,
+    executavel: dry_run_em !== null,
+    ...veredito,
   };
 }
 
@@ -55,10 +60,10 @@ const ITENS = [
   },
 ];
 
-function rotas(dry_run_em: string | null) {
+function rotas(dry_run_em: string | null, veredito: object = {}) {
   return {
-    "/api/operacoes": [plano(dry_run_em)],
-    "/api/operacoes/1": { ...plano(dry_run_em), itens: ITENS },
+    "/api/operacoes": [plano(dry_run_em, veredito)],
+    "/api/operacoes/1": { ...plano(dry_run_em, veredito), itens: ITENS },
     "/api/operacoes/1/auditoria": [
       {
         id: 1,
@@ -103,6 +108,36 @@ describe("Operações", () => {
 
     await usuario.click(copiar);
     expect(executarPlano).toHaveBeenCalledWith(1);
+  });
+
+  it("dry-run sem nada copiável bloqueia, mesmo tendo rodado", async () => {
+    // O bug que este teste fixa: um plano cujas origens estavam todas num
+    // volume desmontado mostrava "0 erros · dry-run ✓" e liberava o botão.
+    // `com_erro` conta erro de EXECUÇÃO, e o plano nunca executou.
+    servirApi(
+      rotas("2026-07-26T10:05:00", {
+        prontos: 0,
+        problemas: 2,
+        executavel: false,
+      }),
+    );
+    const executarPlano = vi.fn(async () => {});
+    const usuario = userEvent.setup();
+    montar(<Operations job={jobParado({ executarPlano })} />);
+
+    await usuario.click(await screen.findByText("Cópia para /destino"));
+    const copiar = await screen.findByRole("button", {
+      name: /Copiar 0 arquivos/,
+    });
+    expect(copiar).toBeDisabled();
+    expect(copiar).toHaveAttribute(
+      "title",
+      "O dry-run não encontrou nenhum arquivo copiável",
+    );
+    expect(
+      screen.getByText(/nenhum arquivo copiável \(2 problemas\)/),
+    ).toBeInTheDocument();
+    expect(executarPlano).not.toHaveBeenCalled();
   });
 
   it("o diff mostra o caminho relativo, sem o prefixo comum das árvores",

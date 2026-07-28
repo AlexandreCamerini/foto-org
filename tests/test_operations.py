@@ -204,3 +204,48 @@ def test_plano_nao_refaz_midias_ja_copiadas(ambiente):
     executor.executar(plan_id)
 
     assert planner.criar_plano(destino) is None  # nada novo a planejar
+
+
+def test_execucao_recusa_plano_sem_nada_copiavel(ambiente):
+    """Ter rodado o dry-run não basta — ele precisa ter aprovado algo.
+
+    Caso real: 97 fotos cujas origens estavam todas num volume desmontado.
+    O dry-run marcou 97 problemas e 0 prontos, mas o plano seguia com
+    "0 erros" (que conta erro de EXECUÇÃO) e a porta se abria.
+    """
+    factory, planner, executor, origem, destino = ambiente
+    plan_id = planner.criar_plano(destino)
+
+    for rel in ("a/IMG_1.jpg", "b/IMG_1.jpg", "a/IMG_2.jpg"):
+        (origem / rel).unlink()  # volume desconectado
+    relatorio = executor.dry_run(plan_id)
+    assert relatorio["prontos"] == 0
+    assert len(relatorio["problemas"]) == 3
+
+    with pytest.raises(DryRunObrigatorio, match="nenhum arquivo copiável"):
+        executor.executar(plan_id)
+
+
+def test_resumo_do_plano_carrega_o_veredito_do_dry_run(ambiente):
+    factory, planner, executor, origem, destino = ambiente
+    plan_id = planner.criar_plano(destino)
+    repo = OperationRepository(factory)
+
+    # Antes do dry-run não há veredito, e o plano não é executável.
+    row = repo.plano(plan_id)
+    assert (row.prontos, row.problemas) == (None, None)
+    assert row.executavel is False
+
+    executor.dry_run(plan_id)
+    row = repo.plano(plan_id)
+    assert row.prontos == 3 and row.problemas == 0
+    assert row.executavel is True
+
+    # Origens somem: o dry-run seguinte derruba o veredito.
+    for rel in ("a/IMG_1.jpg", "b/IMG_1.jpg", "a/IMG_2.jpg"):
+        (origem / rel).unlink()
+    executor.dry_run(plan_id)
+    row = repo.plano(plan_id)
+    assert row.prontos == 0 and row.problemas == 3
+    assert row.executavel is False
+    assert row.com_erro == 0  # o campo que enganava: nada executou ainda

@@ -27,6 +27,17 @@ class PlanRow:
     concluidos: int
     com_conflito: int
     com_erro: int
+    # Veredito do ÚLTIMO dry-run. `com_erro` conta erro de execução e fica
+    # em zero num plano que nunca rodou — sem estes dois campos o resumo
+    # de um plano intransitável (origem em volume desmontado) se lê como
+    # "0 erros, dry-run feito", ou seja, pronto para executar.
+    prontos: int | None = None
+    problemas: int | None = None
+
+    @property
+    def executavel(self) -> bool:
+        """Há dry-run recente e ele achou ao menos um arquivo copiável."""
+        return self.dry_run_em is not None and bool(self.prontos)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +71,7 @@ class OperationRepository:
                 .where(OperationItem.plan_id == plano.id, *filtros)
             ) or 0
 
+        prontos, problemas = OperationRepository._veredito(session, plano.id)
         return PlanRow(
             id=plano.id, nome=plano.nome, status=plano.status,
             dry_run_em=plano.dry_run_em, criado_em=plano.criado_em,
@@ -67,7 +79,26 @@ class OperationRepository:
             concluidos=contar(OperationItem.status == OperationStatus.CONCLUIDA),
             com_conflito=contar(OperationItem.conflito.is_not(None)),
             com_erro=contar(OperationItem.status == OperationStatus.ERRO),
+            prontos=prontos, problemas=problemas,
         )
+
+    @staticmethod
+    def _veredito(session: Session, plan_id: int) -> tuple[int | None, int | None]:
+        """(prontos, problemas) do último dry-run, lidos do audit log.
+
+        O audit log já grava isso, e é onde a informação tem de viver: é a
+        trilha do que aconteceu (invariante 3). Copiar os números para o
+        plano criaria duas verdades livres para divergir.
+        """
+        detalhe = session.scalar(
+            select(AuditLog.detalhe)
+            .where(AuditLog.plan_id == plan_id, AuditLog.acao == "dry_run")
+            .order_by(AuditLog.id.desc())
+            .limit(1)
+        )
+        if not detalhe:
+            return None, None
+        return detalhe.get("prontos"), detalhe.get("problemas")
 
     def listar_planos(self) -> list[PlanRow]:
         with self._factory() as session:

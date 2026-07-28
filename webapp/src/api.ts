@@ -128,6 +128,12 @@ export interface Plano {
   concluidos: number;
   com_conflito: number;
   com_erro: number;
+  /** Veredito do último dry-run. `com_erro` conta erro de EXECUÇÃO e fica
+   *  em zero num plano intransitável — sem estes campos a tela diria
+   *  "0 erros" para um plano que não copiaria nada. */
+  prontos: number | null;
+  problemas: number | null;
+  executavel: boolean;
 }
 
 export interface ItemPlano {

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { RelatorioDryRun } from "../api";
+import type { Plano, RelatorioDryRun } from "../api";
 import type { Job } from "../hooks/useJob";
 
 const CORES_STATUS: Record<string, string> = {
@@ -35,6 +35,20 @@ function semPrefixo(caminho: string, prefixo: string): string {
   return prefixo && caminho.startsWith(`${prefixo}/`)
     ? caminho.slice(prefixo.length + 1)
     : caminho;
+}
+
+/** O que o dry-run concluiu — a frase que decide se dá para copiar.
+ *  Sem ela a tela mostrava só a data do dry-run, e um plano com todas as
+ *  origens num volume desmontado se lia como pronto. */
+function veredito(p: Plano): string {
+  if (p.dry_run_em === null) return "sem dry-run — nada pode ser copiado ainda";
+  const quando = new Date(p.dry_run_em).toLocaleString();
+  if (p.prontos === null) return `dry-run em ${quando}`;
+  if (p.prontos === 0)
+    return `dry-run ${quando}: nenhum arquivo copiável (${p.problemas} problemas)`;
+  if (p.problemas)
+    return `dry-run ${quando}: ${p.prontos} prontos, ${p.problemas} com problema`;
+  return `dry-run ${quando}: ${p.prontos} prontos, sem problemas`;
 }
 
 /** Operações físicas: plano → dry-run → aprovação → cópia verificada.
@@ -91,8 +105,8 @@ export default function Operations({ job }: { job: Job }) {
   });
 
   const executando = job.rodando && job.estado.tipo === "operacao";
-  const podeExecutar =
-    plano != null && plano.dry_run_em !== null && !job.rodando;
+  // Ter rodado o dry-run não basta: ele precisa ter aprovado alguma coisa.
+  const podeExecutar = plano != null && plano.executavel && !job.rodando;
   const raizOrigem = prefixoComum((plano?.itens ?? []).map((i) => i.origem));
   const raizDestino = prefixoComum((plano?.itens ?? []).map((i) => i.destino));
 
@@ -140,6 +154,12 @@ export default function Operations({ job }: { job: Job }) {
                   {p.com_erro > 0 && (
                     <span className="text-conf-baixa"> · {p.com_erro} erros</span>
                   )}
+                  {p.dry_run_em !== null && !p.executavel && (
+                    <span className="text-conf-baixa">
+                      {" "}
+                      · dry-run: nada copiável
+                    </span>
+                  )}
                 </div>
               </button>
             ))
@@ -157,7 +177,7 @@ export default function Operations({ job }: { job: Job }) {
                 <button
                   onClick={() => dryRun.mutate()}
                   disabled={dryRun.isPending || job.rodando}
-                  className="rounded-md border border-borda bg-cartao px-3 py-1 hover:border-acento disabled:opacity-50"
+                  className="shrink-0 whitespace-nowrap rounded-md border border-borda bg-cartao px-3 py-1 hover:border-acento disabled:opacity-50"
                 >
                   {dryRun.isPending ? "Simulando…" : "Rodar dry-run"}
                 </button>
@@ -171,11 +191,14 @@ export default function Operations({ job }: { job: Job }) {
                   title={
                     plano.dry_run_em === null
                       ? "Rode o dry-run antes de copiar"
-                      : "Copia os arquivos para o destino"
+                      : !plano.executavel
+                        ? "O dry-run não encontrou nenhum arquivo copiável"
+                        : "Copia os arquivos para o destino"
                   }
-                  className="rounded-md bg-acento px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
+                  className="shrink-0 whitespace-nowrap rounded-md bg-acento px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
                 >
-                  Copiar {plano.total_itens - plano.concluidos} arquivos
+                  Copiar {plano.prontos ?? plano.total_itens - plano.concluidos}{" "}
+                  arquivos
                 </button>
                 {executando && (
                   <button
@@ -186,10 +209,14 @@ export default function Operations({ job }: { job: Job }) {
                   </button>
                 )}
                 <div className="flex-1" />
-                <span className="text-texto-3">
-                  {plano.dry_run_em
-                    ? `dry-run em ${new Date(plano.dry_run_em).toLocaleString()}`
-                    : "sem dry-run — nada pode ser copiado ainda"}
+                <span
+                  className={
+                    plano.dry_run_em && !plano.executavel
+                      ? "text-conf-baixa"
+                      : "text-texto-3"
+                  }
+                >
+                  {veredito(plano)}
                 </span>
               </div>
 

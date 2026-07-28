@@ -420,6 +420,11 @@ def create_app(
             "concluidos": row.concluidos,
             "com_conflito": row.com_conflito,
             "com_erro": row.com_erro,
+            # Veredito do último dry-run: sem ele a tela mostra "0 erros"
+            # para um plano que não copiaria nada.
+            "prontos": row.prontos,
+            "problemas": row.problemas,
+            "executavel": row.executavel,
         }
 
     @app.get("/api/operacoes")
