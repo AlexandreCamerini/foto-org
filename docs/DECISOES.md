@@ -88,3 +88,64 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   tempo sem reduzir risco.
 - Como reverter: rodar na ordem numérica.
 - Status: decidido
+
+## D-006 — Fase 1 executada sem subagente
+- Fase: 1
+- Classe: A
+- Data: 2026-07-29
+- Contexto: o protocolo permite até 2 subagentes por fase para varredura ampla.
+- Opções: (a) dois subagentes, um por metade do código; (b) execução direta.
+- Escolhida: (b)
+- Por quê: a varredura é ampla mas não independente — cada achado do esquema
+  informa a leitura do servidor e vice-versa. Subagente devolveria relatório
+  que eu teria de reler inteiro.
+- Como reverter: não se aplica; a fase está concluída.
+- Status: decidido
+
+## D-007 — `docs/ARQUITETURA.md` não foi corrigido nesta fase
+- Fase: 1
+- Classe: A
+- Data: 2026-07-29
+- Contexto: a avaliação encontrou divergências entre `docs/ARQUITETURA.md` /
+  `CLAUDE.md` e o código (`SyncProvider` inexistente, dois protocolos não
+  documentados, handlers com quatro consultas diretas).
+- Opções: (a) corrigir os documentos junto da avaliação; (b) registrar a
+  divergência na avaliação e deixar a correção para quem implementar.
+- Escolhida: (b)
+- Por quê: `CLAUDE.md` está fora da fronteira do protocolo, e a correção certa
+  depende de decisão de produto — se sync entra no roadmap, `SyncProvider`
+  passa a ser código a escrever, não linha a apagar.
+- Como reverter: editar os dois documentos após a decisão sobre sync.
+- Status: decidido
+
+## D-008 — Quatro lacunas de esquema classificadas como não-bloqueio de MVP
+- Fase: 1
+- Classe: B
+- Data: 2026-07-29
+- Contexto: faltam derivados/linhagem pai-filho, hierarquia de tags, direitos
+  de uso e coleções curadas — mesa posta em DAM maduro.
+- Opções: (a) migrar agora as quatro; (b) migrar agora só as duas baratas
+  (`media_files.parent_id`, `tags.parent_id`) e adiar direitos e coleções;
+  (c) registrar todas e não migrar nada nesta rodada.
+- Escolhida: (c) para esta fase, recomendando (b) para a primeira rodada de
+  implementação.
+- Por quê: migração está fora da fronteira do protocolo. As duas baratas ficam
+  substancialmente mais caras depois de 500 mil linhas catalogadas, então a
+  recomendação é fazê-las antes do primeiro acervo grande — e direitos de uso
+  depende do que a fase 3 decidir sobre colunas tipadas.
+- Como reverter: as migrações são aditivas; nenhuma perde dado.
+- Status: decidido por timeout
+
+## D-009 — `AGENTS.md` deveria ser symlink de `CLAUDE.md`
+- Fase: 1
+- Classe: A
+- Data: 2026-07-29
+- Contexto: os dois arquivos são byte-a-byte idênticos (132 linhas, 7.748
+  bytes) e independentes — duas fontes de verdade que divergem na primeira
+  edição.
+- Opções: (a) symlink; (b) manter e sincronizar à mão; (c) apagar um.
+- Escolhida: (a), recomendado — não executado, `CLAUDE.md` e `AGENTS.md` estão
+  fora da fronteira desta fase.
+- Por quê: symlink preserva as duas convenções de nome sem duplicar conteúdo.
+- Como reverter: `cp` de volta.
+- Status: aguardando (fora da fronteira)
