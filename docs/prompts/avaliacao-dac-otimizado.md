@@ -18,6 +18,24 @@ linha, registre-o no relatório em vez de corrigir.
 
 Escreva tudo em português, no tom dos documentos existentes.
 
+## Prompts por fase
+
+Este documento é a visão geral. Cada fase tem um prompt detalhado, feito para
+rodar em sessão limpa:
+
+| Fase | Prompt | Entregável |
+|---|---|---|
+| — | [00-protocolo.md](00-protocolo.md) | regras de autonomia, evidência e registro — leia primeiro |
+| 1 | [fase-1-arquitetura.md](fase-1-arquitetura.md) | `docs/AVALIACAO_ARQUITETURA.md` |
+| 2 | [fase-2-auditoria.md](fase-2-auditoria.md) | `docs/AUDITORIA_FUNCIONALIDADES.md` |
+| 3 | [fase-3-metadados.md](fase-3-metadados.md) | `docs/PLANO_METADADOS.md` |
+| 4 | [fase-4-local-estimado.md](fase-4-local-estimado.md) | `docs/PLANO_LOCAL_ESTIMADO.md` |
+| 5 | [fase-5-ia-e-produto.md](fase-5-ia-e-produto.md) | `docs/PLANO_IA_E_PRODUTO.md` — termina no gate de aprovação |
+| 6 | [fase-6-ux.md](fase-6-ux.md) | `docs/AVALIACAO_UX.md` + protótipos |
+
+Ordem: 1 → 2 → 3 → 4 → 5, com a 6 podendo rodar em paralelo a partir da 2.
+As decisões tomadas em cada fase ficam em `docs/DECISOES.md`.
+
 ## Restrições que valem em todas as fases
 
 - Os invariantes de segurança do `CLAUDE.md` são o piso do produto
