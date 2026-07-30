@@ -28,6 +28,8 @@ export interface Media {
   trip_id: number | null;
   event_id: number | null;
   erro_leitura: string | null;
+  /** foto | captura | recebida | baixada. null = não avaliado. */
+  tipo_imagem: string | null;
   /** true quando a coordenada veio de outra câmera, não do arquivo. */
   gps_estimado: boolean;
   gps_lat_efetivo: number | null;
@@ -70,6 +72,18 @@ export interface Sugestao {
 }
 
 export type MediaDetalhe = Media & { sugestao?: Sugestao };
+
+/** Tudo que estava gravado no arquivo, agrupado por padrão. */
+export interface NamespaceMetadados {
+  nome: string;
+  rotulo: string;
+  itens: { chave: string; valor: string }[];
+}
+
+export interface Metadados {
+  total: number;
+  namespaces: NamespaceMetadados[];
+}
 
 export interface PaginaMidia {
   total: number;
@@ -220,6 +234,7 @@ export const api = {
     return json<PaginaMidia>(`/api/midia?${params}`);
   },
   detalhe: (id: number) => json<MediaDetalhe>(`/api/midia/${id}`),
+  metadados: (id: number) => json<Metadados>(`/api/midia/${id}/metadados`),
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),

@@ -31,6 +31,7 @@ LACUNAS: dict[str, str] = {
     "sem_data": "sem data de captura",
     "sem_gps": "sem coordenada",
     "local_estimado": "lugar estimado de outra câmera",
+    "nao_e_foto": "não é foto (captura, recebida, baixada)",
     "sem_grupo": "fora de viagem ou evento",
     "sem_camera": "sem câmera identificada",
     "sem_sugestao": "sem sugestão de destino",
@@ -59,6 +60,11 @@ def _condicao_lacuna(chave: str):
         ),
         # Não é falta: é uma inferência que vale conferir antes de organizar.
         "local_estimado": MediaFile.gps_lat_estimado.is_not(None),
+        # NULL = ainda não avaliado; só conta o que o detector já viu.
+        "nao_e_foto": and_(
+            MediaFile.tipo_imagem.is_not(None),
+            MediaFile.tipo_imagem != "foto",
+        ),
         "sem_grupo": and_(
             MediaFile.trip_id.is_(None), MediaFile.event_id.is_(None)
         ),

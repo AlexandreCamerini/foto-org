@@ -120,6 +120,9 @@ class MediaFile(Base):
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"))
+    # foto | captura | recebida | baixada. NULL = ainda não avaliado.
+    # Ver fotoorganizer/classification/tipo_imagem.py.
+    tipo_imagem: Mapped[str | None]
     hash_rapido: Mapped[str | None]
     hash_sha256: Mapped[str | None]
     # phash 64-bit em hex — calculado sob demanda pela detecção de duplicatas.

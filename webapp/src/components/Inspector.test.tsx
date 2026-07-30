@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import Inspector from "./Inspector";
@@ -99,6 +100,52 @@ describe("Inspector", () => {
     expect(await screen.findByText(/Esta câmera não gravou coordenada/))
       .toBeInTheDocument();
     expect(screen.getByText(/tirada a 2min de distância/)).toBeInTheDocument();
+  });
+
+  it("os metadados do arquivo só são lidos quando o painel abre", async () => {
+    const chamadas = servirApi({
+      "/api/midia/7": DETALHE_HERDADO,
+      "/api/midia/7/metadados": {
+        total: 2,
+        namespaces: [{
+          nome: "iptc",
+          rotulo: "IPTC (autor, direitos, palavras-chave)",
+          itens: [
+            { chave: "By-line", valor: "Alexandre Camerini" },
+            { chave: "Keywords", valor: "viagem; franca" },
+          ],
+        }],
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    expect(chamadas.filter((c) => c.caminho.endsWith("/metadados"))).toHaveLength(0);
+
+    await usuario.click(screen.getByText("Metadados do arquivo"));
+
+    expect(
+      await screen.findByText("IPTC (autor, direitos, palavras-chave)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Alexandre Camerini")).toBeInTheDocument();
+    expect(chamadas.filter((c) => c.caminho.endsWith("/metadados"))).toHaveLength(1);
+  });
+
+  it("arquivo sem metadado diz isso, em vez de painel vazio", async () => {
+    servirApi({
+      "/api/midia/7": DETALHE_HERDADO,
+      "/api/midia/7/metadados": { total: 0, namespaces: [] },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(screen.getByText("Metadados do arquivo"));
+
+    expect(
+      await screen.findByText(/não trouxe metadado nenhum/),
+    ).toBeInTheDocument();
   });
 
   it("foto sem lugar resolvido não inventa linha vazia", async () => {

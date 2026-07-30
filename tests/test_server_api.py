@@ -558,3 +558,41 @@ def test_lacuna_sem_coordenada_ignora_quem_tem_estimativa(client, migrated_engin
     # 5 fotos, 1 com GPS próprio, 1 agora com estimativa → 3 sem nada.
     assert lacunas["sem_gps"] == 3
     assert lacunas["local_estimado"] == 1
+
+
+def test_metadados_agrupa_por_padrao_com_rotulo_legivel(client, migrated_engine):
+    """A pergunta do dono era "mapeamento total das informações gravadas no
+    arquivo". Elas já eram escritas em metadata_entries desde o M1 e não
+    saíam de lá — nenhum endpoint as devolvia."""
+    from fotoorganizer.models import MediaFile, MetadataEntry
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).first()
+        media_id = media.id
+        session.add_all([
+            MetadataEntry(media_id=media_id, namespace="iptc",
+                          chave="By-line", valor="Alexandre Camerini"),
+            MetadataEntry(media_id=media_id, namespace="iptc",
+                          chave="Keywords", valor="viagem; franca"),
+            MetadataEntry(media_id=media_id, namespace="xmp",
+                          chave="dc.rights", valor="(c) 2024"),
+        ])
+        session.commit()
+
+    dados = client.get(f"/api/midia/{media_id}/metadados").json()
+    por_nome = {ns["nome"]: ns for ns in dados["namespaces"]}
+
+    assert dados["total"] >= 3
+    assert por_nome["iptc"]["rotulo"] == "IPTC (autor, direitos, palavras-chave)"
+    chaves = {i["chave"]: i["valor"] for i in por_nome["iptc"]["itens"]}
+    assert chaves["By-line"] == "Alexandre Camerini"
+    assert por_nome["xmp"]["itens"][0]["valor"] == "(c) 2024"
+
+
+def test_metadados_de_foto_sem_nada_devolve_vazio(client):
+    achados = client.get("/api/midia", params={"busca": "img_3"}).json()
+    dados = client.get(
+        f"/api/midia/{achados['itens'][0]['id']}/metadados"
+    ).json()
+    assert dados["total"] >= 0 and isinstance(dados["namespaces"], list)

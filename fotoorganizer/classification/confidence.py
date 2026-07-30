@@ -23,6 +23,10 @@ SCORES_REFERENCIA: dict[str, float] = {
     "vizinhanca": 0.55,    # inferido de fotos próximas no tempo
     "agrupamento": 0.70,   # viagem por lacuna temporal
     "llm": 0.55,           # sugerido por LLM a partir de metadados (opt-in)
+    # Tipo da imagem por sinais de arquivo (nome, pasta, resolução de
+    # tela). O score real vem do detector, por sinal — este é só o piso
+    # para quando nenhum override chegar.
+    "arquivo": 0.70,
     "fs": 0.40,            # data do filesystem (sem EXIF)
     "visao": 0.30,         # apenas análise visual
     "usuario": 1.00,       # correção manual prevalece sobre tudo

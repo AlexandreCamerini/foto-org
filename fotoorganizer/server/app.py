@@ -35,6 +35,7 @@ from fotoorganizer.models import (
     Event,
     Location,
     MediaFile,
+    MetadataEntry,
     Suggestion,
     SuggestionStatus,
     Trip,
@@ -94,6 +95,18 @@ class PlanoBody(BaseModel):
     raiz_destino: str
     nome: str | None = None
 
+# O usuário não precisa saber o que é "libraw" — precisa saber de onde o
+# dado veio. O nome técnico fica na chave; o rótulo explica a origem.
+ROTULOS_NAMESPACE = {
+    "exif": "EXIF (gravado pela câmera)",
+    "gps": "GPS (coordenadas no arquivo)",
+    "iptc": "IPTC (autor, direitos, palavras-chave)",
+    "xmp": "XMP (escrito por editor de imagem)",
+    "libraw": "RAW (lido do arquivo bruto)",
+    "apple": "Apple Fotos (catálogo importado)",
+    "google": "Google Takeout (catálogo importado)",
+}
+
 _PREVIEW_SIZE = 2048
 
 _WEBAPP_DIST = Path(__file__).resolve().parents[2] / "webapp" / "dist"
@@ -117,6 +130,7 @@ def _media_json(m: MediaFile) -> dict:
         "gps_lon": m.gps_lon,
         # Coordenada efetiva + se ela é estimada: a grade precisa marcar a
         # diferença sem uma consulta por miniatura.
+        "tipo_imagem": m.tipo_imagem,
         "gps_estimado": m.coordenada_estimada,
         "gps_lat_efetivo": m.coordenada[0] if m.coordenada else None,
         "gps_lon_efetivo": m.coordenada[1] if m.coordenada else None,
@@ -276,6 +290,34 @@ def create_app(
                     ],
                 }
         return detalhe
+
+    @app.get("/api/midia/{media_id}/metadados")
+    def metadados(media_id: int) -> dict:
+        """Tudo que estava gravado no arquivo, agrupado por padrão.
+
+        Endpoint próprio e não parte do detalhe: um JPEG editado traz
+        dezenas de chaves XMP, e o detalhe é pedido a cada seleção na
+        grade. Aqui o custo só existe quando o usuário pergunta.
+        """
+        with session_factory() as session:
+            linhas = session.scalars(
+                select(MetadataEntry)
+                .where(MetadataEntry.media_id == media_id)
+                .order_by(MetadataEntry.namespace, MetadataEntry.chave)
+            ).all()
+        grupos: dict[str, list[dict]] = {}
+        for linha in linhas:
+            grupos.setdefault(linha.namespace, []).append(
+                {"chave": linha.chave, "valor": linha.valor}
+            )
+        return {
+            "total": len(linhas),
+            "namespaces": [
+                {"nome": nome, "rotulo": ROTULOS_NAMESPACE.get(nome, nome),
+                 "itens": itens}
+                for nome, itens in grupos.items()
+            ],
+        }
 
     # -- imagens ---------------------------------------------------------------
     @app.get("/api/midia/{media_id}/thumb")

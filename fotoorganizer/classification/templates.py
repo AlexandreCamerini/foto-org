@@ -25,6 +25,9 @@ TEMPLATE_PADRAO = "{categoria}/{ano} - {viagem}/{evento}/{pais}/{regiao}/{cidade
 
 DESTINO_NAO_CLASSIFICADO = "Não classificadas"
 
+# O que não é foto de câmera: captura de tela, recebida, baixada.
+DESTINO_NAO_FOTO = "Não são fotos"
+
 _MAX_SEGMENTO = 80
 # Inválidos em APFS/exFAT/NTFS + controles. "/" separa segmentos, nunca
 # entra num nome.

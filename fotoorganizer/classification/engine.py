@@ -24,8 +24,12 @@ from fotoorganizer.classification.confidence import (
     elo_mais_fraco,
     nivel_para_score,
 )
+from fotoorganizer.classification.tipo_imagem import ROTULOS as ROTULOS_TIPO
+from fotoorganizer.classification.tipo_imagem import classificar as classificar_tipo
+from fotoorganizer.classification.tipo_imagem import FOTO as TIPO_FOTO
 from fotoorganizer.classification.templates import (
     DESTINO_NAO_CLASSIFICADO,
+    DESTINO_NAO_FOTO,
     TEMPLATE_PADRAO,
     render_destino,
 )
@@ -450,6 +454,26 @@ class SuggestionEngine:
                          por_id: dict[int, MediaFile]) -> list[_Draft]:
         drafts: list[_Draft] = []
 
+        # Foto de câmera ou imagem que só passou pelo disco? Decide antes de
+        # tudo: o que não é foto não deve ser organizado por viagem, e a
+        # justificativa precisa aparecer junto do resto.
+        veredito = classificar_tipo(
+            nome=media.nome, pasta=media.pasta, extensao=media.extensao or "",
+            largura=media.largura, altura=media.altura,
+            make=media.make, model=media.model, lente=media.lente,
+            # GPS LIDO do arquivo, não o efetivo: a coordenada herdada é
+            # justamente o que uma captura de tela feita no meio da viagem
+            # ganha das fotos vizinhas. Usar a efetiva aqui transformaria a
+            # herança em atestado de que o arquivo veio de uma câmera.
+            tem_gps=media.gps_lat is not None,
+        )
+        media.tipo_imagem = veredito.tipo
+        if not veredito.e_foto:
+            drafts.append(_Draft(
+                "tipo", "arquivo", ROTULOS_TIPO[veredito.tipo],
+                veredito.justificativa, score_override=veredito.score,
+            ))
+
         if media.data_capturada is not None:
             drafts.append(_Draft(
                 "data", "exif", media.data_capturada.isoformat(),
@@ -596,6 +620,19 @@ class SuggestionEngine:
         return None
 
     @staticmethod
+    def _destino_nao_foto(media: MediaFile, evidencias: dict) -> str:
+        """Ramo do que não é foto: por tipo e ano.
+
+        Separado por tipo porque as decisões são diferentes — captura de tela
+        quase sempre se apaga, imagem recebida às vezes se guarda. Por ano
+        porque um balde único com milhares não é revisável.
+        """
+        raiz = f"{DESTINO_NAO_FOTO}/{ROTULOS_TIPO[media.tipo_imagem].capitalize()}"
+        if "data" in evidencias:
+            return f"{raiz}/{datetime.fromisoformat(evidencias['data'].valor).year}"
+        return raiz
+
+    @staticmethod
     def _destino_nao_classificado(media: MediaFile, evidencias: dict) -> str:
         """Ramo das fotos que nenhum sinal nomeia, quebrado por ano e mês.
 
@@ -687,6 +724,18 @@ class SuggestionEngine:
         # ele só não vira pasta.
         if campos.get("viagem") or campos.get("evento"):
             campos["pais"] = campos["regiao"] = campos["cidade"] = None
+
+        # O que não é foto sai do fluxo de organização por viagem: captura
+        # de tela não pertence a "Viagens/2024 - França" por ter sido feita
+        # durante a viagem. Vai para um ramo próprio, por tipo e ano, onde
+        # dá para revisar em lote e apagar se quiser.
+        if media.tipo_imagem and media.tipo_imagem != TIPO_FOTO:
+            destino = self._destino_nao_foto(media, evidencias)
+            usados = {"tipo": evidencias["tipo"]} if "tipo" in evidencias else {}
+            if "data" in evidencias:
+                usados["data"] = evidencias["data"]
+            self._salvar_sugestao(session, media, destino, usados)
+            return
 
         if sem_nome:
             # Nada nomeia a foto: em vez do template (que renderiza só o

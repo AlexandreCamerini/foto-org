@@ -1,7 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { api, type Media } from "../api";
 import { Confianca } from "./Confianca";
+
+/** Só o que NÃO é foto ganha rótulo: dizer "foto" em toda foto é ruído. */
+const ROTULOS_TIPO: Record<string, string> = {
+  captura: "captura de tela",
+  recebida: "recebida em mensageiro",
+  baixada: "baixada da web",
+};
 
 export default function Inspector({ media }: { media: Media | null }) {
   const { data: detalhe } = useQuery({
@@ -56,6 +64,14 @@ export default function Inspector({ media }: { media: Media | null }) {
                   : null
               }
             />
+            <Linha
+              rotulo="Tipo"
+              valor={
+                detalhe?.tipo_imagem && detalhe.tipo_imagem !== "foto"
+                  ? ROTULOS_TIPO[detalhe.tipo_imagem] ?? detalhe.tipo_imagem
+                  : null
+              }
+            />
             <Linha rotulo="Pasta" valor={detalhe?.pasta} />
           </dl>
 
@@ -75,6 +91,8 @@ export default function Inspector({ media }: { media: Media | null }) {
                 : "."}
             </div>
           )}
+
+          <MetadadosDoArquivo mediaId={media.id} />
 
           {detalhe?.sugestao && (
             <div className="mt-3 border-t border-borda pt-3">
@@ -104,6 +122,58 @@ export default function Inspector({ media }: { media: Media | null }) {
         </div>
       )}
     </aside>
+  );
+}
+
+/** Tudo que estava gravado no arquivo — EXIF, GPS, IPTC, XMP, RAW.
+ *
+ * Fechado por padrão e buscado só ao abrir: um JPEG editado traz dezenas de
+ * chaves XMP, e o inspetor é recarregado a cada seleção na grade. */
+function MetadadosDoArquivo({ mediaId }: { mediaId: number }) {
+  const [aberto, setAberto] = useState(false);
+  const { data, isPending } = useQuery({
+    queryKey: ["metadados", mediaId],
+    queryFn: () => api.metadados(mediaId),
+    enabled: aberto,
+  });
+
+  return (
+    <div className="mt-3 border-t border-borda pt-3">
+      <button
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        className="titulo-painel flex w-full items-center gap-1.5 px-0 hover:text-texto"
+      >
+        <span className="w-2">{aberto ? "▾" : "▸"}</span>
+        Metadados do arquivo
+        {data && <span className="text-texto-3">({data.total})</span>}
+      </button>
+
+      {aberto && isPending && (
+        <div className="mt-1 text-texto-3">lendo…</div>
+      )}
+      {aberto && data && data.total === 0 && (
+        <div className="mt-1 text-texto-3">
+          Este arquivo não trouxe metadado nenhum.
+        </div>
+      )}
+      {aberto &&
+        data?.namespaces.map((ns) => (
+          <div key={ns.nome} className="mt-2">
+            <div className="mb-1 text-[11px] text-texto-3">{ns.rotulo}</div>
+            <dl className="space-y-0.5">
+              {ns.itens.map((item) => (
+                <div key={item.chave} className="flex gap-2">
+                  <dt className="w-24 shrink-0 break-all text-texto-3">
+                    {item.chave}
+                  </dt>
+                  <dd className="min-w-0 break-all text-texto-2">{item.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+    </div>
   );
 }
 

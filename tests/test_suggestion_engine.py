@@ -754,3 +754,62 @@ def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):
         assert cam.gps_lat_estimado is None
         assert cam.gps_estimado_de_id is None
         assert cam.coordenada_estimada is False
+
+
+def test_captura_de_tela_sai_do_fluxo_de_viagem(migrated_engine):
+    """Captura de tela feita durante a viagem não pertence à pasta da
+    viagem. Vai para ramo próprio, por tipo e ano, com a justificativa
+    dizendo o que a denunciou."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(4):
+            session.add(_media(
+                fonte.id, f"franca_{i}.jpg", "/fotos/Viagens/2024 - França",
+                data=base + timedelta(days=i), gps=(43.95, 4.8083),
+                make="Canon", model="EOS R5",
+            ))
+        # No meio da viagem, uma captura de tela do mapa.
+        captura = _media(fonte.id, "Captura de Tela 2024-05-05 às 09.00.00.png",
+                         "/fotos/Viagens/2024 - França",
+                         data=base + timedelta(days=1))
+        captura.extensao = "png"
+        captura.largura, captura.altura = 2556, 1179
+        session.add(captura)
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    sugestao, _ = _sugestao_de(factory, "Captura de Tela 2024-05-05 às 09.00.00.png")
+    assert sugestao.destino_sugerido.startswith("Não são fotos/Captura de tela")
+    assert "2024" in sugestao.destino_sugerido
+    vinculadas = {e.campo: e for e in sugestao.evidencias}
+    assert "captura de tela" in vinculadas["tipo"].justificativa.lower() or \
+           "resolução de uma tela" in vinculadas["tipo"].justificativa
+
+    # E a foto de verdade da mesma viagem não foi arrastada junto.
+    foto, _ = _sugestao_de(factory, "franca_0.jpg")
+    assert foto.destino_sugerido.startswith("Viagens")
+
+
+def test_foto_com_camera_nao_vai_para_o_ramo_de_nao_fotos(migrated_engine):
+    """A regra de ouro: na dúvida é foto. Erro aqui derruba a confiança no
+    catálogo inteiro."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # Nome que parece download, mas com câmera gravada no arquivo.
+        session.add(_media(fonte.id, "image (2).jpg", "/fotos/Downloads",
+                           data=datetime(2024, 5, 4, 10, 0),
+                           make="Nikon", model="Z6"))
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    sugestao, _ = _sugestao_de(factory, "image (2).jpg")
+    assert not sugestao.destino_sugerido.startswith("Não são fotos")
