@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from fotoorganizer.config.settings import ScannerSettings, Settings
 from fotoorganizer.database import create_session_factory
@@ -46,6 +47,37 @@ def test_listagem_paginada(client):
     assert len(pagina["itens"]) == 2
     resto = client.get("/api/midia", params={"limit": 500, "offset": 4}).json()
     assert len(resto["itens"]) == 1
+
+
+def test_detalhe_expoe_o_lugar_resolvido(client, migrated_engine):
+    """País e cidade existem no catálogo desde o M3, e não saíam de lá: a
+    API não devolvia `locations` em resposta alguma. Sem isso a UI não tem
+    como mostrar onde a foto foi tirada — nem quando o lugar foi herdado
+    de outra câmera."""
+    from fotoorganizer.models import Location, MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        local = Location(pais="França", regiao="Provence", cidade="Avignon",
+                         fonte="offline:reverse_geocode", cache_key="43.9,4.8")
+        session.add(local)
+        session.flush()
+        media = session.scalars(select(MediaFile)).first()
+        media.location_id = local.id
+        media_id = media.id
+        session.commit()
+
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["local"] == {
+        "pais": "França", "regiao": "Provence", "cidade": "Avignon",
+        "fonte": "offline:reverse_geocode",
+    }
+
+
+def test_detalhe_sem_lugar_omite_a_chave(client):
+    achados = client.get("/api/midia", params={"busca": "img_3"}).json()
+    detalhe = client.get(f"/api/midia/{achados['itens'][0]['id']}").json()
+    assert "local" not in detalhe
 
 
 def test_busca_e_detalhe(client):
