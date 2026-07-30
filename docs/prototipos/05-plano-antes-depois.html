@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Protótipo — plano: antes e depois</title>
+<style>
+:root{
+  --fundo:#08090A;--sup-1:rgba(255,255,255,.02);--sup-2:rgba(255,255,255,.05);
+  --sup-3:rgba(255,255,255,.08);--borda:rgba(255,255,255,.10);
+  --borda-forte:rgba(255,255,255,.18);--texto:#F7F8F8;--texto-2:#8A8F98;
+  --texto-3:#62666D;--atencao:#C2833A;--herdado:#6E8FA8;--novo:#6E9A78;
+  --r:6px;--f:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;
+  --m:ui-monospace,"SF Mono",Menlo,monospace;
+  --t-corpo:13px;--t-peq:11px;--p-tit:510;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--fundo);color:var(--texto);font:var(--t-corpo)/1.5 var(--f);
+  -webkit-font-smoothing:antialiased;padding:24px;max-width:1040px;margin:0 auto}
+h1{font-size:20px;font-weight:var(--p-tit);letter-spacing:-.4px}
+.leg{color:var(--texto-2);margin:4px 0 18px;max-width:66ch}
+.par{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.col{background:var(--sup-1);border:1px solid var(--borda);border-radius:10px;
+  overflow:hidden}
+.col h2{font-size:var(--t-peq);text-transform:uppercase;letter-spacing:.6px;
+  color:var(--texto-2);font-weight:var(--p-tit);padding:10px 12px;
+  border-bottom:1px solid var(--borda);background:var(--sup-2)}
+.arv{font-family:var(--m);font-size:12px;padding:10px 12px;line-height:1.75}
+.arv div{white-space:pre;color:var(--texto-2)}
+.arv .p{color:var(--texto)}
+.arv .add{color:var(--novo)}
+.arv .cont{color:var(--texto-3)}
+.arv .marc{background:rgba(110,154,120,.10);border-radius:3px;
+  margin:0 -4px;padding:0 4px}
+
+.resumo{display:flex;gap:0;margin:16px 0 0;border:1px solid var(--borda);
+  border-radius:10px;overflow:hidden}
+.cel{flex:1;padding:11px 13px;background:var(--sup-1)}
+.cel + .cel{border-left:1px solid var(--borda)}
+.cel .n{font-size:19px;font-weight:var(--p-tit);letter-spacing:-.5px}
+.cel .r{color:var(--texto-2);font-size:var(--t-peq)}
+.cel.alerta .n{color:var(--atencao)}
+
+.acoes{display:flex;align-items:center;gap:10px;margin-top:14px}
+.btn{padding:7px 14px;border:1px solid var(--borda-forte);border-radius:var(--r);
+  background:var(--sup-3);color:var(--texto);font:inherit;font-weight:var(--p-tit);
+  cursor:pointer}
+.btn.sec{background:none;border-color:var(--borda);color:var(--texto-2);
+  font-weight:400}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.sel{margin-left:auto;color:var(--texto-3);font-size:var(--t-peq)}
+.aviso{margin-top:12px;padding:10px 12px;border:1px solid var(--borda);
+  border-left:2px solid var(--atencao);border-radius:var(--r);
+  color:var(--texto-2);font-size:var(--t-peq)}
+.aviso b{color:var(--texto);font-weight:var(--p-tit)}
+.nota{color:var(--texto-3);font-size:var(--t-peq);margin-top:14px;max-width:74ch}
+</style>
+</head>
+<body>
+
+<h1>O que vai acontecer, antes de acontecer</h1>
+<p class="leg">A operação é cópia verificada e não destrutiva, mas isso o
+usuário não sabe olhando. Ver as duas árvores lado a lado, com o que é novo
+destacado e a origem intacta à esquerda, é o que transforma “executar” de
+aposta em decisão.</p>
+
+<div class="par">
+  <div class="col">
+    <h2>Origem · permanece intacta</h2>
+    <div class="arv">
+      <div class="p">Fotos/</div>
+      <div>├─ <span class="p">Viagens/</span></div>
+      <div>│  ├─ 2024 - França/</div>
+      <div>│  │  └─ Avignon/  <span class="cont">18 arquivos</span></div>
+      <div>│  └─ 2023 - Japão/</div>
+      <div>│     └─ Tóquio/   <span class="cont">18 arquivos</span></div>
+      <div>├─ <span class="p">Família/</span></div>
+      <div>│  └─ Aniversários/ <span class="cont">18 arquivos</span></div>
+      <div>└─ <span class="p">Diversos/</span> <span class="cont">5 arquivos</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h2>Destino · o que será criado</h2>
+    <div class="arv">
+      <div class="p">Organizado/</div>
+      <div>├─ <span class="add marc">Viagens/</span></div>
+      <div>│  ├─ <span class="add marc">2024 - França/</span> <span class="cont">22 cópias</span></div>
+      <div>│  └─ <span class="add marc">2023 - Japão/</span> <span class="cont">18 cópias</span></div>
+      <div>├─ <span class="add marc">Família/</span></div>
+      <div>│  └─ <span class="add marc">2022/Aniversários/</span> <span class="cont">18 cópias</span></div>
+      <div>└─ <span class="add marc">Não classificadas/</span></div>
+      <div>   └─ <span class="add marc">2026/julho/</span> <span class="cont">5 cópias</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="resumo">
+  <div class="cel"><div class="n">63</div><div class="r">arquivos a copiar</div></div>
+  <div class="cel"><div class="n">7</div><div class="r">pastas novas</div></div>
+  <div class="cel"><div class="n">9,7 kB</div><div class="r">de 3,9 GB livres</div></div>
+  <div class="cel"><div class="n">0</div><div class="r">conflitos de nome</div></div>
+  <div class="cel alerta"><div class="n">4</div><div class="r">com lugar estimado</div></div>
+</div>
+
+<div class="aviso"><b>4 fotos vão para França por lugar estimado</b>, herdado de
+outra câmera com 2 min de diferença. Se a estimativa estiver errada, elas caem
+na pasta errada — nenhum original é alterado, mas a cópia sai torta.
+<a href="01-confianca.html" style="color:var(--herdado)">Rever as 4</a> antes de executar.</div>
+
+<div class="acoes">
+  <button class="btn" onclick="executa(this)">Executar cópia</button>
+  <button class="btn sec">Exportar plano…</button>
+  <span class="sel">dry-run em 30/07 00:38 · 63 prontos, sem problemas</span>
+</div>
+
+<p class="nota">O botão só existe porque o dry-run já rodou e deu verde — a
+regra do invariante 2 fica visível na interface, não só no código. Sem
+dry-run, o botão aparece desabilitado com o motivo ao lado, em vez de sumir:
+controle que desaparece ensina menos que controle que explica.</p>
+
+<script>
+function executa(btn){
+  btn.disabled = true;
+  btn.textContent = 'Copiando… 0 de 63';
+  let i = 0;
+  const t = setInterval(() => {
+    i += 7;
+    if (i >= 63) { clearInterval(t); btn.textContent = '63 copiados e verificados'; return; }
+    btn.textContent = `Copiando… ${i} de 63`;
+  }, 220);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Protótipo — linha do tempo por fonte</title>
+<style>
+:root{
+  --fundo:#08090A;--sup-1:rgba(255,255,255,.02);--sup-2:rgba(255,255,255,.05);
+  --sup-3:rgba(255,255,255,.08);--borda:rgba(255,255,255,.10);
+  --borda-forte:rgba(255,255,255,.18);--texto:#F7F8F8;--texto-2:#8A8F98;
+  --texto-3:#62666D;--atencao:#C2833A;--herdado:#6E8FA8;
+  --r:6px;--f:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;
+  --t-corpo:13px;--t-peq:11px;--p-tit:510;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--fundo);color:var(--texto);font:var(--t-corpo)/1.5 var(--f);
+  -webkit-font-smoothing:antialiased;padding:24px;max-width:1040px;margin:0 auto}
+h1{font-size:20px;font-weight:var(--p-tit);letter-spacing:-.4px}
+.leg{color:var(--texto-2);margin:4px 0 18px;max-width:66ch}
+h2{font-size:var(--t-peq);text-transform:uppercase;letter-spacing:.6px;
+  color:var(--texto-2);font-weight:var(--p-tit);margin:22px 0 8px}
+.quadro{background:var(--sup-1);border:1px solid var(--borda);border-radius:10px;
+  padding:14px}
+svg{display:block;width:100%;height:auto}
+.legenda{display:flex;gap:18px;margin-top:10px;font-size:var(--t-peq);
+  color:var(--texto-2);flex-wrap:wrap}
+.legenda span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:8px;border-radius:2px}
+.nota{color:var(--texto-3);font-size:var(--t-peq);margin-top:10px;max-width:74ch}
+.nota b{color:var(--texto-2);font-weight:var(--p-tit)}
+</style>
+</head>
+<body>
+
+<h1>Linha do tempo, uma faixa por fonte</h1>
+<p class="leg">Empilhar os dispositivos em faixas separadas é o que torna o
+cruzamento visível: dá para ver que a câmera fotografou entre duas fotos do
+telefone, que é exatamente o motivo de ela ter herdado a coordenada. Numa
+faixa só, isso vira uma pilha indistinta.</p>
+
+<h2>Viagem à França · 2 a 19 de maio de 2024</h2>
+<div class="quadro">
+  <svg viewBox="0 0 960 210" role="img"
+       aria-label="Linha do tempo com faixas por dispositivo">
+    <!-- eixo -->
+    <line x1="90" y1="176" x2="940" y2="176" stroke="rgba(255,255,255,.12)"/>
+    <g fill="#62666D" font-size="10" font-family="-apple-system,sans-serif">
+      <text x="90" y="194">02/05</text><text x="300" y="194">06/05</text>
+      <text x="510" y="194">11/05</text><text x="720" y="194">15/05</text>
+      <text x="905" y="194">19/05</text>
+    </g>
+
+    <!-- faixa: iPhone -->
+    <text x="0" y="46" fill="#8A8F98" font-size="11" font-family="-apple-system,sans-serif">iPhone 15 Pro</text>
+    <rect x="90" y="32" width="850" height="22" rx="4" fill="rgba(255,255,255,.02)"/>
+    <g fill="#F7F8F8">
+      <rect x="96" y="36" width="5" height="14" rx="1.5"/>
+      <rect x="118" y="36" width="5" height="14" rx="1.5"/>
+      <rect x="205" y="36" width="5" height="14" rx="1.5"/>
+      <rect x="292" y="36" width="5" height="14" rx="1.5"/>
+      <rect x="470" y="36" width="5" height="14" rx="1.5"/>
+      <rect x="640" y="36" width="5" height="14" rx="1.5"/>
+      <rect x="812" y="36" width="5" height="14" rx="1.5"/>
+    </g>
+
+    <!-- faixa: Canon -->
+    <text x="0" y="92" fill="#8A8F98" font-size="11" font-family="-apple-system,sans-serif">Canon EOS R5</text>
+    <rect x="90" y="78" width="850" height="22" rx="4" fill="rgba(255,255,255,.02)"/>
+    <g fill="#6E8FA8">
+      <rect x="103" y="82" width="5" height="14" rx="1.5"/>
+      <rect x="128" y="82" width="5" height="14" rx="1.5"/>
+      <rect x="298" y="82" width="5" height="14" rx="1.5"/>
+      <rect x="476" y="82" width="5" height="14" rx="1.5"/>
+      <rect x="648" y="82" width="5" height="14" rx="1.5"/>
+    </g>
+    <!-- ligações de herança -->
+    <g stroke="#6E8FA8" stroke-width="1" stroke-dasharray="2 2" opacity=".55">
+      <path d="M99 52 L105 78"/><path d="M120 52 L130 78"/>
+      <path d="M294 52 L300 78"/><path d="M472 52 L478 78"/>
+      <path d="M642 52 L650 78"/>
+    </g>
+
+    <!-- sessões -->
+    <text x="0" y="138" fill="#8A8F98" font-size="11" font-family="-apple-system,sans-serif">Sessões</text>
+    <rect x="90" y="124" width="220" height="22" rx="4" fill="rgba(255,255,255,.06)"/>
+    <text x="100" y="139" fill="#F7F8F8" font-size="10" font-family="-apple-system,sans-serif">Avignon · 9 fotos</text>
+    <rect x="330" y="124" width="26" height="22" rx="4"
+          fill="none" stroke="rgba(194,131,58,.5)" stroke-dasharray="3 2"/>
+    <rect x="380" y="124" width="300" height="22" rx="4" fill="rgba(255,255,255,.06)"/>
+    <text x="390" y="139" fill="#F7F8F8" font-size="10" font-family="-apple-system,sans-serif">Arles e Nîmes · 8 fotos</text>
+    <rect x="720" y="124" width="220" height="22" rx="4" fill="rgba(255,255,255,.06)"/>
+    <text x="730" y="139" fill="#F7F8F8" font-size="10" font-family="-apple-system,sans-serif">Marselha · 5 fotos</text>
+    <text x="332" y="118" fill="#C2833A" font-size="9" font-family="-apple-system,sans-serif">lacuna 2 dias</text>
+  </svg>
+
+  <div class="legenda">
+    <span><i class="sw" style="background:#F7F8F8"></i> foto com GPS próprio</span>
+    <span><i class="sw" style="background:#6E8FA8"></i> foto sem GPS, lugar herdado</span>
+    <span><i class="sw" style="background:none;border:1px dashed rgba(194,131,58,.6)"></i> lacuna que separaria viagens</span>
+    <span style="color:var(--texto-3)">o traço vertical liga quem herdou a quem doou</span>
+  </div>
+</div>
+
+<h2>Deriva de relógio, quando existe</h2>
+<div class="quadro">
+  <svg viewBox="0 0 960 130" role="img" aria-label="Correção de deriva de relógio">
+    <text x="0" y="34" fill="#8A8F98" font-size="11" font-family="-apple-system,sans-serif">iPhone</text>
+    <rect x="90" y="20" width="850" height="20" rx="4" fill="rgba(255,255,255,.02)"/>
+    <g fill="#F7F8F8">
+      <rect x="300" y="24" width="5" height="12" rx="1.5"/>
+      <rect x="330" y="24" width="5" height="12" rx="1.5"/>
+      <rect x="480" y="24" width="5" height="12" rx="1.5"/>
+    </g>
+
+    <text x="0" y="76" fill="#8A8F98" font-size="11" font-family="-apple-system,sans-serif">Canon</text>
+    <rect x="90" y="62" width="850" height="20" rx="4" fill="rgba(255,255,255,.02)"/>
+    <!-- posição registrada (errada), esmaecida -->
+    <g fill="#62666D" opacity=".55">
+      <rect x="140" y="66" width="5" height="12" rx="1.5"/>
+      <rect x="170" y="66" width="5" height="12" rx="1.5"/>
+      <rect x="320" y="66" width="5" height="12" rx="1.5"/>
+    </g>
+    <!-- posição corrigida -->
+    <g fill="#6E8FA8">
+      <rect x="308" y="66" width="5" height="12" rx="1.5"/>
+      <rect x="338" y="66" width="5" height="12" rx="1.5"/>
+      <rect x="488" y="66" width="5" height="12" rx="1.5"/>
+    </g>
+    <g stroke="#6E8FA8" stroke-width="1" opacity=".5" stroke-dasharray="2 2">
+      <path d="M145 72 L308 72"/><path d="M175 72 L338 72"/><path d="M325 72 L488 72"/>
+    </g>
+    <path d="M145 104 L308 104" stroke="#C2833A" stroke-width="1"/>
+    <path d="M145 100 L145 108 M308 100 L308 108" stroke="#C2833A" stroke-width="1"/>
+    <text x="180" y="118" fill="#C2833A" font-size="10" font-family="-apple-system,sans-serif">
+      relógio 3h atrasado — corrigido por 4 fotos-âncora</text>
+  </svg>
+  <div class="legenda">
+    <span style="color:var(--texto-3)">cinza: hora gravada no arquivo · azul: hora corrigida</span>
+  </div>
+</div>
+
+<p class="nota"><b>Por que mostrar a deriva.</b> Hoje a correção acontece em
+silêncio dentro do motor. Quando ela erra, o usuário vê fotos no dia errado e
+não tem como saber por quê. Expor o deslocamento — e quantas âncoras o
+sustentam — transforma um comportamento mágico em algo que pode ser conferido
+e, se preciso, recusado.</p>
+
+</body>
+</html>

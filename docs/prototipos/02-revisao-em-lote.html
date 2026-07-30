@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Protótipo — revisão em lote</title>
+<style>
+:root{
+  --fundo:#08090A;--sup-1:rgba(255,255,255,.02);--sup-2:rgba(255,255,255,.05);
+  --sup-3:rgba(255,255,255,.08);--borda:rgba(255,255,255,.10);
+  --borda-forte:rgba(255,255,255,.18);--texto:#F7F8F8;--texto-2:#8A8F98;
+  --texto-3:#62666D;--atencao:#C2833A;--herdado:#6E8FA8;--ok:#6E9A78;
+  --r:6px;--f:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;
+  --t-corpo:13px;--t-peq:11px;--p-tit:510;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--fundo);color:var(--texto);font:var(--t-corpo)/1.45 var(--f);
+  -webkit-font-smoothing:antialiased;height:100vh;display:flex;flex-direction:column}
+
+.barra{display:flex;align-items:center;gap:14px;padding:10px 14px;
+  border-bottom:1px solid var(--borda);background:var(--sup-1)}
+.barra h1{font-size:14px;font-weight:var(--p-tit);letter-spacing:-.2px}
+.pilhas{display:flex;gap:2px;margin-left:auto}
+.pilha{padding:4px 10px;border:1px solid var(--borda);background:none;
+  color:var(--texto-2);font:inherit;cursor:pointer}
+.pilha:first-child{border-radius:var(--r) 0 0 var(--r)}
+.pilha:last-child{border-radius:0 var(--r) var(--r) 0}
+.pilha[aria-pressed=true]{background:var(--sup-3);color:var(--texto)}
+.pilha b{color:var(--texto);font-weight:var(--p-tit)}
+
+/* agrupamento: a unidade de decisão é o GRUPO, não a foto solta */
+.grupo{border-bottom:1px solid var(--borda)}
+.cab{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  background:var(--sup-2);position:sticky;top:0;cursor:pointer}
+.cab:hover{background:var(--sup-3)}
+.cab .tri{color:var(--texto-3);width:10px}
+.cab .tit{font-weight:var(--p-tit);letter-spacing:-.1px}
+.cab .sub{color:var(--texto-2)}
+.cab .acoes{margin-left:auto;display:flex;gap:6px}
+.mini-btn{padding:3px 9px;border:1px solid var(--borda);border-radius:var(--r);
+  background:none;color:var(--texto-2);font:inherit;font-size:var(--t-peq);cursor:pointer}
+.mini-btn:hover{border-color:var(--borda-forte);color:var(--texto)}
+.mini-btn.sim:hover{color:var(--ok);border-color:var(--ok)}
+
+.linhas{display:none}
+.grupo[data-aberto] .linhas{display:block}
+.linha{display:grid;grid-template-columns:44px 1fr 210px 92px 64px;gap:12px;
+  align-items:center;padding:6px 14px;border-top:1px solid var(--sup-1)}
+.linha:hover{background:var(--sup-1)}
+.linha[data-foco]{background:var(--sup-2);box-shadow:inset 2px 0 0 var(--texto-2)}
+.linha[data-estado=aprovada]{opacity:.45}
+.tb{width:44px;height:33px;border-radius:4px}
+.arq{font-weight:var(--p-tit);letter-spacing:-.05px}
+.arq small{display:block;color:var(--texto-3);font-weight:400;font-size:var(--t-peq)}
+.dest{color:var(--texto-2);font-size:var(--t-peq);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.dest b{color:var(--texto);font-weight:var(--p-tit)}
+.conf{display:inline-flex;align-items:center;gap:6px;background:none;border:0;
+  padding:2px 4px;border-radius:4px;cursor:pointer;color:inherit;font:inherit}
+.conf:hover{background:var(--sup-2)}
+.barras{display:flex;gap:2px}
+.barras i{width:3px;height:10px;border-radius:1px;background:var(--sup-3)}
+.barras i.on{background:var(--texto-2)}
+.conf.baixa .barras i.on{background:var(--atencao)}
+.conf .rot{font-size:var(--t-peq);color:var(--texto-2)}
+.conf.baixa .rot{color:var(--atencao)}
+.est{font-size:var(--t-peq);color:var(--texto-3);text-align:right}
+.est.ok{color:var(--ok)}
+
+.porque{grid-column:2/-1;padding:6px 0 8px;border-top:1px dashed var(--sup-3);
+  margin-top:4px;color:var(--texto-2);font-size:var(--t-peq);display:none}
+.linha[data-porque] .porque{display:block}
+.porque em{font-style:normal;color:var(--herdado)}
+
+.rodape{margin-top:auto;display:flex;align-items:center;gap:14px;padding:9px 14px;
+  border-top:1px solid var(--borda);background:var(--sup-1);
+  color:var(--texto-3);font-size:var(--t-peq)}
+kbd{border:1px solid var(--borda);border-radius:3px;padding:1px 5px;
+  color:var(--texto-2);font:inherit;font-size:10px}
+.desfazer{margin-left:auto;display:flex;align-items:center;gap:8px;
+  color:var(--texto-2)}
+.desfazer button{border:1px solid var(--borda);background:var(--sup-2);
+  color:var(--texto);border-radius:var(--r);padding:3px 9px;font:inherit;
+  font-size:var(--t-peq);cursor:pointer}
+</style>
+</head>
+<body>
+
+<div class="barra">
+  <h1>Revisão</h1>
+  <span style="color:var(--texto-2)">63 sugestões em 4 grupos</span>
+  <div class="pilhas">
+    <button class="pilha" aria-pressed="true">Pendentes <b>58</b></button>
+    <button class="pilha" aria-pressed="false">Aprovadas <b>5</b></button>
+    <button class="pilha" aria-pressed="false">Rejeitadas <b>0</b></button>
+  </div>
+</div>
+
+<div class="grupo" data-aberto>
+  <div class="cab" onclick="dobra(this)">
+    <span class="tri">▾</span>
+    <span class="tit">Viagens/2024 - França</span>
+    <span class="sub">· 22 fotos · 2 câmeras · 02–19 de maio</span>
+    <span class="acoes">
+      <button class="mini-btn sim" onclick="event.stopPropagation();aprovaGrupo(this)">Aprovar as 22</button>
+      <button class="mini-btn" onclick="event.stopPropagation()">Editar destino…</button>
+    </span>
+  </div>
+  <div class="linhas">
+
+    <div class="linha" data-foco>
+      <span class="tb" style="background:linear-gradient(135deg,#3b4a55,#7d6b57)"></span>
+      <span class="arq">IMG_9100.jpg<small>iPhone 15 Pro · 04/05 10:30</small></span>
+      <span class="dest">→ <b>Viagens/2024 - França</b></span>
+      <button class="conf" onclick="porque(this)">
+        <span class="barras"><i class="on"></i><i class="on"></i><i class="on"></i></span>
+        <span class="rot">Alta</span></button>
+      <span class="est">pendente</span>
+      <div class="porque">GPS do EXIF geocodificado para Avignon · data do EXIF</div>
+    </div>
+
+    <div class="linha" data-porque>
+      <span class="tb" style="background:linear-gradient(135deg,#5a4a3b,#8a7a5f)"></span>
+      <span class="arq">DSC_0100.jpg<small>Canon EOS R5 · 04/05 10:32</small></span>
+      <span class="dest">→ <b>Viagens/2024 - França</b></span>
+      <button class="conf" onclick="porque(this)">
+        <span class="barras"><i class="on"></i><i class="on"></i><i></i></span>
+        <span class="rot">Média</span></button>
+      <span class="est">pendente</span>
+      <div class="porque">Esta câmera não grava GPS. Lugar <em>estimado</em>:
+        Avignon, herdado de IMG_9100.jpg (iPhone 15 Pro) tirada 2 min antes.</div>
+    </div>
+
+    <div class="linha">
+      <span class="tb" style="background:linear-gradient(135deg,#46525e,#6f7f6a)"></span>
+      <span class="arq">DSC_0101.jpg<small>Canon EOS R5 · 04/05 10:38</small></span>
+      <span class="dest">→ <b>Viagens/2024 - França</b></span>
+      <button class="conf" onclick="porque(this)">
+        <span class="barras"><i class="on"></i><i class="on"></i><i></i></span>
+        <span class="rot">Média</span></button>
+      <span class="est">pendente</span>
+      <div class="porque">Lugar <em>estimado</em>: herdado de IMG_9101.jpg, 2 min antes.</div>
+    </div>
+
+    <div class="linha" data-estado="aprovada">
+      <span class="tb" style="background:linear-gradient(135deg,#59493f,#7f6f55)"></span>
+      <span class="arq">IMG_9101.jpg<small>iPhone 15 Pro · 04/05 10:40</small></span>
+      <span class="dest">→ <b>Viagens/2024 - França</b></span>
+      <button class="conf" onclick="porque(this)">
+        <span class="barras"><i class="on"></i><i class="on"></i><i class="on"></i></span>
+        <span class="rot">Alta</span></button>
+      <span class="est ok">aprovada</span>
+      <div class="porque">GPS do EXIF geocodificado para Avignon.</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="grupo">
+  <div class="cab" onclick="dobra(this)">
+    <span class="tri">▸</span>
+    <span class="tit">Família/2022/Aniversários</span>
+    <span class="sub">· 18 fotos · 1 câmera · agosto de 2022</span>
+    <span class="acoes"><button class="mini-btn sim" onclick="event.stopPropagation()">Aprovar as 18</button></span>
+  </div>
+  <div class="linhas"></div>
+</div>
+
+<div class="grupo">
+  <div class="cab" onclick="dobra(this)">
+    <span class="tri">▸</span>
+    <span class="tit">Viagens/2023 - Japão</span>
+    <span class="sub">· 18 fotos · novembro de 2023</span>
+    <span class="acoes"><button class="mini-btn sim" onclick="event.stopPropagation()">Aprovar as 18</button></span>
+  </div>
+  <div class="linhas"></div>
+</div>
+
+<div class="grupo">
+  <div class="cab" onclick="dobra(this)" style="box-shadow:inset 3px 0 0 var(--atencao)">
+    <span class="tri">▸</span>
+    <span class="tit">Não classificadas/2026/julho</span>
+    <span class="sub">· 5 fotos · sem data de captura</span>
+    <span class="acoes"><button class="mini-btn" onclick="event.stopPropagation()">Ver as 5</button></span>
+  </div>
+  <div class="linhas"></div>
+</div>
+
+<div class="rodape">
+  <span><kbd>↑</kbd><kbd>↓</kbd> navega</span>
+  <span><kbd>↵</kbd> aprova</span>
+  <span><kbd>⌫</kbd> rejeita</span>
+  <span><kbd>?</kbd> por quê</span>
+  <span><kbd>⇧↵</kbd> aprova o grupo</span>
+  <div class="desfazer">5 aprovadas neste lote <button>Desfazer</button></div>
+</div>
+
+<script>
+function dobra(cab){
+  const g = cab.parentElement, aberto = g.hasAttribute('data-aberto');
+  if (aberto) g.removeAttribute('data-aberto'); else g.setAttribute('data-aberto','');
+  cab.querySelector('.tri').textContent = aberto ? '▸' : '▾';
+}
+function porque(btn){
+  const l = btn.closest('.linha');
+  l.hasAttribute('data-porque') ? l.removeAttribute('data-porque')
+                                : l.setAttribute('data-porque','');
+}
+function aprovaGrupo(btn){
+  btn.closest('.grupo').querySelectorAll('.linha').forEach(l => {
+    l.setAttribute('data-estado','aprovada');
+    const e = l.querySelector('.est'); e.textContent = 'aprovada'; e.classList.add('ok');
+  });
+}
+document.addEventListener('keydown', e => {
+  const linhas = [...document.querySelectorAll('.grupo[data-aberto] .linha')];
+  let i = linhas.findIndex(l => l.hasAttribute('data-foco'));
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (i >= 0) linhas[i].removeAttribute('data-foco');
+    i = Math.max(0, Math.min(linhas.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
+    linhas[i].setAttribute('data-foco','');
+  }
+  if (e.key === '?' && i >= 0) porque(linhas[i].querySelector('.conf'));
+  if (e.key === 'Enter' && i >= 0) {
+    linhas[i].setAttribute('data-estado','aprovada');
+    const s = linhas[i].querySelector('.est'); s.textContent='aprovada'; s.classList.add('ok');
+  }
+});
+</script>
+</body>
+</html>

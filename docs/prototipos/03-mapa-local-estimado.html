@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Protótipo — mapa: lido x estimado</title>
+<style>
+:root{
+  --fundo:#08090A;--sup-1:rgba(255,255,255,.02);--sup-2:rgba(255,255,255,.05);
+  --sup-3:rgba(255,255,255,.08);--borda:rgba(255,255,255,.10);
+  --borda-forte:rgba(255,255,255,.18);--texto:#F7F8F8;--texto-2:#8A8F98;
+  --texto-3:#62666D;--atencao:#C2833A;--herdado:#6E8FA8;
+  --r:6px;--f:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;
+  --t-corpo:13px;--t-peq:11px;--p-tit:510;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--fundo);color:var(--texto);font:var(--t-corpo)/1.5 var(--f);
+  -webkit-font-smoothing:antialiased;padding:24px;max-width:1000px;margin:0 auto}
+h1{font-size:20px;font-weight:var(--p-tit);letter-spacing:-.4px}
+.leg{color:var(--texto-2);margin:4px 0 16px;max-width:64ch}
+.quadro{display:grid;grid-template-columns:1fr 260px;gap:16px}
+.mapa{background:var(--sup-1);border:1px solid var(--borda);border-radius:10px;
+  overflow:hidden;position:relative}
+svg{display:block;width:100%;height:auto}
+.legenda{display:flex;gap:16px;padding:10px 12px;border-top:1px solid var(--borda);
+  font-size:var(--t-peq);color:var(--texto-2);flex-wrap:wrap}
+.legenda span{display:inline-flex;align-items:center;gap:6px}
+.pt{width:9px;height:9px;border-radius:50%}
+.pt.lido{background:var(--texto)}
+.pt.est{background:none;border:1.5px dashed var(--herdado)}
+.painel{background:var(--sup-1);border:1px solid var(--borda);border-radius:10px;
+  padding:12px}
+.painel h2{font-size:var(--t-peq);text-transform:uppercase;letter-spacing:.6px;
+  color:var(--texto-2);font-weight:var(--p-tit);margin-bottom:10px}
+.fot{display:flex;gap:9px;padding:7px 0}
+.fot + .fot{border-top:1px solid var(--sup-2)}
+.tb{width:40px;height:30px;border-radius:4px;flex:none}
+.fot .n{font-weight:var(--p-tit);font-size:12px}
+.fot .m{color:var(--texto-2);font-size:var(--t-peq)}
+.fot .m em{font-style:normal;color:var(--herdado)}
+.aviso{margin-top:14px;padding:9px 10px;border:1px solid var(--borda);
+  border-left:2px solid var(--atencao);border-radius:var(--r);
+  color:var(--texto-2);font-size:var(--t-peq)}
+.nota{color:var(--texto-3);font-size:var(--t-peq);margin-top:14px;max-width:70ch}
+</style>
+</head>
+<body>
+
+<h1>Onde a foto foi tirada — e como o sistema sabe</h1>
+<p class="leg">Ponto cheio é coordenada lida do arquivo. Ponto vazado e
+tracejado é <strong>local estimado</strong>: a câmera não gravou GPS e a
+coordenada veio de outra foto, próxima no tempo. A linha liga a estimativa
+à foto que doou — a origem fica alcançável, não implícita.</p>
+
+<div class="quadro">
+  <div class="mapa">
+    <svg viewBox="0 0 640 380" role="img" aria-label="Mapa esquemático de Avignon com quatro fotos">
+      <defs>
+        <pattern id="grade" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M40 0H0v40" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="1"/>
+        </pattern>
+      </defs>
+      <rect width="640" height="380" fill="url(#grade)"/>
+      <!-- rio e malha urbana, esquemáticos -->
+      <path d="M-10 250 C 120 210, 200 300, 330 265 S 540 200, 660 235"
+            fill="none" stroke="rgba(110,143,168,.22)" stroke-width="16"/>
+      <path d="M90 40 L 150 340 M 300 20 L 260 360 M 470 60 L 520 350"
+            stroke="rgba(255,255,255,.05)" stroke-width="2" fill="none"/>
+      <path d="M20 130 L 620 100 M 10 300 L 630 310"
+            stroke="rgba(255,255,255,.05)" stroke-width="2" fill="none"/>
+
+      <!-- ligação estimativa → doador -->
+      <path d="M300 170 L 258 148" stroke="#6E8FA8" stroke-width="1.5"
+            stroke-dasharray="3 3" opacity=".8"/>
+      <path d="M352 196 L 268 156" stroke="#6E8FA8" stroke-width="1.5"
+            stroke-dasharray="3 3" opacity=".5"/>
+
+      <!-- lidos -->
+      <circle cx="258" cy="148" r="7" fill="#F7F8F8"/>
+      <circle cx="258" cy="148" r="14" fill="none" stroke="#F7F8F8" opacity=".18"/>
+      <circle cx="268" cy="156" r="7" fill="#F7F8F8"/>
+
+      <!-- estimados -->
+      <circle cx="300" cy="170" r="7" fill="none" stroke="#6E8FA8"
+              stroke-width="1.8" stroke-dasharray="3 2.6"/>
+      <circle cx="352" cy="196" r="7" fill="none" stroke="#6E8FA8"
+              stroke-width="1.8" stroke-dasharray="3 2.6"/>
+
+      <text x="278" y="128" fill="#8A8F98" font-size="11"
+            font-family="-apple-system,sans-serif">Avignon · 4 fotos</text>
+      <text x="316" y="176" fill="#6E8FA8" font-size="10"
+            font-family="-apple-system,sans-serif">estimado · 2 min</text>
+    </svg>
+    <div class="legenda">
+      <span><i class="pt lido"></i> coordenada lida do arquivo (2)</span>
+      <span><i class="pt est"></i> local estimado por proximidade (2)</span>
+      <span style="color:var(--texto-3)">o traço aponta a foto que doou a coordenada</span>
+    </div>
+  </div>
+
+  <div class="painel">
+    <h2>Neste ponto</h2>
+    <div class="fot">
+      <span class="tb" style="background:linear-gradient(135deg,#3b4a55,#7d6b57)"></span>
+      <div><div class="n">IMG_9100.jpg</div>
+        <div class="m">iPhone 15 Pro · 10:30<br>43.9493, 4.8055 — do EXIF</div></div>
+    </div>
+    <div class="fot">
+      <span class="tb" style="background:linear-gradient(135deg,#5a4a3b,#8a7a5f)"></span>
+      <div><div class="n">DSC_0100.jpg</div>
+        <div class="m">Canon EOS R5 · 10:32<br><em>estimado</em> — herdado de IMG_9100.jpg</div></div>
+    </div>
+    <div class="fot">
+      <span class="tb" style="background:linear-gradient(135deg,#46525e,#6f7f6a)"></span>
+      <div><div class="n">DSC_0101.jpg</div>
+        <div class="m">Canon EOS R5 · 10:38<br><em>estimado</em> — herdado de IMG_9101.jpg</div></div>
+    </div>
+    <div class="fot">
+      <span class="tb" style="background:linear-gradient(135deg,#59493f,#7f6f55)"></span>
+      <div><div class="n">IMG_9101.jpg</div>
+        <div class="m">iPhone 15 Pro · 10:40<br>43.9493, 4.8055 — do EXIF</div></div>
+    </div>
+    <div class="aviso">Uma estimativa não é uma medição. Corrigir o lugar
+      destas 2 fotos desfaz também a viagem que elas ajudaram a formar.</div>
+  </div>
+</div>
+
+<p class="nota">O desenho do mapa aqui é esquemático de propósito: o protótipo
+existe para decidir a <strong>linguagem</strong> — cheio x vazado, o traço até
+o doador, o aviso de cascata — não a cartografia. Mapa real exige decidir
+antes se vem de dados offline embarcados ou de serviço externo, o que é
+matéria de <code>docs/PRIVACIDADE.md</code> e não de direção de arte.</p>
+
+</body>
+</html>

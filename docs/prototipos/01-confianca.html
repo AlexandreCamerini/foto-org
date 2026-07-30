@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Protótipo — confiança e o porquê</title>
+<style>
+:root{
+  --fundo:#08090A;--sup-1:rgba(255,255,255,.02);--sup-2:rgba(255,255,255,.05);
+  --sup-3:rgba(255,255,255,.08);--borda:rgba(255,255,255,.10);
+  --borda-forte:rgba(255,255,255,.18);--texto:#F7F8F8;--texto-2:#8A8F98;
+  --texto-3:#62666D;--atencao:#C2833A;--herdado:#6E8FA8;
+  --r:6px;--r-g:10px;
+  --f:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;
+  --t-corpo:13px;--t-peq:11px;--t-tit:15px;--p-tit:510;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--fundo);color:var(--texto);font:var(--t-corpo)/1.5 var(--f);
+  -webkit-font-smoothing:antialiased;padding:32px;max-width:920px;margin:0 auto}
+h1{font-size:22px;font-weight:var(--p-tit);letter-spacing:-.4px;margin-bottom:4px}
+h2{font-size:var(--t-tit);font-weight:var(--p-tit);letter-spacing:-.2px;
+  margin:28px 0 10px;color:var(--texto)}
+.leg{color:var(--texto-2);margin-bottom:20px;max-width:62ch}
+.nota{color:var(--texto-3);font-size:var(--t-peq);margin-top:6px;max-width:62ch}
+
+/* ---- indicador de confiança: quantidade, não semáforo ---- */
+.conf{display:inline-flex;align-items:center;gap:6px;background:none;border:0;
+  padding:2px 4px;margin:-2px -4px;border-radius:4px;cursor:pointer;
+  color:inherit;font:inherit}
+.conf:hover{background:var(--sup-2)}
+.conf:focus-visible{outline:2px solid var(--borda-forte);outline-offset:1px}
+.barras{display:flex;gap:2px}
+.barras i{width:3px;height:11px;border-radius:1px;background:var(--sup-3);
+  display:block}
+.barras i.on{background:var(--texto-2)}
+.conf.baixa .barras i.on{background:var(--atencao)}
+.conf .rot{font-size:var(--t-peq);color:var(--texto-2);letter-spacing:.2px}
+.conf.baixa .rot{color:var(--atencao)}
+
+/* ---- cartão de foto ---- */
+.cartao{background:var(--sup-1);border:1px solid var(--borda);
+  border-radius:var(--r-g);padding:14px;display:grid;
+  grid-template-columns:96px 1fr;gap:14px;margin-bottom:10px}
+.mini{width:96px;height:72px;border-radius:var(--r);
+  background:linear-gradient(135deg,#3b4a55,#7d6b57 60%,#4a5a48)}
+.mini.b{background:linear-gradient(135deg,#5a4a3b,#8a7a5f 60%,#3f4a52)}
+.nome{font-weight:var(--p-tit);letter-spacing:-.1px}
+.destino{color:var(--texto-2);margin-top:2px}
+.destino b{color:var(--texto);font-weight:var(--p-tit)}
+.linha-topo{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+
+/* ---- painel de evidências ---- */
+.porque{margin-top:10px;border-top:1px solid var(--borda);padding-top:10px;
+  display:none}
+.porque[data-aberto]{display:block}
+.ev{display:grid;grid-template-columns:14px 1fr auto;gap:8px;padding:6px 0;
+  align-items:start}
+.ev + .ev{border-top:1px solid var(--sup-2)}
+.pino{width:6px;height:6px;border-radius:50%;background:var(--texto-3);
+  margin-top:6px}
+.ev.herdada .pino{background:var(--herdado)}
+.ev .campo{color:var(--texto-2);font-size:var(--t-peq);text-transform:uppercase;
+  letter-spacing:.5px}
+.ev .valor{font-weight:var(--p-tit)}
+.ev .just{color:var(--texto-2);margin-top:1px}
+.ev .just em{font-style:normal;color:var(--herdado)}
+.doador{display:inline-flex;align-items:center;gap:5px;margin-top:5px;
+  padding:3px 7px;border:1px solid var(--borda);border-radius:99px;
+  background:var(--sup-2);font-size:var(--t-peq);color:var(--texto-2);
+  cursor:pointer}
+.doador:hover{border-color:var(--borda-forte);color:var(--texto)}
+.doador .p{width:14px;height:14px;border-radius:3px;
+  background:linear-gradient(135deg,#4a6a7a,#7a8a6a)}
+.chave{color:var(--texto-3);font-size:var(--t-peq);margin-top:12px}
+</style>
+</head>
+<body>
+
+<h1>Confiança que leva à evidência</h1>
+<p class="leg">O badge de hoje diz “Média” e não leva a lugar nenhum. Aqui a
+confiança é <strong>quantidade</strong> — três segmentos, não três cores — e é
+o próprio controle que abre o porquê. Cor entra só na confiança baixa, que é a
+única que pede olho humano.</p>
+
+<h2>Foto com GPS próprio</h2>
+<div class="cartao">
+  <div class="mini"></div>
+  <div>
+    <div class="linha-topo">
+      <div>
+        <div class="nome">IMG_9100.jpg</div>
+        <div class="destino">→ <b>Viagens/2024 - França</b></div>
+      </div>
+      <button class="conf" aria-expanded="false" onclick="alterna(this)">
+        <span class="barras"><i class="on"></i><i class="on"></i><i class="on"></i></span>
+        <span class="rot">Alta · por quê</span>
+      </button>
+    </div>
+    <div class="porque">
+      <div class="ev">
+        <span class="pino"></span>
+        <div><div class="campo">data</div><div class="valor">04/05/2024 10:30</div>
+          <div class="just">lida do EXIF (DateTimeOriginal)</div></div>
+        <span class="conf"><span class="barras"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>
+      </div>
+      <div class="ev">
+        <span class="pino"></span>
+        <div><div class="campo">lugar</div><div class="valor">Avignon, França</div>
+          <div class="just">geocodificação offline das coordenadas do EXIF (43.9493, 4.8055)</div></div>
+        <span class="conf"><span class="barras"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>Foto sem GPS, com lugar herdado de outra câmera</h2>
+<p class="leg">Este é o caso que hoje é invisível. O sistema sabe responder;
+a interface é que não perguntava. O pino azul marca o que veio de outro
+dispositivo, e o chip leva à foto que doou a coordenada.</p>
+<div class="cartao">
+  <div class="mini b"></div>
+  <div>
+    <div class="linha-topo">
+      <div>
+        <div class="nome">DSC_0100.jpg <span style="color:var(--texto-3);font-weight:400">· Canon EOS R5</span></div>
+        <div class="destino">→ <b>Viagens/2024 - França</b></div>
+      </div>
+      <button class="conf" aria-expanded="true" onclick="alterna(this)">
+        <span class="barras"><i class="on"></i><i class="on"></i><i></i></span>
+        <span class="rot">Média · por quê</span>
+      </button>
+    </div>
+    <div class="porque" data-aberto>
+      <div class="ev">
+        <span class="pino"></span>
+        <div><div class="campo">data</div><div class="valor">04/05/2024 10:32</div>
+          <div class="just">lida do EXIF (DateTimeOriginal)</div></div>
+        <span class="conf"><span class="barras"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>
+      </div>
+      <div class="ev herdada">
+        <span class="pino"></span>
+        <div>
+          <div class="campo">lugar · estimado</div>
+          <div class="valor">Avignon, França</div>
+          <div class="just">esta câmera não grava GPS. A coordenada veio de uma
+            foto tirada <em>2 min antes</em>, do mesmo lugar, por outro
+            dispositivo.</div>
+          <button class="doador"><span class="p"></span> IMG_9100.jpg · iPhone 15 Pro</button>
+        </div>
+        <span class="conf"><span class="barras"><i class="on"></i><i class="on"></i><i></i></span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>Confiança baixa: a única que muda de cor</h2>
+<div class="cartao">
+  <div class="mini" style="background:linear-gradient(135deg,#4a4a52,#6a6a72)"></div>
+  <div>
+    <div class="linha-topo">
+      <div>
+        <div class="nome">captura.png</div>
+        <div class="destino">→ <b>Não classificadas/2026/julho</b></div>
+      </div>
+      <button class="conf baixa" aria-expanded="false" onclick="alterna(this)">
+        <span class="barras"><i class="on"></i><i></i><i></i></span>
+        <span class="rot">Baixa · por quê</span>
+      </button>
+    </div>
+    <div class="porque">
+      <div class="ev">
+        <span class="pino"></span>
+        <div><div class="campo">data</div><div class="valor">sem data de captura</div>
+          <div class="just">o arquivo não traz EXIF. A data que aparece é a de
+            cópia para o disco, e por isso não vale como data da foto.</div></div>
+        <span class="conf baixa"><span class="barras"><i class="on"></i><i></i><i></i></span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="chave">Teclado: <b>?</b> alterna o porquê da linha em foco ·
+<b>↵</b> aprova · <b>⌫</b> rejeita. O indicador é um botão, então entra na
+ordem de tabulação naturalmente.</p>
+
+<script>
+function alterna(btn){
+  const p = btn.closest('.cartao').querySelector('.porque');
+  const aberto = p.hasAttribute('data-aberto');
+  if (aberto) p.removeAttribute('data-aberto'); else p.setAttribute('data-aberto','');
+  btn.setAttribute('aria-expanded', String(!aberto));
+}
+</script>
+</body>
+</html>

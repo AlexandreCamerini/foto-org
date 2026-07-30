@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Protótipos — fase 6</title>
+<style>
+:root{
+  --fundo:#08090A;--sup-1:rgba(255,255,255,.02);--sup-2:rgba(255,255,255,.05);
+  --sup-3:rgba(255,255,255,.08);--borda:rgba(255,255,255,.10);
+  --borda-forte:rgba(255,255,255,.18);--texto:#F7F8F8;--texto-2:#8A8F98;
+  --texto-3:#62666D;--herdado:#6E8FA8;
+  --r:6px;--f:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;
+  --p-tit:510;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--fundo);color:var(--texto);font:13px/1.5 var(--f);
+  -webkit-font-smoothing:antialiased;padding:40px 24px;max-width:720px;margin:0 auto}
+h1{font-size:24px;font-weight:var(--p-tit);letter-spacing:-.5px}
+.leg{color:var(--texto-2);margin:6px 0 26px;max-width:60ch}
+a.item{display:grid;grid-template-columns:26px 1fr;gap:12px;padding:14px;
+  border:1px solid var(--borda);border-radius:10px;background:var(--sup-1);
+  text-decoration:none;color:inherit;margin-bottom:8px}
+a.item:hover{background:var(--sup-2);border-color:var(--borda-forte)}
+.num{color:var(--texto-3);font-variant-numeric:tabular-nums}
+.tit{font-weight:var(--p-tit);letter-spacing:-.1px}
+.sub{color:var(--texto-2);margin-top:2px}
+.nota{color:var(--texto-3);font-size:11px;margin-top:22px;max-width:64ch}
+.nota code{color:var(--texto-2)}
+</style>
+</head>
+<body>
+<h1>Protótipos de decisão visível</h1>
+<p class="leg">Cinco propostas para a fase 6. Cada arquivo é autocontido —
+abre com duplo clique, sem servidor e sem rede — e usa os tokens de
+<code style="color:var(--texto-2)">docs/REFERENCIAS_DESIGN.md</code>.</p>
+
+<a class="item" href="01-confianca.html">
+  <span class="num">01</span>
+  <span><span class="tit">Confiança que leva à evidência</span>
+    <span class="sub">Três segmentos em vez de semáforo; o badge abre o porquê;
+      o lugar herdado mostra de quem veio.</span></span>
+</a>
+<a class="item" href="02-revisao-em-lote.html">
+  <span class="num">02</span>
+  <span><span class="tit">Revisão em lote</span>
+    <span class="sub">Agrupada por destino, com miniatura, nome, câmera e o
+      porquê inline. Teclado-first, com desfazer.</span></span>
+</a>
+<a class="item" href="03-mapa-local-estimado.html">
+  <span class="num">03</span>
+  <span><span class="tit">Mapa: lido x estimado</span>
+    <span class="sub">Ponto cheio é medição, vazado é estimativa, e o traço
+      liga a estimativa à foto que doou a coordenada.</span></span>
+</a>
+<a class="item" href="04-linha-do-tempo.html">
+  <span class="num">04</span>
+  <span><span class="tit">Linha do tempo por fonte</span>
+    <span class="sub">Uma faixa por dispositivo torna o cruzamento visível —
+      e a deriva de relógio deixa de ser mágica.</span></span>
+</a>
+<a class="item" href="05-plano-antes-depois.html">
+  <span class="num">05</span>
+  <span><span class="tit">Plano: antes e depois</span>
+    <span class="sub">Duas árvores lado a lado, o que é novo destacado, e o
+      alerta de quantas fotos vão por lugar estimado.</span></span>
+</a>
+
+<p class="nota">Nenhum deles toca <code>webapp/src/</code>. São propostas para
+discussão antes de virar implementação — a fronteira da fase, registrada em
+D-001 e D-016.</p>
+</body>
+</html>

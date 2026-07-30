@@ -265,3 +265,40 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   em especial a migração Alembic da fase 3, que é o que custa caro desfazer.
 - Como reverter: os quatro commits são independentes e revertem isolados.
 - Status: decidido
+
+## D-017 — Confiança como quantidade, não como semáforo
+- Fase: 6
+- Classe: B
+- Data: 2026-07-30
+- Contexto: hoje o nível é um badge colorido ("Média" em âmbar) que não leva a
+  lugar nenhum. Precisa virar superfície de entrada da evidência.
+- Opções: (a) manter semáforo de três cores, tornando-o clicável; (b) três
+  segmentos preenchidos, neutros, com cor só na confiança baixa; (c) percentual
+  numérico.
+- Escolhida: (b)
+- Por quê: numa ferramenta de foto, três cores saturadas competem com a
+  imagem — contraria "a foto é a cor da interface". Cor como canal único
+  também falha para daltônicos. Quantidade resolve os dois, e reservar a cor
+  para a confiança baixa faz o pouco de cor que sobra significar "olhe aqui".
+  (c) sugere precisão que o modelo do docs/CONFIANCA.md não tem: o score é
+  elo mais fraco, não medida contínua.
+- Como reverter: é uma regra de CSS mais o rótulo; nada no modelo de dados.
+- Status: decidido por timeout
+
+## D-018 — A unidade de decisão da Revisão passa a ser o grupo
+- Fase: 6
+- Classe: B
+- Data: 2026-07-30
+- Contexto: com 63 linhas indistinguíveis, a única ação racional é "Aprovar
+  todas" — que é o que a tela oferece no topo. A tela empurra para o
+  comportamento que ela deveria evitar.
+- Opções: (a) manter lista plana e enriquecer cada linha; (b) agrupar por
+  destino sugerido, com aprovação em lote por grupo e desdobramento sob
+  demanda; (c) uma foto por vez, em tela cheia.
+- Escolhida: (b)
+- Por quê: "aprovar as 22 de Viagens/2024 - França" é uma decisão que o usuário
+  consegue tomar com a informação que tem; "aprovar a linha 37 de 63" não é.
+  (a) melhora a linha mas mantém 63 decisões; (c) não escala para acervo
+  grande.
+- Como reverter: o desdobramento já mostra a lista plana dentro do grupo.
+- Status: decidido por timeout
