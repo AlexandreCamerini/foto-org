@@ -30,6 +30,7 @@ ORDENACOES = {
 LACUNAS: dict[str, str] = {
     "sem_data": "sem data de captura",
     "sem_gps": "sem coordenada",
+    "local_estimado": "lugar estimado de outra câmera",
     "sem_grupo": "fora de viagem ou evento",
     "sem_camera": "sem câmera identificada",
     "sem_sugestao": "sem sugestão de destino",
@@ -49,7 +50,15 @@ def _condicao_lacuna(chave: str):
 
     condicoes = {
         "sem_data": MediaFile.data_capturada.is_(None),
-        "sem_gps": or_(MediaFile.gps_lat.is_(None), MediaFile.gps_lon.is_(None)),
+        # Sem coordenada NENHUMA — nem lida, nem herdada de outra câmera.
+        # Contar a estimada aqui mandaria o usuário procurar GPS numa foto
+        # cujo lugar o sistema já sabe.
+        "sem_gps": and_(
+            or_(MediaFile.gps_lat.is_(None), MediaFile.gps_lon.is_(None)),
+            MediaFile.gps_lat_estimado.is_(None),
+        ),
+        # Não é falta: é uma inferência que vale conferir antes de organizar.
+        "local_estimado": MediaFile.gps_lat_estimado.is_not(None),
         "sem_grupo": and_(
             MediaFile.trip_id.is_(None), MediaFile.event_id.is_(None)
         ),

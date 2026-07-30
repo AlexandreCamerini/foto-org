@@ -18,11 +18,23 @@ const DETALHE_HERDADO = {
   model: "EOS R5",
   gps_lat: null,
   gps_lon: null,
+  gps_estimado: true,
+  gps_lat_efetivo: 43.95,
+  gps_lon_efetivo: 4.81,
   local: {
     pais: "França",
     regiao: "Provence-Alpes-Côte d'Azur",
     cidade: "Avignon",
     fonte: "offline:reverse_geocode",
+    estimado: true,
+  },
+  estimativa: {
+    doadora_id: 6,
+    doadora_nome: "IMG_9100.jpg",
+    doadora_camera: "Apple iPhone 15 Pro",
+    delta_s: 120,
+    lat: 43.95,
+    lon: 4.81,
   },
   sugestao: {
     id: 1,
@@ -62,9 +74,39 @@ describe("Inspector", () => {
     expect(screen.getByText(/2min de distância/)).toBeInTheDocument();
   });
 
+  it("marca o lugar como estimado no rótulo, não só no texto", async () => {
+    servirApi({ "/api/midia/7": DETALHE_HERDADO });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("Lugar · estimado")).toBeInTheDocument();
+  });
+
+  it("não repete a história da herança quando a evidência já a conta", async () => {
+    servirApi({ "/api/midia/7": DETALHE_HERDADO });
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("Lugar · estimado");
+    // Uma vez só: a evidência em "Por quê?" cobre; o bloco extra seria ruído
+    // num painel estreito.
+    expect(screen.queryByText(/Esta câmera não gravou coordenada/))
+      .not.toBeInTheDocument();
+  });
+
+  it("sem sugestão, a estimativa ainda se explica", async () => {
+    servirApi({ "/api/midia/7": { ...DETALHE_HERDADO, sugestao: null } });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText(/Esta câmera não gravou coordenada/))
+      .toBeInTheDocument();
+    expect(screen.getByText(/tirada a 2min de distância/)).toBeInTheDocument();
+  });
+
   it("foto sem lugar resolvido não inventa linha vazia", async () => {
     servirApi({
-      "/api/midia/7": { ...DETALHE_HERDADO, local: undefined, sugestao: null },
+      "/api/midia/7": {
+        ...DETALHE_HERDADO, local: undefined, sugestao: null,
+        estimativa: undefined, gps_estimado: false,
+      },
     });
     montar(<Inspector media={MEDIA} />);
 

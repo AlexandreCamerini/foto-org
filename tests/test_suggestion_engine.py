@@ -686,3 +686,71 @@ def test_mes_nao_invade_destino_que_ja_tem_nome(migrated_engine):
     SuggestionEngine(factory).gerar()
     sugestao, _ev = _sugestao_de(factory, "t0.jpg")
     assert sugestao.destino_sugerido == "Eventos/2026/Teatro"
+
+
+def test_coordenada_herdada_e_persistida_com_doador_e_delta(migrated_engine):
+    """A herança precisa sobreviver ao fim da geração: sem coluna, a foto
+    continua contando como "sem coordenada" em toda consulta, e a origem da
+    estimativa não é recuperável depois."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/Camera")
+        telefone = Source(caminho="/fotos/iPhone")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(camera.id, "cam.jpg", "/fotos/Camera", data=base,
+                           make="Canon", model="EOS R5"))
+        session.add(_media(telefone.id, "tel.jpg", "/fotos/iPhone",
+                           data=base + timedelta(minutes=2),
+                           gps=(43.95, 4.8083), make="Apple", model="iPhone 15"))
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    with factory() as session:
+        cam = session.scalar(select(MediaFile).where(MediaFile.nome == "cam.jpg"))
+        tel = session.scalar(select(MediaFile).where(MediaFile.nome == "tel.jpg"))
+        # A coordenada lida continua vazia — estimativa não vira medição.
+        assert cam.gps_lat is None
+        assert cam.gps_lat_estimado == 43.95
+        assert cam.gps_estimado_de_id == tel.id
+        assert cam.gps_estimado_delta_s == 120
+        assert cam.coordenada == (43.95, 4.8083)
+        assert cam.coordenada_estimada is True
+        # A doadora não herda de ninguém.
+        assert tel.gps_lat_estimado is None
+        assert tel.coordenada_estimada is False
+
+
+def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):
+    """Reprocessar um arquivo pode trazer o GPS que faltava. A estimativa
+    antiga não pode sobreviver a isso."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/Camera")
+        telefone = Source(caminho="/fotos/iPhone")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(camera.id, "cam.jpg", "/fotos/Camera", data=base,
+                           make="Canon", model="EOS R5"))
+        session.add(_media(telefone.id, "tel.jpg", "/fotos/iPhone",
+                           data=base + timedelta(minutes=2),
+                           gps=(43.95, 4.8083), make="Apple", model="iPhone 15"))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        cam = session.scalar(select(MediaFile).where(MediaFile.nome == "cam.jpg"))
+        assert cam.gps_lat_estimado is not None
+        cam.gps_lat, cam.gps_lon = 43.96, 4.81   # reprocessado, agora com EXIF
+        session.commit()
+
+    engine.gerar()
+    with factory() as session:
+        cam = session.scalar(select(MediaFile).where(MediaFile.nome == "cam.jpg"))
+        assert cam.gps_lat_estimado is None
+        assert cam.gps_estimado_de_id is None
+        assert cam.coordenada_estimada is False

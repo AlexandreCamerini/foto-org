@@ -28,13 +28,27 @@ export interface Media {
   trip_id: number | null;
   event_id: number | null;
   erro_leitura: string | null;
-  /** Ausente quando a foto não tem lugar resolvido. A coordenada pode ter
-   *  vindo do EXIF ou de outra câmera — quem diz qual é a evidência. */
+  /** true quando a coordenada veio de outra câmera, não do arquivo. */
+  gps_estimado: boolean;
+  gps_lat_efetivo: number | null;
+  gps_lon_efetivo: number | null;
+  /** Ausente quando a foto não tem lugar resolvido. */
   local?: {
     pais: string | null;
     regiao: string | null;
     cidade: string | null;
     fonte: string;
+    estimado: boolean;
+  };
+  /** Só no detalhe, e só quando a coordenada foi herdada: de quem veio e a
+   *  que distância no tempo. É o que torna a estimativa auditável. */
+  estimativa?: {
+    doadora_id: number;
+    doadora_nome: string;
+    doadora_camera: string | null;
+    delta_s: number | null;
+    lat: number | null;
+    lon: number | null;
   };
 }
 

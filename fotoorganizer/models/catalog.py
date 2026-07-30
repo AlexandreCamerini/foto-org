@@ -105,6 +105,18 @@ class MediaFile(Base):
     altura: Mapped[int | None]
     gps_lat: Mapped[float | None]
     gps_lon: Mapped[float | None]
+    # Coordenada HERDADA de outra foto, de outro dispositivo, próxima no
+    # tempo. Fica separada de gps_lat/gps_lon porque estimativa e medição não
+    # são a mesma coisa — misturar as duas apaga a distinção que o usuário
+    # precisa ver antes de aprovar um destino. Ver docs/PLANO_LOCAL_ESTIMADO.md.
+    gps_lat_estimado: Mapped[float | None]
+    gps_lon_estimado: Mapped[float | None]
+    gps_estimado_de_id: Mapped[int | None] = mapped_column(
+        ForeignKey("media_files.id")
+    )
+    # Δt até a foto doadora, JÁ corrigido de deriva de relógio. Em coluna, e
+    # não só dentro da justificativa, para poder filtrar por ele.
+    gps_estimado_delta_s: Mapped[int | None]
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"))
@@ -117,6 +129,20 @@ class MediaFile(Base):
     )
     erro_leitura: Mapped[str | None] = mapped_column(Text)
     indexado_em: Mapped[datetime] = mapped_column(default=utcnow)
+
+    @property
+    def coordenada(self) -> tuple[float, float] | None:
+        """A coordenada que vale para esta foto: a lida, senão a estimada."""
+        if self.gps_lat is not None:
+            return self.gps_lat, self.gps_lon
+        if self.gps_lat_estimado is not None:
+            return self.gps_lat_estimado, self.gps_lon_estimado
+        return None
+
+    @property
+    def coordenada_estimada(self) -> bool:
+        """True quando o lugar veio de outra foto, não do arquivo."""
+        return self.gps_lat is None and self.gps_lat_estimado is not None
 
     source: Mapped[Source] = relationship(back_populates="arquivos")
     metadados: Mapped[list["MetadataEntry"]] = relationship(

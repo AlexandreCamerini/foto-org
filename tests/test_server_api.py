@@ -71,6 +71,8 @@ def test_detalhe_expoe_o_lugar_resolvido(client, migrated_engine):
     assert detalhe["local"] == {
         "pais": "França", "regiao": "Provence", "cidade": "Avignon",
         "fonte": "offline:reverse_geocode",
+        # Esta foto tem GPS próprio (img_0 do fixture): o lugar é medido.
+        "estimado": False,
     }
 
 
@@ -508,3 +510,51 @@ def test_origem_local_e_ausencia_de_origem_seguem_normais(client):
         "/api/status", headers={"origin": "http://localhost:5173"}
     ).status_code == 200
     assert client.get("/api/status").status_code == 200  # curl/CLI
+
+
+def test_detalhe_traz_a_foto_que_doou_a_coordenada(client, migrated_engine):
+    """A estimativa só é auditável se a doadora for alcançável a partir de
+    quem herdou — id, nome, câmera e Δt, não só uma frase."""
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fotos = list(session.scalars(select(MediaFile).order_by(MediaFile.nome)))
+        doadora, herdeira = fotos[0], fotos[1]
+        doadora.make, doadora.model = "Apple", "iPhone 15 Pro"
+        herdeira.gps_lat = herdeira.gps_lon = None
+        herdeira.gps_lat_estimado, herdeira.gps_lon_estimado = 43.95, 4.81
+        herdeira.gps_estimado_de_id = doadora.id
+        herdeira.gps_estimado_delta_s = 120
+        ids = (doadora.id, herdeira.id)
+        session.commit()
+
+    detalhe = client.get(f"/api/midia/{ids[1]}").json()
+    assert detalhe["gps_lat"] is None
+    assert detalhe["gps_estimado"] is True
+    assert detalhe["gps_lat_efetivo"] == 43.95
+    assert detalhe["estimativa"] == {
+        "doadora_id": ids[0], "doadora_nome": "img_0.jpg",
+        "doadora_camera": "Apple iPhone 15 Pro",
+        "delta_s": 120, "lat": 43.95, "lon": 4.81,
+    }
+
+
+def test_lacuna_sem_coordenada_ignora_quem_tem_estimativa(client, migrated_engine):
+    """Mandar o usuário procurar GPS numa foto cujo lugar o sistema já
+    estimou é trabalho inventado. A estimativa vira lacuna própria."""
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        foto = session.scalars(
+            select(MediaFile).where(MediaFile.gps_lat.is_(None))
+        ).first()
+        foto.gps_lat_estimado, foto.gps_lon_estimado = 43.95, 4.81
+        session.commit()
+
+    lacunas = {l["chave"]: l["quantidade"]
+               for l in client.get("/api/panorama").json()["lacunas"]}
+    # 5 fotos, 1 com GPS próprio, 1 agora com estimativa → 3 sem nada.
+    assert lacunas["sem_gps"] == 3
+    assert lacunas["local_estimado"] == 1

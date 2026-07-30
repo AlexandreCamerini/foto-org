@@ -115,6 +115,11 @@ def _media_json(m: MediaFile) -> dict:
         "altura": m.altura,
         "gps_lat": m.gps_lat,
         "gps_lon": m.gps_lon,
+        # Coordenada efetiva + se ela é estimada: a grade precisa marcar a
+        # diferença sem uma consulta por miniatura.
+        "gps_estimado": m.coordenada_estimada,
+        "gps_lat_efetivo": m.coordenada[0] if m.coordenada else None,
+        "gps_lon_efetivo": m.coordenada[1] if m.coordenada else None,
         "source_id": m.source_id,
         "trip_id": m.trip_id,
         "event_id": m.event_id,
@@ -234,6 +239,20 @@ def create_app(
                         "regiao": local.regiao,
                         "cidade": local.cidade,
                         "fonte": local.fonte,
+                        "estimado": media.coordenada_estimada,
+                    }
+            if media.gps_estimado_de_id is not None:
+                doadora = session.get(MediaFile, media.gps_estimado_de_id)
+                if doadora is not None:
+                    detalhe["estimativa"] = {
+                        "doadora_id": doadora.id,
+                        "doadora_nome": doadora.nome,
+                        "doadora_camera": " ".join(
+                            filter(None, [doadora.make, doadora.model])
+                        ) or None,
+                        "delta_s": media.gps_estimado_delta_s,
+                        "lat": media.gps_lat_estimado,
+                        "lon": media.gps_lon_estimado,
                     }
             sugestao = session.scalar(
                 select(Suggestion).where(Suggestion.media_id == media_id)

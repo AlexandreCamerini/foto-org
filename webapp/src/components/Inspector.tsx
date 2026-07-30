@@ -67,7 +67,7 @@ export default function Inspector({ media }: { media: Media | null }) {
               }
             />
             <Linha
-              rotulo="Lugar"
+              rotulo={detalhe?.local?.estimado ? "Lugar · estimado" : "Lugar"}
               valor={
                 detalhe?.local
                   ? [detalhe.local.cidade, detalhe.local.regiao, detalhe.local.pais]
@@ -78,6 +78,23 @@ export default function Inspector({ media }: { media: Media | null }) {
             />
             <Linha rotulo="Pasta" valor={detalhe?.pasta} />
           </dl>
+
+          {/* Quando há sugestão, a evidência de vizinhança temporal já conta
+              esta história em "Por quê?" — repetir num painel de 288px é
+              ruído. O bloco cobre o caso sem sugestão (já aprovada, ou
+              decidida pelo usuário), em que a estimativa ficaria muda. */}
+          {detalhe?.estimativa && !detalhe?.sugestao && (
+            <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5 text-texto-2">
+              Esta câmera não gravou coordenada. O lugar veio de{" "}
+              <span className="text-texto">{detalhe.estimativa.doadora_nome}</span>
+              {detalhe.estimativa.doadora_camera
+                ? ` (${detalhe.estimativa.doadora_camera})`
+                : ""}
+              {detalhe.estimativa.delta_s != null
+                ? `, tirada a ${formatarDelta(detalhe.estimativa.delta_s)} de distância.`
+                : "."}
+            </div>
+          )}
 
           {detalhe?.sugestao && (
             <div className="mt-3 border-t border-borda pt-3">
@@ -118,4 +135,9 @@ function Linha({ rotulo, valor }: { rotulo: string; valor?: string | null }) {
       <dd className="break-all">{valor}</dd>
     </div>
   );
+}
+
+/** Δt legível, no mesmo vocabulário do motor (fotoorganizer/classification). */
+function formatarDelta(segundos: number): string {
+  return segundos < 60 ? `${segundos}s` : `${Math.round(segundos / 60)}min`;
 }

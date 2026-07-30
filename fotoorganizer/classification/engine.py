@@ -156,6 +156,7 @@ class SuggestionEngine:
             # TODAS as mídias, inclusive as referências sem arquivo local —
             # são elas que trazem GPS de celular numa biblioteca em iCloud.
             herancas = self._correlacionar(midias)
+            self._persistir_herancas(midias, herancas)
 
             # Daqui em diante só o que o usuário pode ver e organizar: uma
             # referência não tem arquivo para agrupar nem para copiar.
@@ -189,6 +190,31 @@ class SuggestionEngine:
                 "herancas_gps": len(herancas),
                 "preservadas": len(decididas),
             }
+
+    @staticmethod
+    def _persistir_herancas(midias, herancas: dict[int, Heranca]) -> None:
+        """Grava a coordenada herdada — quem doou e a que distância no tempo.
+
+        Antes isto vivia só em memória durante a geração: o lugar resolvido
+        virava `location_id` e a coordenada se perdia, então a foto seguia
+        contando como "sem coordenada" em toda consulta. Reescreve a cada
+        rodada porque a herança depende do conjunto: uma foto nova com GPS
+        pode virar doadora melhor, e uma fonte removida invalida a antiga.
+        """
+        for media in midias:
+            heranca = herancas.get(media.id)
+            if heranca is None or media.gps_lat is not None:
+                # Sem doador, ou a foto passou a ter coordenada própria: a
+                # estimativa antiga não vale mais.
+                media.gps_lat_estimado = None
+                media.gps_lon_estimado = None
+                media.gps_estimado_de_id = None
+                media.gps_estimado_delta_s = None
+                continue
+            media.gps_lat_estimado = heranca.lat
+            media.gps_lon_estimado = heranca.lon
+            media.gps_estimado_de_id = heranca.doador_id
+            media.gps_estimado_delta_s = int(heranca.delta.total_seconds())
 
     # -- correlação entre fontes ---------------------------------------------
     @staticmethod
