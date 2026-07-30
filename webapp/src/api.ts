@@ -28,6 +28,14 @@ export interface Media {
   trip_id: number | null;
   event_id: number | null;
   erro_leitura: string | null;
+  /** Ausente quando a foto não tem lugar resolvido. A coordenada pode ter
+   *  vindo do EXIF ou de outra câmera — quem diz qual é a evidência. */
+  local?: {
+    pais: string | null;
+    regiao: string | null;
+    cidade: string | null;
+    fonte: string;
+  };
 }
 
 export interface Evidencia {

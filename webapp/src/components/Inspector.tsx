@@ -66,6 +66,16 @@ export default function Inspector({ media }: { media: Media | null }) {
                   : null
               }
             />
+            <Linha
+              rotulo="Lugar"
+              valor={
+                detalhe?.local
+                  ? [detalhe.local.cidade, detalhe.local.regiao, detalhe.local.pais]
+                      .filter(Boolean)
+                      .join(", ")
+                  : null
+              }
+            />
             <Linha rotulo="Pasta" valor={detalhe?.pasta} />
           </dl>
 

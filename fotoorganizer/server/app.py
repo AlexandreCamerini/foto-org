@@ -33,6 +33,7 @@ from fotoorganizer import __version__
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.models import (
     Event,
+    Location,
     MediaFile,
     Suggestion,
     SuggestionStatus,
@@ -222,6 +223,18 @@ def create_app(
             raise HTTPException(404, "foto não encontrada")
         detalhe = _media_json(media)
         with session_factory() as session:
+            # Só no detalhe: na grade isto seria uma consulta por miniatura.
+            # O lugar pode ter vindo de GPS próprio ou herdado de outra
+            # câmera — qual dos dois foi está nas evidências, abaixo.
+            if media.location_id is not None:
+                local = session.get(Location, media.location_id)
+                if local is not None:
+                    detalhe["local"] = {
+                        "pais": local.pais,
+                        "regiao": local.regiao,
+                        "cidade": local.cidade,
+                        "fonte": local.fonte,
+                    }
             sugestao = session.scalar(
                 select(Suggestion).where(Suggestion.media_id == media_id)
             )
