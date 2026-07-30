@@ -24,8 +24,13 @@ identificáveis, todas visíveis nas capturas da fase 2. Não é impressão vaga
 | Navegação como fileira de links de texto | padrão de menu de site; no Mac seria barra de ferramentas ou lateral | idioma |
 | Acento azul | `blue-500`, o padrão do Tailwind | token |
 | Botões de bloco no rodapé da lateral | layout de web; no Mac seria `+` discreto ou item de menu | idioma |
-| Corpo em 16px | medida de página; app Mac trabalha em 13px | token |
 | Quatro miniaturas no canto de uma área imensa vazia | grade não preenche nem centraliza | layout |
+| Superfícies em cinza sólido (#252526, #2d2d30) | painel com cor própria compete com a foto | token |
+
+**Correção de 30/07.** A versão anterior deste documento listava "corpo em
+16px" como causa. Está errado: `webapp/src/index.css` já definia 13px, e a
+medição por `getComputedStyle` na página viva confirmou. A escala não era o
+problema — as superfícies cinza-sólidas e o acento azul eram.
 
 A causa raiz é uma só: **React + Vite + Tailwind num navegador herda o visual
 do navegador em tudo que não for explicitamente desenhado.** O
@@ -55,15 +60,23 @@ arquitetura de informação.
 
 ### O que a Revisão não responde hoje
 
-Olhando uma linha da tela de Revisão, o usuário não sabe: qual foto é (não há
-miniatura nem nome visível), de que câmera veio, quando foi tirada, por que
-aquele destino, o que o "Média" significa, nem o que acontece se ele errar.
+Olhando uma linha da tela de Revisão, o usuário não sabe: qual foto é, de que
+câmera veio, quando foi tirada, por que aquele destino, o que o "Média"
+significa, nem o que acontece se ele errar.
+
 Ele tem dois botões — Aprovar e Rejeitar — e nenhuma base para escolher entre
 eles. Com 63 linhas idênticas, a única ação racional é "Aprovar todas", que é
 exatamente o que a tela oferece no topo.
 
 **Uma tela de revisão que empurra o usuário para "aprovar tudo" não é uma tela
 de revisão.**
+
+**Correção de 30/07.** A versão anterior dizia "não há miniatura". Está
+errado: `Review.tsx` sempre teve um `<img>` de 48px por linha, e o nome do
+arquivo sempre foi renderizado. O defeito real é mais estreito e mais
+interessante — `{s.pasta}/` vinha antes do nome na mesma linha, e o
+`truncate` cortava antes de o nome aparecer. O elemento estava lá; a
+informação, não. Foi por isso que as 63 linhas ficaram visualmente idênticas.
 
 ---
 

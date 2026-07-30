@@ -19,7 +19,10 @@ from typing import Protocol
 
 log = logging.getLogger(__name__)
 
-MODELO_PADRAO = "claude-opus-4-8"
+# Opus 5 é a geração corrente do tier. Ver docs/PLANO_IA_E_PRODUTO.md §3
+# para a recomendação de descer para Haiku 4.5 nesta tarefa: rotular
+# metadados em três categorias não precisa do modelo mais caro.
+MODELO_PADRAO = "claude-opus-5"
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +132,13 @@ class ClaudeAdvisor:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
+                # Sem raciocínio estendido, e explicitamente. No Opus 4.8
+                # omitir `thinking` já significava não pensar; no Opus 5 o
+                # padrão passou a ser pensar, e `max_tokens` cobre
+                # raciocínio MAIS resposta — 1024 truncaria o JSON no meio.
+                # A tarefa é rotular um punhado de metadados em três
+                # categorias; não é onde raciocínio longo paga.
+                thinking={"type": "disabled"},
                 system=_SYSTEM,
                 output_config={
                     "format": {"type": "json_schema", "schema": _SCHEMA}

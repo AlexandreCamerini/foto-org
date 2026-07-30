@@ -302,3 +302,82 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   grande.
 - Como reverter: o desdobramento já mostra a lista plana dentro do grupo.
 - Status: decidido por timeout
+
+## D-019 — `defusedxml` declarado, não instalado
+- Fase: 3
+- Classe: C (respeitada)
+- Data: 2026-07-30
+- Contexto: o Pillow só analisa XMP com um parser de XML endurecido. O venv é
+  compartilhado com o checkout principal, e o dono estava dormindo.
+- Opções: (a) instalar no venv; (b) declarar como extra opcional e degradar
+  em silêncio; (c) não implementar XMP.
+- Escolhida: (b)
+- Por quê: instalar num venv compartilhado é alterar o ambiente do dono sem
+  ele. (c) desperdiçaria o achado. Com (b), IPTC — que é a metade que não
+  precisa de nada — entra hoje, e XMP liga com um comando.
+- Como reverter: `pip install -e '.[xmp]'` liga; remover o extra desliga.
+- Status: aguardando (classe C)
+
+## D-020 — exiftool não entra nesta rodada
+- Fase: 3
+- Classe: C (respeitada)
+- Data: 2026-07-30
+- Contexto: não está instalado; instalar é alterar o ambiente do dono.
+- Opções: (a) instalar e medir; (b) implementar o extrator às cegas;
+  (c) implementar Python puro agora e deixar a medição pronta.
+- Escolhida: (c)
+- Por quê: (b) escreveria código que não dá para verificar. (c) entrega IPTC
+  e XMP hoje e transforma "exiftool lê mais" de folclore em número quando o
+  dono instalar — `scripts/medir_exiftool.py` compara tag a tag por formato.
+- Como reverter: `brew install exiftool` e rodar o script.
+- Status: aguardando (classe C)
+
+## D-021 — Precedência XMP → IPTC → EXIF
+- Fase: 3
+- Classe: B
+- Data: 2026-07-30
+- Contexto: o mesmo campo (autor, direitos, legenda, data) aparece em até três
+  padrões, e agora os três chegam ao banco.
+- Opções: (a) EXIF primeiro, por ser o do momento do disparo; (b) XMP → IPTC →
+  EXIF; (c) sem precedência — guardar os três e nunca escolher.
+- Escolhida: (b), com (c) preservado por baixo
+- Por quê: XMP costuma ser o mais recentemente escrito (o editor grava ao
+  salvar), IPTC vem de quem cataloga profissionalmente, e o EXIF é o que a
+  câmera pôs e ninguém revisou. Mas a precedência só decide o valor canônico:
+  cada leitura continua sendo evidência com origem própria, então a
+  divergência fica visível em vez de resolvida em silêncio.
+- Como reverter: a ordem é uma lista; os três valores continuam no banco.
+- Status: decidido por timeout (não implementado — depende de D-023)
+
+## D-022 — Advisor sobe para Opus 5 com `thinking` desligado
+- Fase: 5
+- Classe: A
+- Data: 2026-07-30
+- Contexto: `MODELO_PADRAO` estava em `claude-opus-4-8`, uma geração atrás.
+  A troca não é drop-in: o advisor não passava `thinking`, e o significado
+  disso mudou — no 4.8 omitir era não pensar, no Opus 5 é pensar, e
+  `max_tokens` cobre raciocínio mais resposta.
+- Opções: (a) deixar em 4.8; (b) subir para Opus 5 sem mais nada;
+  (c) subir com `thinking: disabled` explícito.
+- Escolhida: (c)
+- Por quê: (b) truncaria o JSON no meio com `max_tokens=1024`. A tarefa é
+  rotular metadados em três categorias — não é onde raciocínio longo paga, e
+  desligar também é mais barato.
+- Como reverter: uma constante e um parâmetro.
+- Status: decidido
+
+## D-023 — Colunas tipadas de direitos e autoria ficam para depois da medição
+- Fase: 3 e 5
+- Classe: B
+- Data: 2026-07-30
+- Contexto: com IPTC lido, autor, direitos, licença e crédito existem no banco
+  sem ter onde morar — ficam em `metadata_entries`, não filtráveis.
+- Opções: (a) migrar agora as quatro colunas; (b) esperar medir quantas chaves
+  por foto um acervo real produz.
+- Escolhida: (b)
+- Por quê: a decisão certa depende do volume, e o volume só se mede com
+  exiftool instalado ou com o acervo real — as duas coisas são classe C.
+  Migrar antes é adivinhar o formato; a migração é aditiva e barata agora,
+  cara com 500 mil linhas já escritas.
+- Como reverter: não se aplica; nada foi migrado.
+- Status: decidido por timeout
