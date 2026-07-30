@@ -70,3 +70,21 @@ def test_erro_do_apple_nomeia_o_app_que_precisa_da_permissao(
     assert main(["importar", "apple"]) == 1
     saida = capsys.readouterr().out
     assert "«Claude»" in saida
+
+
+def test_data_dir_isola_o_catalogo_do_padrao(tmp_path, capsys):
+    """Sem esta flag, a única forma de rodar contra um catálogo limpo era
+    editar a config real do usuário ou trocar o HOME do processo. Suporte
+    não consegue pedir isso a ninguém."""
+    fotos = tmp_path / "fotos"
+    make_jpeg(fotos / "a.jpg", seed=1)
+    alternativo = tmp_path / "catalogo-de-teste"
+
+    assert main(["--data-dir", str(alternativo), "scan", str(fotos)]) == 0
+
+    assert (alternativo / "catalog.db").is_file()
+    saida = capsys.readouterr().out
+    assert str(alternativo / "catalog.db") in saida
+    # E o padrão do usuário não foi tocado.
+    from fotoorganizer.config import paths
+    assert paths.default_data_dir() not in alternativo.parents

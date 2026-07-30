@@ -26,7 +26,23 @@ from pathlib import Path
 from fotoorganizer.config import load_settings
 
 
-def _abrir_catalogo():
+def _settings(args: argparse.Namespace | None = None):
+    """Config do TOML, com `--data-dir` sobrepondo o catálogo padrão.
+
+    Sem isso não há como rodar contra um catálogo limpo sem editar a config
+    real do usuário — o que torna qualquer diagnóstico de suporte invasivo.
+    """
+    from dataclasses import replace
+
+    settings = load_settings()
+    data_dir = getattr(args, "data_dir", None)
+    if data_dir:
+        raiz = Path(data_dir).expanduser()
+        settings = replace(settings, data_dir=raiz, cache_dir=raiz / "cache")
+    return settings
+
+
+def _abrir_catalogo(args: argparse.Namespace | None = None):
     """Settings + session factory com o schema já migrado."""
     from fotoorganizer.database import (
         create_db_engine,
@@ -34,13 +50,13 @@ def _abrir_catalogo():
         upgrade_to_head,
     )
 
-    settings = load_settings()
+    settings = _settings(args)
     settings.ensure_dirs()
     upgrade_to_head(settings.db_path)
     return settings, create_session_factory(create_db_engine(settings.db_path))
 
 
-def _build_scanner(db_path: Path):
+def _build_scanner(db_path: Path, settings=None):
     from fotoorganizer.database import (
         create_db_engine,
         create_session_factory,
@@ -50,7 +66,7 @@ def _build_scanner(db_path: Path):
     from fotoorganizer.scanner import CatalogScanner
     from fotoorganizer.thumbnails import ThumbnailCache
 
-    settings = load_settings()
+    settings = settings or load_settings()
     upgrade_to_head(db_path)
     engine = create_db_engine(db_path)
     factory = create_session_factory(engine)
@@ -70,9 +86,9 @@ def _print_progress(metrics, caminho: str) -> None:
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
-    settings = load_settings()
+    settings = _settings(args)
     settings.ensure_dirs()
-    scanner = _build_scanner(settings.db_path)
+    scanner = _build_scanner(settings.db_path, settings)
 
     for pasta in args.pastas:
         print(f"Varrendo {pasta} (somente leitura, catálogo em {settings.db_path})")
@@ -102,7 +118,7 @@ def cmd_importar(args: argparse.Namespace) -> int:
     from fotoorganizer.sources.apple_photos import ApplePhotosError
     from fotoorganizer.thumbnails import ThumbnailCache
 
-    settings, factory = _abrir_catalogo()
+    settings, factory = _abrir_catalogo(args)
     if args.fonte == "apple":
         provider = ApplePhotosProvider(
             Path(args.caminho).expanduser() if args.caminho else None
@@ -143,7 +159,7 @@ def cmd_importar(args: argparse.Namespace) -> int:
 def cmd_planos(args: argparse.Namespace) -> int:
     from fotoorganizer.repositories import OperationRepository
 
-    _, factory = _abrir_catalogo()
+    _, factory = _abrir_catalogo(args)
     planos = OperationRepository(factory).listar_planos()
     if not planos:
         print("Nenhum plano. Crie um com: fotoorganizer plano <raiz-destino>")
@@ -181,7 +197,7 @@ def cmd_plano(args: argparse.Namespace) -> int:
     from fotoorganizer.operations import OperationPlanner
     from fotoorganizer.repositories import OperationRepository
 
-    _, factory = _abrir_catalogo()
+    _, factory = _abrir_catalogo(args)
     raiz = Path(args.destino).expanduser()
     plan_id = OperationPlanner(factory).criar_plano(raiz, args.nome)
     if plan_id is None:
@@ -197,7 +213,7 @@ def cmd_plano(args: argparse.Namespace) -> int:
 def cmd_dry_run(args: argparse.Namespace) -> int:
     from fotoorganizer.operations import OperationExecutor
 
-    _, factory = _abrir_catalogo()
+    _, factory = _abrir_catalogo(args)
     r = OperationExecutor(factory).dry_run(args.plano_id)
     print(f"Prontos: {r['prontos']} · {r['bytes_necessarios'] / 1e6:.1f} MB")
     if r["bytes_livres"] is not None:
@@ -217,7 +233,7 @@ def cmd_executar(args: argparse.Namespace) -> int:
         print("Execução copia arquivos de verdade. Repita com --confirmar.")
         return 1
 
-    _, factory = _abrir_catalogo()
+    _, factory = _abrir_catalogo(args)
 
     def progresso(n: int, total: int, origem: str) -> None:
         sys.stdout.write(f"\r{n}/{total} — {Path(origem).name}      ")
@@ -283,7 +299,7 @@ def cmd_web(args: argparse.Namespace) -> int:
     )
     from fotoorganizer.server import create_app
 
-    settings = load_settings()
+    settings = _settings(args)
     settings.ensure_dirs()
     upgrade_to_head(settings.db_path)
     factory = create_session_factory(create_db_engine(settings.db_path))
@@ -297,6 +313,12 @@ def cmd_web(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING)
     parser = argparse.ArgumentParser(prog="fotoorganizer")
+    parser.add_argument(
+        "--data-dir", metavar="PASTA",
+        help="usa outro catálogo em vez do padrão (~/Library/Application "
+             "Support/FotoOrganizer) — para testar ou isolar um problema "
+             "sem tocar no catálogo real",
+    )
     sub = parser.add_subparsers(dest="comando", required=True)
 
     p_scan = sub.add_parser("scan", help="varre pastas para o catálogo (read-only)")
