@@ -214,3 +214,39 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   por natureza, precisa resolver isso de verdade.
 - Como reverter: refazer as capturas com ferramenta que grave em disco.
 - Status: decidido por timeout
+
+## D-014 — `design-mirror` substituído por extração via navegador
+- Fase: 6 (preparação)
+- Classe: A
+- Data: 2026-07-29
+- Contexto: a skill `brightdata-plugin:design-mirror` exige
+  `BRIGHTDATA_API_KEY` e uma zona Unlocker; nenhuma das duas existe no
+  ambiente, e o CLI `bdata` não está instalado.
+- Opções: (a) pedir ao dono que crie conta e chave de API na Bright Data;
+  (b) extrair os tokens abrindo os sites no navegador e lendo o estilo
+  computado.
+- Escolhida: (b)
+- Por quê: `getComputedStyle` na página viva entrega o valor que o usuário
+  realmente vê, enquanto o HTML raspado precisa ser interpretado. Não envolve
+  terceiro, não exige conta, e é mais preciso. Pedir chave de API ao dono para
+  um levantamento que o navegador já resolve seria custo sem ganho.
+- Como reverter: configurar as variáveis e rodar a skill como documentada.
+- Status: decidido
+
+## D-015 — Peakto rejeitada como referência visual
+- Fase: 6 (preparação)
+- Classe: B
+- Data: 2026-07-29
+- Contexto: o dono pediu comparação das três referências antes de escolher. A
+  extração mostrou que cyme.io usa Roboto + Fjalla One condensada, ciano sobre
+  preto e corpo a 19px/34px — estética de site de agência.
+- Opções: (a) espelhar Peakto por ser o concorrente mais próximo; (b) rejeitar
+  como referência visual e manter só como referência de arquitetura de
+  informação; (c) espelhar as três e mediar.
+- Escolhida: (b)
+- Por quê: espelhar cyme.io deixaria o app mais parecido com página web, que é
+  o oposto do problema relatado. A proximidade funcional de Peakto está na
+  organização das fontes, não na aparência do site institucional.
+- Como reverter: o comparativo em `docs/REFERENCIAS_DESIGN.md` tem os tokens
+  extraídos; basta escolher outra composição.
+- Status: decidido por timeout
