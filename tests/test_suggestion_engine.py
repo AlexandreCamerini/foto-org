@@ -166,6 +166,41 @@ def test_gps_herdado_dentro_de_viagem_chega_a_sugestao(migrated_engine):
     assert "iPhone 15" in heranca.justificativa
 
 
+def test_fotos_sem_data_de_captura_nao_viram_viagem(migrated_engine):
+    """mtime é quando o arquivo chegou ao disco, não quando a foto foi
+    tirada. Um lote de arquivos sem EXIF (captura de tela, arquivo
+    recuperado) não pode virar uma viagem na data do scan."""
+    factory = create_session_factory(migrated_engine)
+    chegada = datetime(2026, 7, 29, 14, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # O gatilho real: basta UM arquivo sem EXIF numa pasta cujo nome
+        # classifica a sessão como viagem. O período sai do mtime, e a
+        # viagem nasce datada no dia do scan.
+        session.add(_media(
+            fonte.id, "sem_exif_viagem.jpg", "/fotos/Viagens/2024 - França",
+            mtime=chegada,
+        ))
+        for i in range(4):
+            session.add(_media(
+                fonte.id, f"sem_exif_{i}.png", "/fotos/Diversos",
+                mtime=chegada + timedelta(minutes=i),
+            ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    stats = engine.gerar()
+
+    assert stats["viagens"] == 0
+    assert stats["eventos"] == 0
+    with factory() as session:
+        assert session.scalar(select(Trip)) is None
+    # As fotos continuam catalogadas e com sugestão — só não inventam viagem.
+    assert stats["sugestoes"] == 5
+
+
 def test_vizinhanca_infere_pais_de_fotos_proximas(ambiente):
     factory, engine = ambiente
     engine.gerar()

@@ -250,11 +250,19 @@ class SuggestionEngine:
         sessao_da_media: dict[int, _Sessao] = {}
         for draft in drafts:
             membros = [por_id[i] for i in draft.media_ids]
-            sessao = self._classificar(
-                session, _Sessao(draft=draft), membros, casa, herancas
-            )
-            if sessao.tipo == "neutra" and self._advisor is not None:
-                self._consultar_advisor(sessao, membros)
+            if any(m.data_capturada for m in membros):
+                sessao = self._classificar(
+                    session, _Sessao(draft=draft), membros, casa, herancas
+                )
+                if sessao.tipo == "neutra" and self._advisor is not None:
+                    self._consultar_advisor(sessao, membros)
+            else:
+                # Nenhum membro tem data de captura: o que sobrou é mtime, a
+                # data em que o arquivo chegou ao disco. Agrupar por ela cria
+                # uma "viagem" no dia do scan — captura de tela e arquivo
+                # recuperado viram passeio. A sessão fica neutra; a foto
+                # continua catalogada e cai no ramo de não classificadas.
+                sessao = _Sessao(draft=draft)
             sessoes.append(sessao)
             for media_id in draft.media_ids:
                 sessao_da_media[media_id] = sessao
