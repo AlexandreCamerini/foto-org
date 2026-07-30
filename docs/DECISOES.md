@@ -149,3 +149,68 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
 - Por quê: symlink preserva as duas convenções de nome sem duplicar conteúdo.
 - Como reverter: `cp` de volta.
 - Status: aguardando (fora da fronteira)
+
+## D-010 — Catálogo isolado por redirecionamento de `HOME`
+- Fase: 2
+- Classe: A
+- Data: 2026-07-29
+- Contexto: a fase exige exercitar o app de ponta a ponta, e o catálogo real do
+  dono (31 MB) é classe C. O CLI não tem `--data-dir` nem `--config`.
+- Opções: (a) editar o `config.toml` real temporariamente; (b) redirecionar
+  `HOME` para um diretório temporário; (c) não exercitar e auditar só por
+  leitura de código.
+- Escolhida: (b)
+- Por quê: tudo em `config/paths.py` deriva de `Path.home()`, então o
+  redirecionamento isola catálogo, cache, config e logs de uma vez, sem editar
+  nenhum arquivo do dono. (a) mexeria em config real; (c) não responderia a
+  pergunta da fase.
+- Como reverter: apagar o diretório temporário; nada fora dele foi tocado.
+- Status: decidido
+
+## D-011 — Execução de plano não foi exercitada
+- Fase: 2
+- Classe: C
+- Data: 2026-07-29
+- Contexto: o fluxo de operações foi verificado até o dry-run. Executar copiaria
+  arquivos de verdade, ainda que para um diretório temporário.
+- Opções: (a) executar contra destino temporário; (b) parar no dry-run.
+- Escolhida: (b)
+- Por quê: "operação física fora de dry-run" está na classe C do protocolo, sem
+  ressalva de destino. A leitura disciplinada é parar, mesmo quando o risco
+  concreto é baixo — a regra vale pelo hábito que cria.
+- Como reverter: rodar `POST /api/operacoes/{id}/executar` no catálogo isolado
+  quando o dono autorizar.
+- Status: aguardando (classe C)
+
+## D-012 — `npm install` no worktree tratado como classe A
+- Fase: 2
+- Classe: A
+- Data: 2026-07-29
+- Contexto: `webapp/node_modules` não existia no worktree, e sem ele os passos
+  3 e 4 de `verificar.sh` não rodam nem o webapp sobe.
+- Opções: (a) tratar como dependência de sistema (classe C) e não instalar;
+  (b) instalar, por ser escopo de projeto.
+- Escolhida: (b)
+- Por quê: a classe C fala de dependência **de sistema**. `node_modules` é
+  local ao projeto, gitignorado e reversível com `rm -rf` — não altera o
+  ambiente do dono fora do worktree.
+- Como reverter: `rm -rf webapp/node_modules`.
+- Status: decidido
+
+## D-013 — Capturas de tela não versionadas
+- Fase: 2
+- Classe: B
+- Data: 2026-07-29
+- Contexto: o protocolo pede captura em `docs/capturas/`. As capturas foram
+  feitas e analisadas na sessão, mas a ferramenta de navegador entrega a imagem
+  em contexto e não grava arquivo.
+- Opções: (a) montar um caminho de captura headless só para persistir PNG;
+  (b) transcrever no relatório o que cada captura mostra, com a saída de SQL e
+  de API como evidência durável.
+- Escolhida: (b)
+- Por quê: para os achados desta fase, a saída de SQL e da API é evidência mais
+  forte que a imagem — mostra a causa, não só o sintoma. Montar captura
+  headless custaria mais que o valor que agrega aqui. A fase 6, que é visual
+  por natureza, precisa resolver isso de verdade.
+- Como reverter: refazer as capturas com ferramenta que grave em disco.
+- Status: decidido por timeout
