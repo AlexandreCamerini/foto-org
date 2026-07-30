@@ -39,8 +39,12 @@ fallback até paridade.
   tamanho, inode, ctime, mtime, data_capturada, tz_estimado, make, model,
   lente, orientação, largura, altura, gps_lat, gps_lon, hash_rapido,
   hash_sha256 (nullable), status_revisão, erro_leitura, indexado_em.
-- `metadata_entries` — media_id, namespace (exif/iptc/xmp/fs), chave, valor
-  (dados brutos relevantes; nada de listas em texto com vírgula).
+- `metadata_entries` — media_id, namespace, chave, valor (dados brutos
+  relevantes). Namespaces reais: `exif`, `gps`, `iptc`, `xmp` (este só
+  com `defusedxml` — ver docs/PLANO_METADADOS.md), `libraw` em RAW, e
+  `apple`/`google` vindos de catálogo externo. Campo repetível vira uma
+  linha com valores separados por ponto e vírgula, não chave indexada:
+  índice em chave não sobrevive a reprocessamento.
 - `locations` — geocoding resolvido (país, região, cidade, local, fonte do
   dado, cache key) referenciado por `media_files.location_id`.
 - `trips` / `events` — agrupamentos com período, local dominante, método.
