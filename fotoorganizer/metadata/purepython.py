@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from PIL import ExifTags, Image
+from PIL import ExifTags, Image, IptcImagePlugin
 
 from fotoorganizer.metadata.base import MediaMetadata
 
@@ -90,6 +90,105 @@ def _coletar(destino: list, namespace: str, itens) -> None:
             destino.append((namespace, nome, texto))
 
 
+# IPTC/IIM por (registro, campo). Só os que um DAM usa — o padrão tem
+# dezenas, e despejar todos enche metadata_entries de ruído.
+_IPTC_CAMPOS: dict[tuple[int, int], str] = {
+    (2, 5): "ObjectName",          # título
+    (2, 25): "Keywords",           # repetível
+    (2, 55): "DateCreated",
+    (2, 60): "TimeCreated",
+    (2, 80): "By-line",            # autor
+    (2, 85): "By-lineTitle",
+    (2, 90): "City",
+    (2, 92): "Sub-location",
+    (2, 95): "Province-State",
+    (2, 101): "Country-PrimaryLocationName",
+    (2, 105): "Headline",
+    (2, 110): "Credit",
+    (2, 115): "Source",
+    (2, 116): "CopyrightNotice",
+    (2, 120): "Caption-Abstract",
+}
+
+
+def _achatar_xmp(no, prefixo: str = ""):
+    """XMP vem como árvore; metadata_entries é chave-valor.
+
+    Achata para chaves pontuadas ("dc.creator", "photoshop.City"), que é
+    como o resto do mundo escreve caminho de XMP.
+    """
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            nome = f"{prefixo}.{chave}" if prefixo else str(chave)
+            yield from _achatar_xmp(valor, nome)
+    elif isinstance(no, (list, tuple)):
+        # Lista repetível (dc:subject, por exemplo): junta, não indexa —
+        # índice em chave não sobrevive a reprocessamento.
+        planos = [v for v in no if isinstance(v, (str, int, float))]
+        if planos:
+            yield prefixo, "; ".join(str(v) for v in planos)
+        for item in no:
+            if isinstance(item, (dict, list, tuple)):
+                yield from _achatar_xmp(item, prefixo)
+    elif no is not None:
+        yield prefixo, no
+
+
+try:  # Pillow só analisa XMP com defusedxml — XML não confiável exige parser seguro.
+    import defusedxml  # noqa: F401
+
+    _HAS_XMP = True
+except ImportError:  # pragma: no cover — depende do ambiente
+    _HAS_XMP = False
+    log.info(
+        "XMP indisponível: instale 'defusedxml' para ler palavras-chave, "
+        "direitos e legenda de arquivos editados. IPTC e EXIF seguem normais."
+    )
+
+
+def _coletar_xmp(destino: list, img) -> None:
+    """XMP: onde vivem palavras-chave, direitos e legenda em arquivo editado."""
+    if not _HAS_XMP:
+        # Sem o parser seguro, o Pillow avisa por arquivo — em 500 mil fotos
+        # isso é meio milhão de linhas de log dizendo a mesma coisa.
+        return
+    try:
+        xmp = img.getxmp()
+    except Exception:  # noqa: BLE001 — arquivo ruim não derruba o scan
+        return
+    if not xmp:
+        return
+    # A raiz é sempre xmpmeta > RDF > Description; ela não informa nada.
+    raiz = xmp.get("xmpmeta", xmp)
+    _coletar(destino, "xmp", _achatar_xmp(raiz))
+
+
+def _coletar_iptc(destino: list, img) -> None:
+    """IPTC/IIM: o padrão que as agências e o Photoshop ainda escrevem."""
+    try:
+        info = IptcImagePlugin.getiptcinfo(img)
+    except Exception:  # noqa: BLE001
+        return
+    if not info:
+        return
+    itens = []
+    for chave, valor in info.items():
+        nome = _IPTC_CAMPOS.get(chave)
+        if nome is None:
+            continue
+        if isinstance(valor, (list, tuple)):
+            texto = "; ".join(
+                v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v)
+                for v in valor
+            )
+        elif isinstance(valor, bytes):
+            texto = valor.decode("utf-8", "replace")
+        else:
+            texto = str(valor)
+        itens.append((nome, texto))
+    _coletar(destino, "iptc", itens)
+
+
 def _parse_exif_date(raw: object) -> datetime | None:
     try:
         return datetime.strptime(str(raw), _EXIF_DATE_FORMAT)
@@ -124,6 +223,11 @@ class PurePythonExtractor:
         try:
             with Image.open(path) as img:
                 meta.largura, meta.altura = img.size
+                # XMP e IPTC vêm ANTES do short-circuit do EXIF: arquivo
+                # editado no Lightroom pode ter palavras-chave e direitos
+                # sem trazer EXIF nenhum, e sair daqui cedo perdia os dois.
+                _coletar_xmp(meta.extras, img)
+                _coletar_iptc(meta.extras, img)
                 exif = img.getexif()
                 if not exif:
                     return meta

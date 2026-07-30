@@ -21,10 +21,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# XMP: o Pillow só analisa o pacote XMP com um parser de XML endurecido, e
+# com razão — é XML de origem não confiável dentro do arquivo do usuário.
+# Sem isto o extrator degrada em silêncio: EXIF e IPTC seguem, XMP não é
+# lido. Fica opcional porque o núcleo funciona sem ele.
+xmp = [
+    "defusedxml>=0.7",
+]
 dev = [
     "pytest>=8.0",
     "pytest-qt>=4.4",
     "httpx>=0.27",
+    "defusedxml>=0.7",
 ]
 # Advisor de classificação via Claude (opt-in; docs/AGRUPAMENTO.md §3)
 llm = [

@@ -1,4 +1,7 @@
 from datetime import datetime
+from pathlib import Path
+
+import pytest
 
 from fotoorganizer.metadata import PurePythonExtractor
 from tests.fixtures import make_corrupt_jpeg, make_jpeg, make_png
@@ -151,3 +154,87 @@ def test_valor_ilegivel_ou_gigante_fica_de_fora():
     destino: list = []
     _coletar(destino, "exif", [("MakerNote", "seja o que for"), ("ISO", 100)])
     assert destino == [("exif", "ISO", "100")]
+
+
+def _com_iptc(caminho: Path, campos: list[tuple[int, int, bytes]]) -> Path:
+    """JPEG com bloco IPTC/IIM dentro de um APP13 Photoshop IRB."""
+    from PIL import Image
+
+    def iim(reg: int, campo: int, valor: bytes) -> bytes:
+        return b"\x1c" + bytes([reg, campo]) + len(valor).to_bytes(2, "big") + valor
+
+    bloco = b"".join(iim(r, c, v) for r, c, v in campos)
+    Image.new("RGB", (32, 24), (90, 110, 130)).save(caminho, "JPEG")
+    irb = (b"Photoshop 3.0\x00" + b"8BIM\x04\x04\x00\x00"
+           + len(bloco).to_bytes(4, "big") + bloco)
+    bruto = caminho.read_bytes()
+    caminho.write_bytes(
+        bruto[:2] + b"\xff\xed" + (len(irb) + 2).to_bytes(2, "big") + irb + bruto[2:]
+    )
+    return caminho
+
+
+def test_iptc_traz_autor_direitos_e_palavras_chave(tmp_path):
+    """O namespace iptc estava declarado no schema desde o M1 e nunca
+    recebia uma linha: o extrator não olhava para ele. É onde vivem autor,
+    direitos e palavras-chave em arquivo vindo de agência ou Photoshop."""
+    from fotoorganizer.metadata import PurePythonExtractor
+
+    caminho = _com_iptc(tmp_path / "com_iptc.jpg", [
+        (2, 5, "Ponte de Avignon".encode()),
+        (2, 80, "Alexandre Camerini".encode()),
+        (2, 25, b"viagem"), (2, 25, b"franca"),
+        (2, 116, "(c) 2024".encode()),
+        (2, 90, b"Avignon"),
+    ])
+
+    meta = PurePythonExtractor().extract(caminho)
+    iptc = {chave: valor for ns, chave, valor in meta.extras if ns == "iptc"}
+
+    assert iptc["ObjectName"] == "Ponte de Avignon"
+    assert iptc["By-line"] == "Alexandre Camerini"
+    # Campo repetível vira lista separada por ponto e vírgula — não índice
+    # na chave, que não sobrevive a reprocessamento.
+    assert iptc["Keywords"] == "viagem; franca"
+    assert iptc["CopyrightNotice"] == "(c) 2024"
+    assert iptc["City"] == "Avignon"
+    assert meta.erro is None
+
+
+def test_arquivo_sem_iptc_nao_inventa_namespace(tmp_path):
+    from fotoorganizer.metadata import PurePythonExtractor
+
+    caminho = make_jpeg(tmp_path / "limpa.jpg", seed=3)
+    meta = PurePythonExtractor().extract(caminho)
+    assert not [e for e in meta.extras if e[0] == "iptc"]
+
+
+def test_xmp_traz_autor_e_palavras_chave(tmp_path):
+    """XMP exige defusedxml (parser seguro para XML não confiável). Sem ele
+    o extrator degrada em silêncio — o teste pula, não falha."""
+    pytest.importorskip("defusedxml")
+    from PIL import Image
+
+    from fotoorganizer.metadata import PurePythonExtractor
+
+    xmp = (
+        '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+        '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        '<rdf:Description rdf:about="" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/">'
+        "<dc:creator><rdf:Seq><rdf:li>Alexandre Camerini</rdf:li>"
+        "</rdf:Seq></dc:creator>"
+        "<dc:subject><rdf:Bag><rdf:li>viagem</rdf:li><rdf:li>franca</rdf:li>"
+        "</rdf:Bag></dc:subject>"
+        "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end='w'?>"
+    ).encode()
+
+    caminho = tmp_path / "com_xmp.jpg"
+    Image.new("RGB", (32, 24), (100, 120, 140)).save(caminho, "JPEG", xmp=xmp)
+
+    meta = PurePythonExtractor().extract(caminho)
+    achatado = {c: v for ns, c, v in meta.extras if ns == "xmp"}
+    juntos = " ".join(f"{c}={v}" for c, v in achatado.items())
+    assert "Alexandre Camerini" in juntos
+    assert "viagem" in juntos and "franca" in juntos
