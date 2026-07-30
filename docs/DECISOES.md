@@ -250,3 +250,18 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
 - Como reverter: o comparativo em `docs/REFERENCIAS_DESIGN.md` tem os tokens
   extraídos; basta escolher outra composição.
 - Status: decidido por timeout
+
+## D-016 — Fronteira aberta para as quatro correções curtas
+- Fase: correções pós-auditoria
+- Classe: B
+- Data: 2026-07-30
+- Contexto: D-001 manteve `fotoorganizer/` e `webapp/` fora da fronteira até
+  aprovação. O dono aprovou explicitamente os itens 1, 3, 4 e 7 da auditoria.
+- Opções: (a) abrir a fronteira só para esses quatro itens; (b) abrir para
+  código de produção em geral.
+- Escolhida: (a)
+- Por quê: a aprovação foi para uma lista nomeada, não para o diretório. As
+  fases 3 a 6 seguem entregando documento até o dono decidir o contrário —
+  em especial a migração Alembic da fase 3, que é o que custa caro desfazer.
+- Como reverter: os quatro commits são independentes e revertem isolados.
+- Status: decidido

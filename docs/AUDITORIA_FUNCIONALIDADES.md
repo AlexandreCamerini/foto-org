@@ -285,3 +285,25 @@ fases 3 e 4, é essa.
 - Catálogo de teste, capturas e saídas de API ficaram no diretório temporário
   da sessão e **não foram versionados** — as evidências que importam estão
   transcritas neste documento. Ver D-013.
+
+---
+
+## 9. Situação dos itens (atualizado em 2026-07-30)
+
+Quatro itens da tabela da seção 7 foram corrigidos, cada um em commit próprio,
+com teste que falha no código anterior.
+
+| # | Item | Commit | Verificação |
+|---|---|---|---|
+| 1 | Evidência de GPS herdado não chega à API nem à UI | `591b58a` | a API devolve as 6 evidências, com "GPS herdado de 'IMG_9100.jpg' (Apple iPhone 15 Pro) — tirada a 2min de distância"; o nível da sugestão continua `media` |
+| 3 | Viagem fantasma na data do scan | `88f15f6` | "Viagem de 29-07" sumiu da lista no catálogo de demonstração; restaram Japão e França |
+| 4 | `location` não exposto pela API | `224647f` | `GET /api/midia/{id}` devolve `local`; o inspetor ganhou a linha Lugar |
+| 7 | Sem `--data-dir` no CLI | `7249318` | `fotoorganizer --data-dir <pasta> scan` cria catálogo isolado, sem truque de `HOME` |
+
+Continuam abertos os itens 2, 5, 6, 8 e 9 — os dois primeiros dependem das
+fases 4 e 6, o 6 é decisão da fase 3.
+
+**O que mudou no comportamento observável:** uma foto tirada com a câmera, sem
+GPS, ao lado de uma foto do telefone com GPS, agora diz na interface onde foi
+tirada e de quem herdou a coordenada. Era o pedido original do dono do
+produto, e o motor já sabia responder — faltava o caminho até a tela.
