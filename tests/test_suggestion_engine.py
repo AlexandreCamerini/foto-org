@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from fotoorganizer.classification import SuggestionEngine
+from fotoorganizer.classification.confidence import nivel_para_score
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.geolocation import GeoResult, LocationResolver
 from fotoorganizer.models import (
@@ -107,6 +108,62 @@ def test_gps_gera_destino_com_alta_e_justificativas(ambiente):
     assert por_campo["viagem"].origem == "geocoding_offline"
     assert "4 fotos entre" in por_campo["viagem"].justificativa
     assert "ao longo de" in por_campo["viagem"].justificativa
+
+
+def test_lugar_suprimido_do_caminho_continua_vinculado_a_sugestao(ambiente):
+    """A viagem é uma pasta só, então cidade não vira nível abaixo dela.
+    Mas o lugar é a resposta a "por que aqui?", e quem serializa isso para a
+    API é `Suggestion.evidencias` — não basta existir em `evidence`."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    sugestao, todas = _sugestao_de(factory, "franca_0.jpg")
+    vinculadas = {e.campo: e for e in sugestao.evidencias}
+
+    assert "Avignon" not in sugestao.destino_sugerido
+    assert vinculadas["cidade"].valor == "Avignon"
+    assert vinculadas["pais"].valor == "França"
+    # Contexto não decide destino: o elo mais fraco continua saindo só do
+    # que virou pasta (docs/CONFIANCA.md proíbe misturar).
+    decidiram = [e.score for c, e in vinculadas.items()
+                 if c not in ("pais", "regiao", "cidade")]
+    assert sugestao.nivel == nivel_para_score(min(decidiram))
+
+
+def test_gps_herdado_dentro_de_viagem_chega_a_sugestao(migrated_engine):
+    """O caso do dono: câmera sem GPS herda do telefone, e a foto cai numa
+    viagem. A viagem nomeia a pasta e suprime a cidade do caminho — a
+    justificativa da herança não pode sumir junto."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/Viagens/Camera")
+        telefone = Source(caminho="/fotos/Viagens/iPhone")
+        session.add_all([camera, telefone])
+        session.flush()
+        for i in range(4):
+            session.add(_media(
+                camera.id, f"cam_{i}.jpg", "/fotos/Viagens/Camera",
+                data=base + timedelta(hours=6 * i),
+                make="Canon", model="EOS R5",
+            ))
+            session.add(_media(
+                telefone.id, f"tel_{i}.jpg", "/fotos/Viagens/iPhone",
+                data=base + timedelta(hours=6 * i, minutes=2),
+                gps=(43.95, 4.8083), make="Apple", model="iPhone 15",
+            ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    sugestao, _ = _sugestao_de(factory, "cam_0.jpg")
+    vinculadas = {e.campo: e for e in sugestao.evidencias}
+    heranca = vinculadas.get("cidade")
+    assert heranca is not None, "a cidade herdada precisa chegar à sugestão"
+    assert heranca.origem == "vizinhanca_temporal"
+    assert "herdado de 'tel_0.jpg'" in heranca.justificativa
+    assert "iPhone 15" in heranca.justificativa
 
 
 def test_vizinhanca_infere_pais_de_fotos_proximas(ambiente):

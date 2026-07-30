@@ -82,6 +82,9 @@ _MIN_FOTOS_SESSAO = 2
 # Campos que dão nome ao destino. Sem nenhum deles, sobra só a data.
 _CAMPOS_QUE_NOMEIAM = ("categoria", "viagem", "evento", "pais", "regiao",
                        "cidade")
+# Lugar: entra na sugestão mesmo quando não vira pasta — é a resposta a
+# "por que aqui?" e a única superfície da herança de GPS entre câmeras.
+_CAMPOS_DE_LUGAR = ("pais", "regiao", "cidade")
 # Fotos geocodificadas mínimas para um país contar como perna da viagem —
 # uma escala de aeroporto com 1-2 fotos não nomeia a viagem.
 _MIN_FOTOS_PERNA = 3
@@ -587,6 +590,24 @@ class SuggestionEngine:
         )
         return set(session.scalars(stmt))
 
+    @staticmethod
+    def _contexto_da_sugestao(
+        evidencias: dict[str, Evidence], usados: dict[str, Evidence]
+    ) -> dict[str, Evidence]:
+        """Lugar que não virou pasta, mas que a sugestão precisa mostrar.
+
+        O motor suprime país/região/cidade do caminho quando a viagem ou o
+        evento já nomeiam a pasta — mas o lugar segue sendo a resposta a
+        "por que aqui?", ainda mais quando veio herdado de outra câmera.
+        Quem serializa para a API é `Suggestion.evidencias`; sem vínculo, a
+        justificativa existe no banco e não chega a lugar nenhum.
+        """
+        return {
+            campo: evidencias[campo]
+            for campo in _CAMPOS_DE_LUGAR
+            if campo in evidencias and campo not in usados
+        }
+
     def _persistir_sugestao(self, session: Session, media: MediaFile,
                             drafts: list[_Draft]) -> None:
         antigas = list(
@@ -640,7 +661,10 @@ class SuggestionEngine:
             usados = (
                 {"data": evidencias["data"]} if "data" in evidencias else {}
             )
-            self._salvar_sugestao(session, media, destino, usados)
+            self._salvar_sugestao(
+                session, media, destino, usados,
+                self._contexto_da_sugestao(evidencias, usados),
+            )
             return
 
         destino = render_destino(self._template, campos)
@@ -657,14 +681,21 @@ class SuggestionEngine:
             # não SOBE score: docs/CONFIANCA.md proíbe soma de confianças.
             usados.pop("ano", None)
 
-        self._salvar_sugestao(session, media, destino, usados)
+        self._salvar_sugestao(
+            session, media, destino, usados, self._contexto_da_sugestao(evidencias, usados),
+        )
 
     def _salvar_sugestao(self, session: Session, media: MediaFile,
-                         destino: str, usados: dict[str, Evidence]) -> None:
+                         destino: str, usados: dict[str, Evidence],
+                         contexto: dict[str, Evidence] | None = None) -> None:
+        # O nível sai SÓ do que decidiu o destino: contexto que não virou
+        # pasta não pode puxar o elo mais fraco para baixo (docs/CONFIANCA.md).
         nivel, _score = elo_mais_fraco([ev.score for ev in usados.values()])
         sugestao = Suggestion(
             media_id=media.id, destino_sugerido=destino, template=self._template,
             nivel=nivel, versao_logica=VERSAO_LOGICA,
         )
-        sugestao.evidencias = list(usados.values())
+        sugestao.evidencias = list(usados.values()) + list(
+            (contexto or {}).values()
+        )
         session.add(sugestao)
