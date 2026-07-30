@@ -32,6 +32,11 @@ class SuggestionRow:
     destino: str
     nivel: ConfidenceLevel
     status: SuggestionStatus
+    # Contexto que a tela de revisão precisa para a decisão ser informada:
+    # sem câmera e horário, 60 linhas com o mesmo destino são indistinguíveis.
+    data_capturada: datetime | None = None
+    camera: str | None = None
+    gps_estimado: bool = False
 
 
 def _agora() -> datetime:
@@ -65,6 +70,11 @@ class SuggestionRepository:
                     id=sugestao.id, media_id=media.id, nome=media.nome,
                     pasta=media.pasta, destino=sugestao.destino_sugerido,
                     nivel=sugestao.nivel, status=sugestao.status,
+                    data_capturada=media.data_capturada,
+                    camera=" ".join(
+                        filter(None, [media.make, media.model])
+                    ) or None,
+                    gps_estimado=media.coordenada_estimada,
                 )
                 for sugestao, media in session.execute(stmt)
             ]

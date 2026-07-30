@@ -88,7 +88,7 @@ export default function Duplicates({ job }: { job: Job }) {
               <div className="flex items-center justify-between">
                 <span
                   className={
-                    g.nivel === "sequencia" ? "text-conf-media" : undefined
+                    g.nivel === "sequencia" ? "text-atencao" : undefined
                   }
                 >
                   {g.rotulo}
@@ -149,7 +149,7 @@ export default function Duplicates({ job }: { job: Job }) {
                 key={m.member_id}
                 className={`overflow-hidden rounded-lg border bg-cartao ${
                   m.papel === "principal"
-                    ? "border-conf-alta"
+                    ? "border-ok"
                     : m.papel === "ignorado"
                       ? "border-borda opacity-50"
                       : "border-borda"
@@ -168,7 +168,7 @@ export default function Duplicates({ job }: { job: Job }) {
                   <div className="flex items-center justify-between text-texto-2">
                     <span>{tamanhoLegivel(m.tamanho)}</span>
                     {m.papel === "principal" ? (
-                      <span className="text-conf-alta">✓ principal</span>
+                      <span className="text-ok">✓ principal</span>
                     ) : (
                       <button
                         onClick={() =>
@@ -177,7 +177,7 @@ export default function Duplicates({ job }: { job: Job }) {
                             body: { media_id: m.media_id },
                           })
                         }
-                        className="rounded-md border border-borda px-2 py-0.5 hover:border-conf-alta hover:text-conf-alta"
+                        className="rounded-md border border-borda px-2 py-0.5 hover:border-ok hover:text-ok"
                       >
                         {grupo.nivel === "sequencia"
                           ? "Melhor frame"

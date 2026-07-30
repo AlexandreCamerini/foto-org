@@ -45,7 +45,7 @@ export default function StatusBar({ job, dica }: { job: Job; dica?: string }) {
           </span>
           <button
             onClick={() => void job.cancelar()}
-            className="shrink-0 rounded px-1 text-texto-2 hover:text-conf-baixa"
+            className="shrink-0 rounded px-1 text-texto-2 hover:text-erro"
           >
             cancelar
           </button>
@@ -56,7 +56,7 @@ export default function StatusBar({ job, dica }: { job: Job; dica?: string }) {
         <>
           <span
             className={`truncate ${
-              estado.status === "erro" ? "text-conf-baixa" : "text-texto-2"
+              estado.status === "erro" ? "text-erro" : "text-texto-2"
             }`}
           >
             {estado.status === "erro"

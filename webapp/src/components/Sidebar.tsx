@@ -58,7 +58,7 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
             {fonte.apelido ?? fonte.caminho.split("/").pop()}
             <span className="ml-1.5 text-texto-2">({fonte.fotos})</span>
             {!fonte.disponivel && (
-              <span className="ml-1 text-conf-media" title="indisponível">
+              <span className="ml-1 text-atencao" title="indisponível">
                 ⚠
               </span>
             )}
@@ -103,7 +103,7 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
             </div>
           )}
         </div>
-        {erro && <div className="text-conf-baixa">{erro}</div>}
+        {erro && <div className="text-erro">{erro}</div>}
       </div>
 
       {/* Progresso e totais vivem na barra de status da janela (StatusBar):

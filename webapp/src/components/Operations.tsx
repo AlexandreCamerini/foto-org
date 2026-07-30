@@ -6,9 +6,9 @@ import type { Plano, RelatorioDryRun } from "../api";
 import type { Job } from "../hooks/useJob";
 
 const CORES_STATUS: Record<string, string> = {
-  concluida: "text-conf-alta",
-  erro: "text-conf-baixa",
-  cancelada: "text-conf-media",
+  concluida: "text-ok",
+  erro: "text-erro",
+  cancelada: "text-texto-2",
   executando: "text-acento",
 };
 
@@ -126,7 +126,7 @@ export default function Operations({ job }: { job: Job }) {
         >
           Criar plano
         </button>
-        {erro && <span className="text-conf-baixa">{erro}</span>}
+        {erro && <span className="text-erro">{erro}</span>}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -152,10 +152,10 @@ export default function Operations({ job }: { job: Job }) {
                   </span>{" "}
                   · {p.concluidos}/{p.total_itens} copiados
                   {p.com_erro > 0 && (
-                    <span className="text-conf-baixa"> · {p.com_erro} erros</span>
+                    <span className="text-erro"> · {p.com_erro} erros</span>
                   )}
                   {p.dry_run_em !== null && !p.executavel && (
-                    <span className="text-conf-baixa">
+                    <span className="text-erro">
                       {" "}
                       · dry-run: nada copiável
                     </span>
@@ -203,7 +203,7 @@ export default function Operations({ job }: { job: Job }) {
                 {executando && (
                   <button
                     onClick={() => job.cancelar()}
-                    className="rounded-md border border-borda px-3 py-1 text-conf-baixa hover:bg-cartao"
+                    className="rounded-md border border-borda px-3 py-1 text-erro hover:bg-cartao"
                   >
                     Cancelar
                   </button>
@@ -212,7 +212,7 @@ export default function Operations({ job }: { job: Job }) {
                 <span
                   className={
                     plano.dry_run_em && !plano.executavel
-                      ? "text-conf-baixa"
+                      ? "text-erro"
                       : "text-texto-3"
                   }
                 >
@@ -240,8 +240,8 @@ export default function Operations({ job }: { job: Job }) {
                         <span
                           className={
                             relatorio.espaco_suficiente
-                              ? "text-conf-alta"
-                              : "text-conf-baixa"
+                              ? "text-ok"
+                              : "text-erro"
                           }
                         >
                           {mb(relatorio.bytes_livres)} livres
@@ -250,7 +250,7 @@ export default function Operations({ job }: { job: Job }) {
                     )}
                   </div>
                   {relatorio.problemas.map((p) => (
-                    <div key={p} className="text-conf-media">
+                    <div key={p} className="text-texto-2">
                       ! {p}
                     </div>
                   ))}
@@ -288,7 +288,7 @@ export default function Operations({ job }: { job: Job }) {
                       </span>
                     </div>
                     {(item.conflito || item.erro) && (
-                      <div className="text-conf-media">
+                      <div className="text-texto-2">
                         {item.erro ?? item.conflito}
                       </div>
                     )}

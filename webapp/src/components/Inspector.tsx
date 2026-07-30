@@ -1,27 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api, type Media } from "../api";
-
-const COR_NIVEL: Record<string, string> = {
-  alta: "text-conf-alta",
-  media: "text-conf-media",
-  baixa: "text-conf-baixa",
-};
-const ROTULO_NIVEL: Record<string, string> = {
-  alta: "Alta",
-  media: "Média",
-  baixa: "Baixa",
-};
-
-export function BadgeNivel({ nivel }: { nivel: string }) {
-  return (
-    <span
-      className={`rounded border border-borda px-1.5 py-0.5 text-[11px] ${COR_NIVEL[nivel] ?? ""}`}
-    >
-      {ROTULO_NIVEL[nivel] ?? nivel}
-    </span>
-  );
-}
+import { Confianca } from "./Confianca";
 
 export default function Inspector({ media }: { media: Media | null }) {
   const { data: detalhe } = useQuery({
@@ -100,7 +80,7 @@ export default function Inspector({ media }: { media: Media | null }) {
             <div className="mt-3 border-t border-borda pt-3">
               <div className="titulo-painel mb-2 flex items-center justify-between px-0">
                 <span>Sugestão</span>
-                <BadgeNivel nivel={detalhe.sugestao.nivel} />
+                <Confianca nivel={detalhe.sugestao.nivel} />
               </div>
               <div className="mb-2 break-all rounded-md bg-cartao px-2 py-1.5">
                 {detalhe.sugestao.destino}
@@ -113,7 +93,7 @@ export default function Inspector({ media }: { media: Media | null }) {
                       <span className="font-medium">
                         {ev.campo}: {ev.valor}
                       </span>
-                      <BadgeNivel nivel={ev.nivel} />
+                      <Confianca nivel={ev.nivel} rotulo={false} />
                     </div>
                     <div className="text-texto-2">{ev.justificativa}</div>
                   </li>

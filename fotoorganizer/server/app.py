@@ -371,6 +371,12 @@ def create_app(
                     "destino": linha.destino,
                     "nivel": linha.nivel.value,
                     "status": linha.status.value,
+                    "data_capturada": (
+                        linha.data_capturada.isoformat()
+                        if linha.data_capturada else None
+                    ),
+                    "camera": linha.camera,
+                    "gps_estimado": linha.gps_estimado,
                 }
                 for linha in linhas
             ],

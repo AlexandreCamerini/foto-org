@@ -3,17 +3,30 @@
 /* Tokens da direção de arte (docs/DIRECAO_DE_ARTE.md): a foto é a cor da
    interface — chrome neutro, escuro e silencioso. */
 @theme {
-  --color-janela: #1e1e1e;
-  --color-painel: #252526;
-  --color-cartao: #2d2d30;
-  --color-borda: #3e3e42;
-  --color-texto: #e8e8e8;
-  --color-texto-2: #9da0a6;
-  --color-texto-3: #6b6e76;
-  --color-acento: #3b82f6;
-  --color-conf-alta: #34d399;
-  --color-conf-media: #fbbf24;
-  --color-conf-baixa: #f87171;
+  /* Quase-preto, não cinza: dá profundidade sem esmagar sombra, e é o que
+     permite às superfícies serem translúcidas em vez de coloridas. */
+  --color-janela: #08090a;
+  /* Painel e cartão NÃO têm cor própria — são branco em opacidade baixa
+     sobre a janela. É assim que "a foto é a cor da interface" vira
+     mecânica: o painel modula o que está atrás em vez de competir. */
+  --color-painel: rgba(255, 255, 255, 0.02);
+  --color-cartao: rgba(255, 255, 255, 0.05);
+  --color-realce: rgba(255, 255, 255, 0.08);
+  --color-borda: rgba(255, 255, 255, 0.1);
+  --color-borda-forte: rgba(255, 255, 255, 0.18);
+  --color-texto: #f7f8f8;
+  --color-texto-2: #8a8f98;
+  --color-texto-3: #62666d;
+  /* Sem acento cromático: numa ferramenta de foto, azul saturado compete
+     com a imagem em toda tela. O "acento" é o próprio branco em opacidade
+     maior; cor fica reservada para ESTADO. */
+  --color-acento: #d6d9dd;
+  /* Estado, dessaturado. Confiança alta e média não têm cor: são
+     quantidade (ver componente Confianca). Só a baixa pede olho humano. */
+  --color-atencao: #c2833a;
+  --color-herdado: #6e8fa8;
+  --color-ok: #6e9a78;
+  --color-erro: #a8615a;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
     sans-serif;
 }
@@ -56,4 +69,35 @@ body,
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Controles próprios. O <select> e o <input> nativos são o sinal mais forte
+   de "isto é uma página web": o navegador desenha a setinha e a borda, e
+   nenhuma folha de estilo do app chega até lá. */
+select,
+input[type="text"],
+input[type="search"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--color-cartao);
+  border: 1px solid var(--color-borda);
+  border-radius: 6px;
+  color: var(--color-texto);
+  font: inherit;
+  padding: 4px 8px;
+}
+select {
+  padding-right: 26px;
+  /* Chevron desenhado por nós, na cor do texto secundário. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a8f98' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+select:hover,
+input[type="text"]:hover,
+input[type="search"]:hover {
+  border-color: var(--color-borda-forte);
+}
+input::placeholder {
+  color: var(--color-texto-3);
 }
