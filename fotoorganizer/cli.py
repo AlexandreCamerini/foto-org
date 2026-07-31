@@ -341,12 +341,14 @@ def main(argv: list[str] | None = None) -> int:
     p_web.set_defaults(func=cmd_web)
 
     p_imp = sub.add_parser(
-        "importar", help="importa Apple Fotos ou Google Takeout (read-only)"
+        "importar",
+        help="importa Apple Fotos, Google Takeout ou Lightroom (read-only)"
     )
     p_imp.add_argument("fonte", choices=["apple", "takeout", "lightroom"])
     p_imp.add_argument(
         "caminho", nargs="?",
-        help="pasta do Takeout; para apple, biblioteca alternativa (opcional)",
+        help="pasta do Takeout, arquivo .lrcat do Lightroom; para apple, "
+             "biblioteca alternativa (opcional)",
     )
     p_imp.add_argument(
         "--ler-arquivos", action="store_true",

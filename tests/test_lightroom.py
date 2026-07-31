@@ -146,3 +146,38 @@ def test_identidade_e_o_arquivo_do_catalogo(tmp_path):
 ])
 def test_formatos_de_data_do_lightroom(bruto, esperado):
     assert _data(bruto) == esperado
+
+
+def test_referencia_importada_e_testemunha_no_catalogo(tmp_path, migrated_engine):
+    """`papel` e `arquivo_ausente` são ortogonais, menos numa direção: quem
+    não tem arquivo local não pode ser acervo — não há o que mostrar na
+    grade nem o que copiar no plano.
+
+    Na primeira importação real, 54.086 referências do Lightroom entraram
+    dizendo `ACERVO` e "sem arquivo" ao mesmo tempo.
+    """
+    from sqlalchemy import select
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.metadata import PurePythonExtractor
+    from fotoorganizer.models import MediaFile, MediaRole
+    from fotoorganizer.config.settings import ScannerSettings
+    from fotoorganizer.sources import ExternalCatalogImporter
+
+    factory = create_session_factory(migrated_engine)
+    importer = ExternalCatalogImporter(
+        factory, PurePythonExtractor(), ScannerSettings()
+    )
+    importer.importar(LightroomProvider(_lrcat(tmp_path)))
+
+    with factory() as session:
+        refs = list(session.scalars(
+            select(MediaFile).where(MediaFile.caminho.like("lightroom://%"))
+        ))
+        assert len(refs) == 2
+        for media in refs:
+            assert media.arquivo_ausente is True
+            assert media.papel is MediaRole.SINAL
+            assert media.organizavel is False
+        # A pasta de origem sobrevive: é o que responde "de que disco veio?"
+        externa = next(m for m in refs if m.nome == "096A9198.DNG")
+        assert externa.pasta == "/Volumes/photo/Portfolio/Patagonia Fev.20"
