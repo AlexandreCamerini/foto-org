@@ -47,11 +47,22 @@ _GRUPOS = {
     "GPS": "gps",
     "IPTC": "iptc",
     "XMP": "xmp",
-    "MakerNotes": "makernotes",
     "ICC_Profile": "icc",
     "QuickTime": "quicktime",
     "PNG": "png",
 }
+
+# `MakerNotes` fica FORA da base bruta de propósito (D-027). São ~259 campos
+# por CR3 — modo de foco, posição do estabilizador, contador do obturador,
+# temperatura do sensor — e somavam 969 mil linhas, 83% de todo o metadado de
+# um acervo real, sem que nada ali ajude a decidir viagem, evento ou lugar.
+#
+# O que o bloco tem de aproveitável já é lido acima: `MakerNotes:LensType`
+# entra em `lente` pela busca em `dados`, que enxerga o JSON inteiro e não
+# depende deste mapa.
+#
+# Para reativar: devolva "MakerNotes": "makernotes" aqui e rode
+# `scan --reprocessar`. O rótulo legível continua em ROTULOS_NAMESPACE.
 
 # O exiftool devolve a orientação por extenso; o catálogo guarda o número da
 # EXIF. Pedir `-n` global resolveria isto e estragaria todo o resto da base

@@ -449,3 +449,25 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
 - Como reverter: `criar_extrator(preferir_exiftool=False)` devolve o
   puro-Python; nada no catálogo depende de qual extrator gravou.
 - Status: decidido pelo dono (instalou o binário a pedido)
+
+---
+
+## D-027 — MakerNotes fica fora da base bruta
+
+- Data: 2026-07-31
+- Contexto: o extrator novo (D-026) passou a gravar o bloco proprietário do
+  fabricante. Num acervo real eram 969.074 linhas — 83% de todo o metadado e
+  51,8 MB de texto, contra 4,8 MB de EXIF.
+- Opções: (a) manter tudo; (b) manter só campos selecionados do bloco;
+  (c) excluir o namespace da base bruta.
+- Escolhida: (c).
+- Por quê: o bloco descreve o estado interno da câmera — modo de foco,
+  posição do estabilizador, contador do obturador, temperatura do sensor — e
+  nada ali ajuda a decidir viagem, evento ou lugar, que é o que este app faz.
+  A opção (b) exigiria manter uma lista por fabricante, e o único campo que
+  interessava (`LensType`) já é lido para a coluna `lente`, do JSON inteiro,
+  sem depender da base bruta. Medido: catálogo de 164 MB para 51 MB.
+- Como reverter: devolver `"MakerNotes": "makernotes"` a `_GRUPOS` em
+  `metadata/exiftool.py` e rodar `scan --reprocessar`. O rótulo legível
+  continua em `ROTULOS_NAMESPACE`, à espera.
+- Status: decidido pelo dono

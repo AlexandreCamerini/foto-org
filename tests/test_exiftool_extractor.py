@@ -67,9 +67,10 @@ def test_grupos_derivados_e_binarios_ficam_fora_da_base_bruta():
     })
     chaves = {(ns, nome) for ns, nome, _ in meta.extras}
     assert ("exif", "Make") in chaves
-    assert ("makernotes", "LensType") in chaves
     assert not any(ns in {"file", "exiftool", "composite"} for ns, _, _ in meta.extras)
     assert ("exif", "ThumbnailImage") not in chaves
+    # MakerNotes tem exclusão própria, testada logo abaixo (D-027).
+    assert meta.lente == "EF24-70mm"
 
 
 def test_valor_estruturado_vira_json_em_vez_de_repr_python():
@@ -151,3 +152,19 @@ def test_criar_extrator_prefere_exiftool_quando_existe():
     assert isinstance(criar_extrator(), ExifToolExtractor)
     assert isinstance(criar_extrator(preferir_exiftool=False),
                       PurePythonExtractor)
+
+
+def test_makernotes_fica_fora_da_base_bruta():
+    """D-027: 259 campos por CR3 sobre o estado interno da câmera, 83% de
+    todo o metadado de um acervo real, e nada ali decide viagem, evento ou
+    lugar. Fica fora — mas o que era aproveitável continua chegando."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:Make": "Canon",
+        "MakerNotes:LensType": "EF24-70mm f/2.8L II USM",
+        "MakerNotes:FocusMode": "One-shot AF",
+        "MakerNotes:ShutterCount": 32211,
+    })
+    assert not any(ns == "makernotes" for ns, _, _ in meta.extras)
+    # A lente vem do bloco do fabricante e não se perde: ela é lida do JSON
+    # inteiro, não da base bruta.
+    assert meta.lente == "EF24-70mm f/2.8L II USM"
