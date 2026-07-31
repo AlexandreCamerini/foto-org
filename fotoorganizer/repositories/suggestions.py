@@ -37,6 +37,11 @@ class SuggestionRow:
     data_capturada: datetime | None = None
     camera: str | None = None
     gps_estimado: bool = False
+    # A revisão precisa saber se dá para MOSTRAR a foto: o primeiro grupo da
+    # fila de um acervo real estava inteiro num volume desmontado, e a tela
+    # desenhou 18 ícones de imagem quebrada sem dizer por quê.
+    source_id: int = 0
+    arquivo_ausente: bool = False
 
 
 def _agora() -> datetime:
@@ -75,6 +80,8 @@ class SuggestionRepository:
                         filter(None, [media.make, media.model])
                     ) or None,
                     gps_estimado=media.coordenada_estimada,
+                    source_id=media.source_id,
+                    arquivo_ausente=media.arquivo_ausente,
                 )
                 for sugestao, media in session.execute(stmt)
             ]

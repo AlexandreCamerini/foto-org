@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { api, type Sugestao } from "../api";
+import { Miniatura } from "./Miniatura";
+import { api, type Media, type Sugestao } from "../api";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
 
@@ -22,6 +23,7 @@ type Item = {
   data_capturada?: string | null;
   camera?: string | null;
   gps_estimado?: boolean;
+  motivo_indisponivel?: string | null;
 };
 
 /** Revisão origem→destino: o usuário decide, o motor explica.
@@ -147,11 +149,13 @@ export default function Review({ job }: { job: Job }) {
                   doGrupo.map((s) => (
                     <div key={s.id} className="border-b border-borda/60">
                       <div className="flex items-center gap-3 px-3 py-1.5 hover:bg-painel">
-                        <img
-                          src={api.thumbUrl(s.media_id)}
-                          alt={s.nome}
-                          loading="lazy"
-                          className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
+                        <Miniatura
+                          media={{
+                            id: s.media_id,
+                            nome: s.nome,
+                            motivo_indisponivel: s.motivo_indisponivel ?? null,
+                          } as Media}
+                          className="h-9 w-12 shrink-0 rounded bg-cartao"
                         />
                         <div className="min-w-0 flex-1">
                           {/* Nome primeiro. Antes a pasta vinha antes e o

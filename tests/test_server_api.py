@@ -699,3 +699,35 @@ def test_inventario_expoe_o_acervo_inteiro(client, migrated_engine):
     assert gaveta_json["alcancaveis"] == 0
     assert gaveta_json["so_no_catalogo"] == 1
     assert gaveta_json["fontes"] == ["photo"]
+
+
+def test_media_diz_por_que_nao_da_para_abrir(client, migrated_engine):
+    """A grade precisa separar "miniatura ainda vindo" de "não tenho o
+    arquivo". Sem isso o navegador desenha imagem quebrada, e o dono — que
+    abriu a fila num grupo 100% em volume desmontado — concluiu que a tela
+    inteira estava quebrada."""
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        gaveta = Source(caminho="/Volumes/photo", apelido="photo",
+                        disponivel=False)
+        session.add(gaveta)
+        session.flush()
+        session.add(MediaFile(
+            source_id=gaveta.id, caminho="/Volumes/photo/a.dng",
+            pasta="/Volumes/photo", nome="a.dng", extensao="dng", tamanho=1,
+        ))
+        session.add(MediaFile(
+            source_id=gaveta.id, caminho="apple://UUID-1", pasta="",
+            nome="IMG_1.HEIC", extensao="heic", tamanho=1,
+            arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    itens = client.get("/api/midia", params={"busca": "a.dng"}).json()["itens"]
+    assert itens[0]["motivo_indisponivel"] == "volume ou pasta fora de alcance"
+
+    # Uma foto de fonte disponível não ganha marca nenhuma.
+    outras = client.get("/api/midia", params={"busca": "img_0"}).json()["itens"]
+    assert outras and outras[0]["motivo_indisponivel"] is None

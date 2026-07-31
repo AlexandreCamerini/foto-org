@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import Review from "./Review";
 import type { Job } from "../hooks/useJob";
-import { montar, servirApi } from "../test/servidor";
+import { ROTAS_BASE, montar, servirApi } from "../test/servidor";
 
 function jobParado(): Job {
   return {
@@ -119,5 +119,31 @@ describe("Review", () => {
     await usuario.click(await screen.findByText("Viagens/2024 - França"));
     expect(screen.queryByText("DSC_0100.jpg")).not.toBeInTheDocument();
     expect(screen.getByText("Viagens/2024 - França")).toBeInTheDocument();
+  });
+});
+
+describe("foto fora de alcance", () => {
+  it("a linha diz por quê em vez de desenhar imagem quebrada", async () => {
+    // O primeiro grupo da fila de um acervo real estava inteiro num volume
+    // desmontado. A tela mostrou 18 ícones de imagem quebrada e ficou calada,
+    // e o dono concluiu que ela estava quebrada — ela estava muda.
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/sugestoes": {
+        contagens: { pendente: 1 },
+        itens: [{
+          id: 1, media_id: 9, nome: "1W0B3275.dng",
+          pasta: "/Volumes/photo/Portfolio", destino: "Eventos/2015/Visconde",
+          nivel: "media", status: "pendente",
+          motivo_indisponivel: "volume ou pasta fora de alcance",
+        }],
+      },
+    });
+    montar(<Review job={jobParado()} />);
+
+    expect(
+      await screen.findByText("volume ou pasta fora de alcance"),
+    ).toBeInTheDocument();
+    expect(screen.queryByAltText("1W0B3275.dng")).not.toBeInTheDocument();
   });
 });

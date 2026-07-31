@@ -28,6 +28,10 @@ export interface Media {
   trip_id: number | null;
   event_id: number | null;
   erro_leitura: string | null;
+  /** Por que esta foto não pode ser aberta agora; `null` quando pode. A
+   *  grade precisa separar "miniatura ainda vindo" de "não tenho o arquivo" —
+   *  sem isso desenha imagem quebrada e o usuário conclui que o app quebrou. */
+  motivo_indisponivel: string | null;
   /** foto | captura | recebida | baixada. null = não avaliado. */
   tipo_imagem: string | null;
   /** true = o detector opinou e você ainda não respondeu. */
