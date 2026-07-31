@@ -81,7 +81,10 @@ export default function StatusBar({ job, dica }: { job: Job; dica?: string }) {
 
       <div className="flex-1" />
       <span className="shrink-0 text-texto-2">
-        {status?.total ?? 0} fotos · {status?.fontes ?? 0} fontes
+        {/* "organizáveis", não "fotos": o topo da Biblioteca mostra 44.661
+            quando a fonte é o Apple Fotos, e dois números contraditórios lado
+            a lado fazem o usuário desconfiar dos dois. */}
+        {status?.total ?? 0} organizáveis · {status?.fontes ?? 0} fontes
         {status?.erros ? ` · ${status.erros} erros` : ""}
       </span>
     </footer>

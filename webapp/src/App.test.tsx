@@ -98,7 +98,7 @@ describe("App", () => {
   it("a barra de status mostra os totais em qualquer aba", async () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
-    expect(await screen.findByText("8 fotos · 1 fontes")).toBeInTheDocument();
+    expect(await screen.findByText("8 organizáveis · 1 fontes")).toBeInTheDocument();
   });
 });
 

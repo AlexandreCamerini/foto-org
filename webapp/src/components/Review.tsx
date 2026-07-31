@@ -153,6 +153,7 @@ export default function Review({ job }: { job: Job }) {
                           media={{
                             id: s.media_id,
                             nome: s.nome,
+                            data_capturada: s.data_capturada ?? null,
                             motivo_indisponivel: s.motivo_indisponivel ?? null,
                           } as Media}
                           className="h-9 w-12 shrink-0 rounded bg-cartao"
