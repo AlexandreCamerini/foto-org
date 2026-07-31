@@ -37,22 +37,39 @@ def test_heranca_do_doador_mais_proximo():
         _iphone(2, -42),                    # doadora 42s antes
         _iphone(3, 600, lat=25.9, lon=55.9),
     ]
-    (h,) = herdar_gps(fotos)
-    assert h.media_id == 1 and h.doador_id == 2
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 2
     assert h.lat == 25.2
     assert h.delta == timedelta(seconds=42)
-    assert h.score_fator == 1.0  # dentro da janela curta
+    # 42s sustenta até a cidade, com confiança cheia (janela curta).
+    assert h.granularidade == "cidade"
+    assert h.fator_de("cidade") == 1.0
 
 
-def test_fora_da_janela_nao_herda():
-    fotos = [_canon(1, 0), _iphone(2, 11 * 60)]
-    assert herdar_gps(fotos) == []
+def test_fora_da_janela_da_cidade_ainda_herda_o_pais():
+    """11 minutos não dizem em que cidade você estava; dizem em que país.
+
+    Antes de D-025 a janela era uma só, de 10 min, e esta foto não herdava
+    nada — o limite da cidade jogava fora a informação de país, que é segura
+    por muito mais tempo.
+    """
+    h = _de(herdar_gps([_canon(1, 0), _iphone(2, 11 * 60)]), 1)
+    assert h is not None
+    assert h.granularidade == "regiao"
+    assert h.fator_de("cidade") is None
+    assert h.fator_de("pais") is not None
+
+
+def test_longe_demais_para_qualquer_campo():
+    assert _de(herdar_gps([_canon(1, 0), _iphone(2, 13 * 3600)]), 1) is None
 
 
 def test_confianca_decai_com_delta():
     fotos = [_canon(1, 0), _iphone(2, 6 * 60)]  # 6 min: meio da rampa
-    (h,) = herdar_gps(fotos)
-    assert 0.7 < h.score_fator < 0.9
+    h = _de(herdar_gps(fotos), 1)
+    assert 0.7 < h.fator_de("cidade") < 0.9
+    # O país mal sente 6 minutos dentro da janela de 12 h.
+    assert h.fator_de("pais") > 0.99
 
 
 def test_mesma_camera_na_mesma_fonte_nao_doa():
@@ -114,9 +131,11 @@ def test_offset_corrige_a_heranca():
     herancas = {h.media_id: h for h in herdar_gps(fotos, offsets)}
     assert 1 in herancas
     assert herancas[1].lat == 13.75
-    # Sem a correção, os 3h de deriva estourariam a janela de 10 min.
-    sem_offset = {h.media_id for h in herdar_gps(fotos)}
-    assert 1 not in sem_offset
+    # A cidade só sobrevive por causa da correção: sem ela, as 3h de deriva
+    # jogam a foto para fora da janela de cidade e sobra o país (D-025).
+    assert herancas[1].granularidade == "cidade"
+    sem_offset = {h.media_id: h for h in herdar_gps(fotos)}
+    assert sem_offset[1].fator_de("cidade") is None
 
 
 def test_ancoras_dispersas_sao_descartadas():
@@ -162,13 +181,12 @@ def test_procura_alem_dos_dois_vizinhos_imediatos():
 
 
 def test_a_busca_para_na_borda_da_janela():
-    """Varrer além da janela seria trabalho jogado fora — e traria doador
-    que a regra de tolerância já rejeita."""
+    """Varrer além da janela maior seria trabalho jogado fora — nenhum campo
+    sobrevive a essa distância."""
     fotos = [_canon(1, 0)]
-    fotos += [_canon(10 + i, 60 * i) for i in range(1, 12)]  # 11 min de irmãs
-    fotos.append(_iphone(99, 11 * 60))                       # doadora fora
-    # As irmãs perto do fim herdam (estão a menos de 10 min da doadora); a
-    # foto 1, a 11 minutos dela, não.
+    # Irmãs com GPS da MESMA origem cercando a foto, para forçar a varredura.
+    fotos += [_canon(10 + i, 3600 * i, lat=1.0, lon=1.0) for i in range(1, 14)]
+    fotos.append(_iphone(99, 13 * 3600))   # doadora válida, mas a 13 h
     assert _de(herdar_gps(fotos), 1) is None
 
 
@@ -193,7 +211,7 @@ def test_hora_vinda_do_arquivo_vale_menos():
 
     assert certa.hora_incerta is False
     assert incerta.hora_incerta is True
-    assert incerta.score_fator < certa.score_fator
+    assert incerta.fator_de("cidade") < certa.fator_de("cidade")
     # A herança continua acontecendo — vale menos, não vale zero.
     assert incerta.doador_id == 2
 

@@ -89,6 +89,8 @@ _CAMPOS_QUE_NOMEIAM = ("categoria", "viagem", "evento", "pais", "regiao",
 # Lugar: entra na sugestão mesmo quando não vira pasta — é a resposta a
 # "por que aqui?" e a única superfície da herança de GPS entre câmeras.
 _CAMPOS_DE_LUGAR = ("pais", "regiao", "cidade")
+# Como cada granularidade se lê numa frase (D-025).
+_GRANULARIDADE = {"pais": "o país", "regiao": "a região", "cidade": "a cidade"}
 # Fotos geocodificadas mínimas para um país contar como perna da viagem —
 # uma escala de aeroporto com 1-2 fotos não nomeia a viagem.
 _MIN_FOTOS_PERNA = 3
@@ -381,11 +383,18 @@ class SuggestionEngine:
             location = self._resolver.resolve(session, *coords)
             if location is None:
                 continue
-            if location.pais:
+            # Coordenada herdada só vale até onde o Δt sustenta (D-025). País
+            # aguenta horas; cidade não. Sem este corte, uma foto correlata a
+            # 6 h de distância nomearia a viagem com a cidade errada.
+            heranca = herancas.get(media.id) if media.gps_lat is None else None
+            pode = (lambda campo: heranca.fator_de(campo) is not None) \
+                if heranca is not None else (lambda campo: True)
+            if location.pais and pode("pais"):
                 paises[location.pais] += 1
                 if location.pais not in ordem_paises:
                     ordem_paises.append(location.pais)
-            lugar = ", ".join(filter(None, [location.cidade, location.pais]))
+            cidade = location.cidade if pode("cidade") else None
+            lugar = ", ".join(filter(None, [cidade, location.pais]))
             if lugar and lugar not in lugares:
                 lugares.append(lugar)
         dominante = paises.most_common(1)[0][0] if paises else None
@@ -576,6 +585,14 @@ class SuggestionEngine:
                     f"{_camera_legivel(doador)} — tirada a "
                     f"{_delta_legivel(heranca.delta)} de distância"
                 )
+                if heranca.granularidade != "cidade":
+                    # A distância no tempo não sustenta a cidade. Dizer só
+                    # "a 3h de distância" deixaria o usuário concluir sozinho
+                    # que a cidade veio junto — ela não veio.
+                    just += (
+                        f"; a essa distância dá para afirmar "
+                        f"{_GRANULARIDADE[heranca.granularidade]}, não a cidade"
+                    )
                 if heranca.hora_incerta:
                     # Sem esta frase o usuário lê "a 2min de distância" e
                     # acredita numa precisão que a hora usada não tem.
@@ -583,19 +600,23 @@ class SuggestionEngine:
                         "; a hora de uma delas é a do arquivo, não a da "
                         "captura — a proximidade pode ser coincidência"
                     )
-                score = round(
-                    SCORES_REFERENCIA["vizinhanca_temporal"]
-                    * heranca.score_fator, 3,
-                )
-                return [
-                    _Draft(campo, "vizinhanca_temporal", valor, just,
-                           score_override=score)
-                    for campo, valor in [
-                        ("pais", location.pais), ("regiao", location.regiao),
-                        ("cidade", location.cidade),
-                    ]
-                    if valor
-                ]
+                drafts = []
+                for campo, valor in [
+                    ("pais", location.pais), ("regiao", location.regiao),
+                    ("cidade", location.cidade),
+                ]:
+                    fator = heranca.fator_de(campo)
+                    if not valor or fator is None:
+                        continue
+                    score = round(
+                        SCORES_REFERENCIA["vizinhanca_temporal"] * fator, 3
+                    )
+                    drafts.append(
+                        _Draft(campo, "vizinhanca_temporal", valor, just,
+                               score_override=score)
+                    )
+                if drafts:
+                    return drafts
 
         # 2) Nome das pastas.
         hierarquia = extrair_hierarquia_da_pasta(media.pasta)

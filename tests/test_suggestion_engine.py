@@ -984,3 +984,39 @@ def test_sugestao_de_quem_deixou_de_ser_acervo_e_descartada(migrated_engine):
         "real.jpg": SuggestionStatus.PENDENTE,
         "mini_aprovada.jpg": SuggestionStatus.APROVADA,
     }
+
+
+def test_heranca_distante_afirma_o_pais_e_cala_a_cidade(migrated_engine):
+    """D-025: em três horas se troca de cidade, não de país.
+
+    Antes a janela era uma só e esta foto não herdava nada. Agora ela herda
+    o que a distância sustenta — e a justificativa diz o que ficou de fora,
+    para o usuário não concluir que a cidade veio junto.
+    """
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "distante.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "tel.jpg", "/fotos/DCIM",
+            data=base + timedelta(hours=3),
+            gps=(43.95, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "distante.jpg")
+    campos = {e.campo for e in evidencias if e.origem == "vizinhanca_temporal"}
+    assert "pais" in campos
+    assert "cidade" not in campos
+    heranca = next(e for e in evidencias if e.origem == "vizinhanca_temporal")
+    assert "não a cidade" in heranca.justificativa

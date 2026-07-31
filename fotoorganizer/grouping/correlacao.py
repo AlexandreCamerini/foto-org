@@ -25,7 +25,17 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from statistics import median
 
-JANELA_HERANCA = timedelta(minutes=10)
+# Quanto tempo de distância cada granularidade aguenta (D-025). Em duas horas
+# se troca de cidade, não de país — uma janela única seria obrigada a adotar o
+# limite da cidade e jogaria fora a informação de país que é segura por muito
+# mais tempo. Do mais fino para o mais grosso.
+JANELAS_POR_CAMPO: tuple[tuple[str, timedelta], ...] = (
+    ("cidade", timedelta(minutes=10)),
+    ("regiao", timedelta(hours=2)),
+    ("pais", timedelta(hours=12)),
+)
+# A busca pela doadora usa a maior das janelas; cada campo é filtrado depois.
+JANELA_HERANCA = max(janela for _, janela in JANELAS_POR_CAMPO)
 # Δt até este limite: confiança cheia da origem; acima, decai até a borda.
 _JANELA_CURTA = timedelta(minutes=2)
 # Âncoras com desvios muito espalhados indicam pareamento ruim — descarta.
@@ -74,11 +84,24 @@ class Heranca:
     lat: float
     lon: float
     delta: timedelta
-    score_fator: float  # 1.0 na janela curta, decaindo até a borda
+    # O que dá para afirmar com este Δt, do mais grosso para o mais fino,
+    # com o fator de confiança de cada um. Vazio nunca acontece: uma herança
+    # sem nenhum campo confiável não é criada.
+    campos: tuple[tuple[str, float], ...]
     # True quando alguma das duas horas veio do mtime do arquivo. A herança
     # continua valendo — é melhor que nada — mas com score menor e dizendo
     # isso na justificativa.
     hora_incerta: bool = False
+
+    def fator_de(self, campo: str) -> float | None:
+        """O fator do campo, ou None quando o Δt não permite afirmá-lo."""
+        return next((f for c, f in self.campos if c == campo), None)
+
+    @property
+    def granularidade(self) -> str:
+        """O campo mais fino que este Δt sustenta — o que a justificativa
+        precisa dizer para não prometer precisão que não existe."""
+        return self.campos[-1][0]
 
 
 def estimar_offsets(
@@ -193,22 +216,42 @@ def herdar_gps(
         if not candidatos:
             continue
         delta, doador = min(candidatos, key=lambda c: c[0])
-        if delta <= _JANELA_CURTA:
-            fator = 1.0
-        else:
-            # Decai linearmente de 1.0 (janela curta) a 0.6 (borda).
-            resto = (delta - _JANELA_CURTA) / (janela - _JANELA_CURTA)
-            fator = 1.0 - 0.4 * resto
         # Hora de arquivo em qualquer um dos lados enfraquece a proximidade:
         # "2 minutos de distância" só significa alguma coisa se as duas horas
         # forem de captura. Vale menos, não vale zero — num acervo onde a
         # câmera não gravou data, é a única pista que sobra.
         incerta = foto.hora_do_arquivo or doador.hora_do_arquivo
-        if incerta:
-            fator *= _PENALIDADE_HORA_DE_ARQUIVO
+        campos = campos_confiaveis(delta, incerta)
+        if not campos:
+            continue
         herancas.append(Heranca(
             media_id=foto.media_id, doador_id=doador.media_id,
             lat=doador.lat, lon=doador.lon, delta=delta,
-            score_fator=round(fator, 3), hora_incerta=incerta,
+            campos=campos, hora_incerta=incerta,
         ))
     return herancas
+
+
+def campos_confiaveis(
+    delta: timedelta, hora_incerta: bool = False
+) -> tuple[tuple[str, float], ...]:
+    """O que dá para afirmar com este Δt, do mais grosso ao mais fino.
+
+    Cada campo decai dentro da PRÓPRIA janela: 1.0 até a janela curta, caindo
+    a 0.6 na borda dele. Assim "país a 6 h" e "cidade a 6 min" não competem
+    na mesma escala — cada um é medido contra o que a sua granularidade
+    aguenta.
+    """
+    resultado: list[tuple[str, float]] = []
+    for campo, janela in sorted(JANELAS_POR_CAMPO, key=lambda cj: -cj[1]):
+        if delta > janela:
+            continue
+        if delta <= _JANELA_CURTA:
+            fator = 1.0
+        else:
+            resto = (delta - _JANELA_CURTA) / (janela - _JANELA_CURTA)
+            fator = 1.0 - 0.4 * resto
+        if hora_incerta:
+            fator *= _PENALIDADE_HORA_DE_ARQUIVO
+        resultado.append((campo, round(fator, 3)))
+    return tuple(resultado)

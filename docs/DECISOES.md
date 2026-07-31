@@ -403,3 +403,27 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
 - Como reverter: o campo `papel` volta a `acervo` com um UPDATE; nenhuma
   linha foi removida, então não há o que restaurar.
 - Status: decidido pelo dono
+
+---
+
+## D-025 — A janela da herança depende do que se herda
+
+- Data: 2026-07-31
+- Contexto: 5.434 das 5.601 fotos do acervo do dono não têm lugar nenhum —
+  nenhuma tem GPS no arquivo. A janela única de 10 minutos alcança 167. A
+  doadora mais próxima de outra origem está a 10–30 min de 762 delas, a
+  30 min–2 h de 1.998 e a 2–12 h de outras 2.235.
+- Opções: (a) manter 10 min; (b) alargar para 30 min; (c) uma janela por
+  campo — cidade em minutos, região em horas, país em mais horas.
+- Escolhida: (c).
+- Por quê: a granularidade do que dá para afirmar depende do intervalo. Em
+  duas horas se troca de cidade, não de país. A janela única era obrigada a
+  adotar o limite da cidade e, com isso, jogava fora a informação de país que
+  seria segura para milhares de fotos. Uma sugestão errada com aparência de
+  fundamentada é pior que nenhuma — e afirmar "Brasil" quando só dá para
+  afirmar "Brasil" é o oposto disso.
+- Janelas: cidade 10 min, região 2 h, país 12 h. A busca pela doadora usa a
+  maior; cada campo entra na evidência só se couber na sua.
+- Como reverter: `JANELAS_POR_CAMPO` em `grouping/correlacao.py` volta a um
+  valor único; nada é persistido de forma irreversível — regerar refaz.
+- Status: decidido pelo dono
