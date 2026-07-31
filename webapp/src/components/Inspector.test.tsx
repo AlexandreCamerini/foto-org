@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import Inspector from "./Inspector";
@@ -27,6 +28,7 @@ const DETALHE_HERDADO = {
     cidade: "Avignon",
     fonte: "offline:reverse_geocode",
     estimado: true,
+    granularidade: "cidade",
   },
   estimativa: {
     doadora_id: 6,
@@ -101,6 +103,126 @@ describe("Inspector", () => {
     expect(screen.getByText(/tirada a 2min de distância/)).toBeInTheDocument();
   });
 
+  it("os metadados do arquivo só são lidos quando o painel abre", async () => {
+    const chamadas = servirApi({
+      "/api/midia/7": DETALHE_HERDADO,
+      "/api/midia/7/metadados": {
+        total: 2,
+        namespaces: [{
+          nome: "iptc",
+          rotulo: "IPTC (autor, direitos, palavras-chave)",
+          itens: [
+            { chave: "By-line", valor: "Alexandre Camerini" },
+            { chave: "Keywords", valor: "viagem; franca" },
+          ],
+        }],
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    expect(chamadas.filter((c) => c.caminho.endsWith("/metadados"))).toHaveLength(0);
+
+    await usuario.click(screen.getByText("Metadados do arquivo"));
+
+    expect(
+      await screen.findByText("IPTC (autor, direitos, palavras-chave)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Alexandre Camerini")).toBeInTheDocument();
+    expect(chamadas.filter((c) => c.caminho.endsWith("/metadados"))).toHaveLength(1);
+  });
+
+  it("arquivo sem metadado diz isso, em vez de painel vazio", async () => {
+    servirApi({
+      "/api/midia/7": DETALHE_HERDADO,
+      "/api/midia/7/metadados": { total: 0, namespaces: [] },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(screen.getByText("Metadados do arquivo"));
+
+    expect(
+      await screen.findByText(/não trouxe metadado nenhum/),
+    ).toBeInTheDocument();
+  });
+
+  it("classificação provisória pergunta, em vez de afirmar", async () => {
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "captura",
+                        tipo_provisorio: true },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText(/Isto parece/)).toBeInTheDocument();
+    expect(screen.getByText("captura de tela")).toBeInTheDocument();
+    expect(screen.getByText("Confere")).toBeInTheDocument();
+    expect(screen.getByText("Não, é foto")).toBeInTheDocument();
+  });
+
+  it("responder grava a palavra do usuário, não a do detector", async () => {
+    const chamadas = servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "captura",
+                        tipo_provisorio: true },
+      "/api/midia/7/tipo": { tipo_imagem: "foto", tipo_provisorio: false },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await usuario.click(await screen.findByText("Não, é foto"));
+
+    const post = chamadas.find((c) => c.caminho === "/api/midia/7/tipo");
+    expect(post?.metodo).toBe("POST");
+    expect(post?.corpo).toEqual({ tipo: "foto" });
+  });
+
+  it("classificação já confirmada não volta a perguntar", async () => {
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "captura",
+                        tipo_provisorio: false },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText(/classificado por você/)).toBeInTheDocument();
+    expect(screen.queryByText("Confere")).not.toBeInTheDocument();
+  });
+
+  it("foto normal não ganha bloco de tipo", async () => {
+    // Foto normal é o detector dizendo "foto" SEM o usuário ter respondido —
+    // `tipo_provisorio: true`. O fixture antigo usava `false`, um estado que
+    // quase não existe, e por isso o caso real passava sem teste: o inspetor
+    // perguntava "isto parece foto, não uma foto?" em 5.071 das 5.601 fotos.
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "foto",
+                        tipo_provisorio: true },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    // Esperar pelo NOME não serve: ele vem do prop `media` e aparece antes
+    // de a consulta do detalhe resolver — a asserção rodava no DOM vazio e
+    // passava com qualquer condição. Esperar por algo que só existe no
+    // detalhe é o que faz este teste medir alguma coisa.
+    await screen.findByText("Canon EOS R5");
+    expect(screen.queryByText(/Isto parece/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/classificado por você/)).not.toBeInTheDocument();
+  });
+
+  it("quem respondeu 'é foto' consegue voltar atrás", async () => {
+    // Antes o bloco sumia depois da correção: o usuário derrubava o veredito
+    // do detector e ficava sem caminho de volta pela interface.
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "foto",
+                        tipo_provisorio: false },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText(/classificado por você/)).toBeInTheDocument();
+    expect(screen.getByText("desfazer")).toBeInTheDocument();
+    expect(screen.queryByText(/Isto parece/)).not.toBeInTheDocument();
+  });
+
   it("foto sem lugar resolvido não inventa linha vazia", async () => {
     servirApi({
       "/api/midia/7": {
@@ -114,3 +236,34 @@ describe("Inspector", () => {
     expect(screen.queryByText("Lugar")).not.toBeInTheDocument();
   });
 });
+
+
+describe("granularidade do lugar herdado", () => {
+  it("herança de horas anuncia o país, não a cidade", async () => {
+    // A API já devolve regiao/cidade nulas nesse caso (D-025); o que se
+    // testa aqui é o rótulo — "Lugar · estimado" seco faria o usuário ler
+    // a linha como se a cidade tivesse sido apurada.
+    servirApi({
+      "/api/midia/7": {
+        ...DETALHE_HERDADO,
+        // sem sugestão: o bloco de evidências cita a cidade por conta
+        // própria, e aqui o alvo é a linha "Lugar".
+        sugestao: null,
+        local: {
+          pais: "França",
+          regiao: null,
+          cidade: null,
+          fonte: "offline:reverse_geocode",
+          estimado: true,
+          granularidade: "pais",
+        },
+      },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("Lugar · país estimado")).toBeInTheDocument();
+    expect(screen.getByText("França")).toBeInTheDocument();
+    expect(screen.queryByText(/Avignon/)).not.toBeInTheDocument();
+  });
+});
+

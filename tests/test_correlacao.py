@@ -24,6 +24,12 @@ def _iphone(mid, segundos, lat=25.2, lon=55.3, **kw):
                    lat=lat, lon=lon, **kw)
 
 
+def _de(herancas, media_id):
+    """A herança de uma foto específica. Toda foto sem GPS tenta herdar, e
+    o retorno traz todas — filtrar deixa a asserção falar de uma só."""
+    return next((h for h in herancas if h.media_id == media_id), None)
+
+
 # -- herança de GPS ----------------------------------------------------------
 def test_heranca_do_doador_mais_proximo():
     fotos = [
@@ -31,22 +37,39 @@ def test_heranca_do_doador_mais_proximo():
         _iphone(2, -42),                    # doadora 42s antes
         _iphone(3, 600, lat=25.9, lon=55.9),
     ]
-    (h,) = herdar_gps(fotos)
-    assert h.media_id == 1 and h.doador_id == 2
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 2
     assert h.lat == 25.2
     assert h.delta == timedelta(seconds=42)
-    assert h.score_fator == 1.0  # dentro da janela curta
+    # 42s sustenta até a cidade, com confiança cheia (janela curta).
+    assert h.granularidade == "cidade"
+    assert h.fator_de("cidade") == 1.0
 
 
-def test_fora_da_janela_nao_herda():
-    fotos = [_canon(1, 0), _iphone(2, 11 * 60)]
-    assert herdar_gps(fotos) == []
+def test_fora_da_janela_da_cidade_ainda_herda_o_pais():
+    """11 minutos não dizem em que cidade você estava; dizem em que país.
+
+    Antes de D-025 a janela era uma só, de 10 min, e esta foto não herdava
+    nada — o limite da cidade jogava fora a informação de país, que é segura
+    por muito mais tempo.
+    """
+    h = _de(herdar_gps([_canon(1, 0), _iphone(2, 11 * 60)]), 1)
+    assert h is not None
+    assert h.granularidade == "regiao"
+    assert h.fator_de("cidade") is None
+    assert h.fator_de("pais") is not None
+
+
+def test_longe_demais_para_qualquer_campo():
+    assert _de(herdar_gps([_canon(1, 0), _iphone(2, 13 * 3600)]), 1) is None
 
 
 def test_confianca_decai_com_delta():
     fotos = [_canon(1, 0), _iphone(2, 6 * 60)]  # 6 min: meio da rampa
-    (h,) = herdar_gps(fotos)
-    assert 0.7 < h.score_fator < 0.9
+    h = _de(herdar_gps(fotos), 1)
+    assert 0.7 < h.fator_de("cidade") < 0.9
+    # O país mal sente 6 minutos dentro da janela de 12 h.
+    assert h.fator_de("pais") > 0.99
 
 
 def test_mesma_camera_na_mesma_fonte_nao_doa():
@@ -108,9 +131,11 @@ def test_offset_corrige_a_heranca():
     herancas = {h.media_id: h for h in herdar_gps(fotos, offsets)}
     assert 1 in herancas
     assert herancas[1].lat == 13.75
-    # Sem a correção, os 3h de deriva estourariam a janela de 10 min.
-    sem_offset = {h.media_id for h in herdar_gps(fotos)}
-    assert 1 not in sem_offset
+    # A cidade só sobrevive por causa da correção: sem ela, as 3h de deriva
+    # jogam a foto para fora da janela de cidade e sobra o país (D-025).
+    assert herancas[1].granularidade == "cidade"
+    sem_offset = {h.media_id: h for h in herdar_gps(fotos)}
+    assert sem_offset[1].fator_de("cidade") is None
 
 
 def test_ancoras_dispersas_sao_descartadas():
@@ -132,3 +157,66 @@ def test_ancoras_dispersas_sao_descartadas():
 def test_ancora_unica_nao_basta():
     fotos = _ancoras_camera_3h_atrasada()[:2]  # só 1 par
     assert estimar_offsets(fotos) == {}
+
+
+def test_procura_alem_dos_dois_vizinhos_imediatos():
+    """Os vizinhos mais próximos COM GPS são da mesma origem da foto.
+
+    Só doador de outra origem acrescenta informação, e a versão anterior
+    olhava apenas os dois vizinhos imediatos: quando os dois eram da mesma
+    origem, ela desistia sem nunca alcançar o terceiro. Num acervo real isso
+    barrou 27.117 candidatos — a biblioteca do Apple Fotos é uma fonte só,
+    e uma referência sem GPS fica cercada de referências com GPS.
+    """
+    fotos = [
+        _canon(1, 0),                                  # quem precisa herdar
+        _canon(2, -5, lat=1.0, lon=1.0),               # tem GPS, MESMA origem
+        _canon(3, 5, lat=2.0, lon=2.0),                # idem, do outro lado
+        _iphone(4, 30, lat=25.2, lon=55.3),            # a única que serve
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 4
+    assert (h.lat, h.lon) == (25.2, 55.3)
+    assert h.delta == timedelta(seconds=30)
+
+
+def test_a_busca_para_na_borda_da_janela():
+    """Varrer além da janela maior seria trabalho jogado fora — nenhum campo
+    sobrevive a essa distância."""
+    fotos = [_canon(1, 0)]
+    # Irmãs com GPS da MESMA origem cercando a foto, para forçar a varredura.
+    fotos += [_canon(10 + i, 3600 * i, lat=1.0, lon=1.0) for i in range(1, 14)]
+    fotos.append(_iphone(99, 13 * 3600))   # doadora válida, mas a 13 h
+    assert _de(herdar_gps(fotos), 1) is None
+
+
+def test_o_mais_proximo_vence_mesmo_vindo_do_outro_lado():
+    fotos = [
+        _canon(1, 0),
+        _canon(2, -20),
+        _iphone(3, -100, lat=10.0, lon=10.0),   # atrás, mais longe
+        _iphone(4, 40, lat=20.0, lon=20.0),     # à frente, mais perto
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 4 and h.lat == 20.0
+
+
+def test_hora_vinda_do_arquivo_vale_menos():
+    """`mtime` costuma ser a hora da cópia, não a do disparo: a vizinhança
+    pode ser coincidência de quando os arquivos foram parar no disco."""
+    certa = _de(herdar_gps([_canon(1, 0), _iphone(2, 30)]), 1)
+    incerta = _de(herdar_gps(
+        [_canon(1, 0, hora_do_arquivo=True), _iphone(2, 30)]
+    ), 1)
+
+    assert certa.hora_incerta is False
+    assert incerta.hora_incerta is True
+    assert incerta.fator_de("cidade") < certa.fator_de("cidade")
+    # A herança continua acontecendo — vale menos, não vale zero.
+    assert incerta.doador_id == 2
+
+    # Basta um dos dois lados ser incerto.
+    pelo_doador = _de(herdar_gps(
+        [_canon(1, 0), _iphone(2, 30, hora_do_arquivo=True)]
+    ), 1)
+    assert pelo_doador.hora_incerta is True

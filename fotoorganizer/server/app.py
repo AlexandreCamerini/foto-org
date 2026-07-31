@@ -29,12 +29,17 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from datetime import datetime, timedelta, timezone
+
 from fotoorganizer import __version__
+from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
+from fotoorganizer.grouping.correlacao import campos_confiaveis
 from fotoorganizer.models import (
     Event,
     Location,
     MediaFile,
+    MetadataEntry,
     Suggestion,
     SuggestionStatus,
     Trip,
@@ -91,6 +96,11 @@ class PrincipalBody(BaseModel):
     media_id: int
 
 
+class TipoBody(BaseModel):
+    """`None` devolve a decisão ao detector."""
+    tipo: str | None = None
+
+
 class PlanoBody(BaseModel):
     raiz_destino: str
     nome: str | None = None
@@ -98,6 +108,26 @@ class PlanoBody(BaseModel):
 
 class EditarDestinoBody(BaseModel):
     destino: str
+
+
+# O usuário não precisa saber o que é "libraw" — precisa saber de onde o
+# dado veio. O nome técnico fica na chave; o rótulo explica a origem.
+TIPOS_VALIDOS = frozenset(TIPOS_IMAGEM)
+
+ROTULOS_NAMESPACE = {
+    "exif": "EXIF (gravado pela câmera)",
+    "gps": "GPS (coordenadas no arquivo)",
+    "iptc": "IPTC (autor, direitos, palavras-chave)",
+    "xmp": "XMP (escrito por editor de imagem)",
+    "libraw": "RAW (lido do arquivo bruto)",
+    "makernotes": "MakerNotes (bloco do fabricante da câmera)",
+    "icc": "ICC (perfil de cor)",
+    "quicktime": "QuickTime (contêiner de vídeo e RAW moderno)",
+    "png": "PNG (cabeçalho do arquivo)",
+    "apple": "Apple Fotos (catálogo importado)",
+    "google": "Google Takeout (catálogo importado)",
+    "lightroom": "Lightroom (catálogo importado)",
+}
 
 _PREVIEW_SIZE = 2048
 
@@ -121,6 +151,21 @@ def _sugestao_json(linha: SuggestionRow) -> dict:
     }
 
 
+def _campos_do_lugar(m: MediaFile) -> tuple[str, ...]:
+    """Que partes do lugar dá para mostrar, do mais grosso ao mais fino.
+
+    GPS lido no arquivo entrega tudo. Lugar herdado entrega só o que o Δt
+    até a doadora sustenta — a mesma regra que o motor usou para montar a
+    evidência (D-025), aplicada aqui para a tela não afirmar mais que ela.
+    """
+    if not m.coordenada_estimada:
+        return ("pais", "regiao", "cidade")
+    if m.gps_estimado_delta_s is None:
+        return ("pais",)
+    campos = campos_confiaveis(timedelta(seconds=m.gps_estimado_delta_s))
+    return tuple(campo for campo, _ in campos)
+
+
 def _media_json(m: MediaFile) -> dict:
     return {
         "id": m.id,
@@ -139,6 +184,10 @@ def _media_json(m: MediaFile) -> dict:
         "gps_lon": m.gps_lon,
         # Coordenada efetiva + se ela é estimada: a grade precisa marcar a
         # diferença sem uma consulta por miniatura.
+        "tipo_imagem": m.tipo_efetivo,
+        # Provisório: o detector opinou e o usuário ainda não respondeu. A
+        # interface pergunta em vez de afirmar.
+        "tipo_provisorio": m.tipo_provisorio,
         "gps_estimado": m.coordenada_estimada,
         "gps_lat_efetivo": m.coordenada[0] if m.coordenada else None,
         "gps_lon_efetivo": m.coordenada[1] if m.coordenada else None,
@@ -256,12 +305,17 @@ def create_app(
             if media.location_id is not None:
                 local = session.get(Location, media.location_id)
                 if local is not None:
+                    # Lugar herdado só é entregue até onde o Δt sustenta
+                    # (D-025). Devolver a cidade quando a evidência só afirma
+                    # o país mostraria na tela uma precisão que ninguém apurou.
+                    pode = _campos_do_lugar(media)
                     detalhe["local"] = {
-                        "pais": local.pais,
-                        "regiao": local.regiao,
-                        "cidade": local.cidade,
+                        "pais": local.pais if "pais" in pode else None,
+                        "regiao": local.regiao if "regiao" in pode else None,
+                        "cidade": local.cidade if "cidade" in pode else None,
                         "fonte": local.fonte,
                         "estimado": media.coordenada_estimada,
+                        "granularidade": pode[-1] if pode else None,
                     }
             if media.gps_estimado_de_id is not None:
                 doadora = session.get(MediaFile, media.gps_estimado_de_id)
@@ -298,6 +352,60 @@ def create_app(
                     ],
                 }
         return detalhe
+
+    @app.get("/api/midia/{media_id}/metadados")
+    def metadados(media_id: int) -> dict:
+        """Tudo que estava gravado no arquivo, agrupado por padrão.
+
+        Endpoint próprio e não parte do detalhe: um JPEG editado traz
+        dezenas de chaves XMP, e o detalhe é pedido a cada seleção na
+        grade. Aqui o custo só existe quando o usuário pergunta.
+        """
+        with session_factory() as session:
+            linhas = session.scalars(
+                select(MetadataEntry)
+                .where(MetadataEntry.media_id == media_id)
+                .order_by(MetadataEntry.namespace, MetadataEntry.chave)
+            ).all()
+        grupos: dict[str, list[dict]] = {}
+        for linha in linhas:
+            grupos.setdefault(linha.namespace, []).append(
+                {"chave": linha.chave, "valor": linha.valor}
+            )
+        return {
+            "total": len(linhas),
+            "namespaces": [
+                {"nome": nome, "rotulo": ROTULOS_NAMESPACE.get(nome, nome),
+                 "itens": itens}
+                for nome, itens in grupos.items()
+            ],
+        }
+
+    @app.post("/api/midia/{media_id}/tipo")
+    def confirmar_tipo(media_id: int, body: TipoBody) -> dict:
+        """A palavra do usuário sobre o que a imagem é.
+
+        Grava em `tipo_confirmado`, que nenhuma geração de sugestões
+        sobrescreve — ao contrário de `tipo_imagem`, que é a opinião do
+        detector e é recalculada a cada passagem. `tipo: null` devolve a
+        decisão ao detector.
+        """
+        if body.tipo is not None and body.tipo not in TIPOS_VALIDOS:
+            raise HTTPException(422, f"tipo desconhecido: {body.tipo}")
+        with session_factory() as session:
+            media = session.get(MediaFile, media_id)
+            if media is None:
+                raise HTTPException(404, "foto não encontrada")
+            media.tipo_confirmado = body.tipo
+            media.tipo_confirmado_em = (
+                datetime.now(timezone.utc).replace(tzinfo=None)
+                if body.tipo else None
+            )
+            session.commit()
+            return {
+                "tipo_imagem": media.tipo_efetivo,
+                "tipo_provisorio": media.tipo_provisorio,
+            }
 
     # -- imagens ---------------------------------------------------------------
     @app.get("/api/midia/{media_id}/thumb")

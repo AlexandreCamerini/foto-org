@@ -28,6 +28,15 @@ somente por último executar operações físicas.**
    embeddings criptografados, resultados sempre como sugestão a confirmar.
 7. MVP não implementa exclusão de fotos nem escrita de EXIF (futuro: sidecar
    XMP apenas).
+8. Nada que possa ser a referência real de uma foto é apagado — nem do disco,
+   nem do catálogo. Registro que não serve como acervo pode ser **rebaixado a
+   fonte de sinal** (sai da grade, da revisão e do plano, continua doando data,
+   GPS e correlação), nunca removido. Uma miniatura interna, um derivado ou uma
+   referência de catálogo externo costuma ser a única testemunha do lugar e da
+   hora de uma foto que não tem GPS próprio: apagá-la destrói informação que
+   não se recupera. Medido em 2026-07-31 — apagar as 45.822 miniaturas do
+   Apple Fotos levaria as fotos reais com lugar estimado de 2.117 para 162.
+   Ver D-024 em `docs/DECISOES.md`.
 
 ## Stack (decidida — não trocar sem justificar)
 

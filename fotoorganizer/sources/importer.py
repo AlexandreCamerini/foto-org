@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import ScannerSettings
 from fotoorganizer.metadata import MetadataExtractor
-from fotoorganizer.models import MediaFile, MetadataEntry, Source
+from fotoorganizer.models import MediaFile, MediaRole, MetadataEntry, Source
 from fotoorganizer.security.hashing import quick_signature
 from fotoorganizer.sources.base import ExternalAsset, ExternalCatalogProvider
 from fotoorganizer.thumbnails import ThumbnailCache
@@ -38,6 +38,7 @@ _BATCH_SIZE = 200
 _NAMESPACES = {
     "apple_photos": "apple",
     "google_takeout": "google",
+    "lightroom": "lightroom",
 }
 
 
@@ -252,6 +253,16 @@ class ExternalCatalogImporter:
             extensao="", tamanho=0,
         )
         media.arquivo_ausente = True
+        # Uma referência é testemunha por definição: não há arquivo para
+        # entrar na grade, na revisão nem no plano. Sem isto o registro fica
+        # dizendo duas coisas contraditórias ao mesmo tempo — foi o que
+        # aconteceu com as 54.086 do Lightroom na primeira importação.
+        media.papel = MediaRole.SINAL
+        # A pasta de origem é o que responde "onde estava esta foto?" quando
+        # o volume não está montado. Sem isto, uma referência do Lightroom
+        # sabe a data e o GPS e não sabe dizer de que disco veio.
+        if asset.caminho_original is not None:
+            media.pasta = str(asset.caminho_original.parent)
         media.nome = (
             asset.nome or asset.titulo or f"{namespace}:{asset.referencia}"
         )
@@ -287,6 +298,8 @@ class ExternalCatalogImporter:
             entradas.append(("album", album))
         for pessoa in asset.pessoas:
             entradas.append(("pessoa", pessoa))
+        for palavra in asset.palavras_chave:
+            entradas.append(("palavra_chave", palavra))
         if asset.gps_lat is not None:
             entradas.append(("gps", f"{asset.gps_lat:.6f},{asset.gps_lon:.6f}"))
         if asset.data_capturada is not None:

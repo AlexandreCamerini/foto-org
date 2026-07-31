@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.classification.confidence import nivel_para_score
@@ -12,6 +12,7 @@ from fotoorganizer.models import (
     ConfidenceLevel,
     Evidence,
     MediaFile,
+    MediaRole,
     Source,
     Suggestion,
     SuggestionStatus,
@@ -754,3 +755,268 @@ def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):
         assert cam.gps_lat_estimado is None
         assert cam.gps_estimado_de_id is None
         assert cam.coordenada_estimada is False
+
+
+def test_captura_de_tela_sai_do_fluxo_de_viagem(migrated_engine):
+    """Captura de tela feita durante a viagem não pertence à pasta da
+    viagem. Vai para ramo próprio, por tipo e ano, com a justificativa
+    dizendo o que a denunciou."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(4):
+            session.add(_media(
+                fonte.id, f"franca_{i}.jpg", "/fotos/Viagens/2024 - França",
+                data=base + timedelta(days=i), gps=(43.95, 4.8083),
+                make="Canon", model="EOS R5",
+            ))
+        # No meio da viagem, uma captura de tela do mapa.
+        captura = _media(fonte.id, "Captura de Tela 2024-05-05 às 09.00.00.png",
+                         "/fotos/Viagens/2024 - França",
+                         data=base + timedelta(days=1))
+        captura.extensao = "png"
+        captura.largura, captura.altura = 2556, 1179
+        session.add(captura)
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    sugestao, _ = _sugestao_de(factory, "Captura de Tela 2024-05-05 às 09.00.00.png")
+    assert sugestao.destino_sugerido.startswith("Não são fotos/Captura de tela")
+    assert "2024" in sugestao.destino_sugerido
+    vinculadas = {e.campo: e for e in sugestao.evidencias}
+    assert "captura de tela" in vinculadas["tipo"].justificativa.lower() or \
+           "resolução de uma tela" in vinculadas["tipo"].justificativa
+
+    # E a foto de verdade da mesma viagem não foi arrastada junto.
+    foto, _ = _sugestao_de(factory, "franca_0.jpg")
+    assert foto.destino_sugerido.startswith("Viagens")
+
+
+def test_foto_com_camera_nao_vai_para_o_ramo_de_nao_fotos(migrated_engine):
+    """A regra de ouro: na dúvida é foto. Erro aqui derruba a confiança no
+    catálogo inteiro."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # Nome que parece download, mas com câmera gravada no arquivo.
+        session.add(_media(fonte.id, "image (2).jpg", "/fotos/Downloads",
+                           data=datetime(2024, 5, 4, 10, 0),
+                           make="Nikon", model="Z6"))
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    sugestao, _ = _sugestao_de(factory, "image (2).jpg")
+    assert not sugestao.destino_sugerido.startswith("Não são fotos")
+
+
+def test_correcao_do_usuario_sobrevive_a_regeneracao(migrated_engine):
+    """`tipo_imagem` é a opinião do detector e é reescrita a cada geração —
+    tem de ser, porque um arquivo reprocessado pode ganhar EXIF. Se a
+    correção do usuário morasse ali, a próxima passagem a desfaria em
+    silêncio."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # Nome de captura de tela, mas é uma foto de verdade que o usuário
+        # renomeou. O detector vai insistir que é captura.
+        session.add(_media(fonte.id, "Screenshot da praia.png", "/fotos",
+                           data=datetime(2024, 5, 4, 10, 0)))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        assert media.tipo_imagem == "captura"
+        assert media.tipo_provisorio is True
+        media.tipo_confirmado = "foto"      # o usuário discorda
+        session.commit()
+
+    engine.gerar()   # regenera tudo
+
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        # O detector continua achando o que achava — e continua irrelevante.
+        assert media.tipo_imagem == "captura"
+        assert media.tipo_confirmado == "foto"
+        assert media.tipo_efetivo == "foto"
+        assert media.tipo_provisorio is False
+        sugestao = session.scalar(select(Suggestion))
+        assert not sugestao.destino_sugerido.startswith("Não são fotos")
+
+
+def test_confirmar_como_nao_foto_manda_para_o_ramo_certo(migrated_engine):
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # O detector acha que é foto (tem câmera); o usuário sabe que é lixo.
+        session.add(_media(fonte.id, "recibo.jpg", "/fotos",
+                           data=datetime(2024, 5, 4, 10, 0),
+                           make="Canon", model="EOS R5"))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        assert media.tipo_imagem == "foto"
+        media.tipo_confirmado = "baixada"
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        sugestao = session.scalar(select(Suggestion))
+        assert sugestao.destino_sugerido.startswith("Não são fotos/Baixada")
+        vinculadas = {e.campo: e for e in sugestao.evidencias}
+        assert vinculadas["tipo"].origem == "usuario"
+        assert "por você" in vinculadas["tipo"].justificativa
+
+
+def test_miniatura_de_cache_doa_gps_mas_nao_vira_sugestao(migrated_engine):
+    """A separação que salvou a revisão: 89% do acervo local de um usuário
+    real eram miniaturas 540×360 do pacote do Apple Fotos, e cada uma virava
+    uma sugestão de destino.
+
+    Apagá-las custaria caro — elas carregam o GPS que o catálogo externo não
+    reporta. Então elas doam e ficam de fora (invariante 8, D-024).
+    """
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    biblioteca = "/Users/x/Pictures/Fotos.photoslibrary/resources/derivatives"
+    with factory() as session:
+        fonte = Source(caminho="/Users/x/Pictures")
+        session.add(fonte)
+        session.flush()
+        # A foto do usuário, de câmera, sem GPS nenhum.
+        session.add(_media(
+            fonte.id, "ACM_0001.jpg", "/Users/x/Pictures/2024",
+            data=base, make="Canon", model="EOS R6",
+        ))
+        # A miniatura interna, com GPS, um minuto depois.
+        mini = _media(
+            fonte.id, "ABC_4_5005_c.jpeg", biblioteca,
+            data=base + timedelta(minutes=1), gps=(43.95, 4.8083),
+            make="Apple", model="iPhone 15",
+        )
+        mini.papel = MediaRole.SINAL
+        session.add(mini)
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    resultado = engine.gerar()
+
+    with factory() as session:
+        foto = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "ACM_0001.jpg")
+        )
+        miniatura = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "ABC_4_5005_c.jpeg")
+        )
+        # A doação aconteceu: a foto do usuário ganhou lugar estimado.
+        assert foto.gps_lat_estimado == 43.95
+        assert foto.gps_estimado_de_id == miniatura.id
+        # E a miniatura não entrou na fila de decisão de ninguém.
+        sugestoes = session.scalars(select(Suggestion)).all()
+        assert [s.media_id for s in sugestoes] == [foto.id]
+    assert resultado["herancas_gps"] == 1
+
+
+def test_sugestao_de_quem_deixou_de_ser_acervo_e_descartada(migrated_engine):
+    """Rebaixar uma mídia a testemunha tem de levar a sugestão pendente
+    dela junto — senão a fila continua pedindo decisão sobre miniatura.
+
+    A decisão já tomada pelo usuário fica: aprovada não se desfaz por
+    reclassificação nossa.
+    """
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for nome in ("mini_pendente.jpg", "mini_aprovada.jpg"):
+            session.add(_media(
+                fonte.id, nome, "/fotos/Lib.photoslibrary/derivatives",
+                data=base, gps=(43.95, 4.8083),
+            ))
+        session.add(_media(fonte.id, "real.jpg", "/fotos/2024", data=base))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()  # ainda sem papel: as três recebem sugestão
+
+    with factory() as session:
+        assert session.scalar(select(func.count(Suggestion.id))) == 3
+        aprovada = session.scalar(select(Suggestion).join(MediaFile).where(
+            MediaFile.nome == "mini_aprovada.jpg"
+        ))
+        aprovada.status = SuggestionStatus.APROVADA
+        for m in session.scalars(select(MediaFile).where(
+            MediaFile.pasta.like("%.photoslibrary%")
+        )):
+            m.papel = MediaRole.SINAL
+        session.commit()
+
+    resultado = engine.gerar()
+    assert resultado["descartadas"] == 1
+
+    with factory() as session:
+        restantes = {
+            nome: status
+            for nome, status in session.execute(
+                select(MediaFile.nome, Suggestion.status)
+                .join(Suggestion, Suggestion.media_id == MediaFile.id)
+            )
+        }
+    assert restantes == {
+        "real.jpg": SuggestionStatus.PENDENTE,
+        "mini_aprovada.jpg": SuggestionStatus.APROVADA,
+    }
+
+
+def test_heranca_distante_afirma_o_pais_e_cala_a_cidade(migrated_engine):
+    """D-025: em três horas se troca de cidade, não de país.
+
+    Antes a janela era uma só e esta foto não herdava nada. Agora ela herda
+    o que a distância sustenta — e a justificativa diz o que ficou de fora,
+    para o usuário não concluir que a cidade veio junto.
+    """
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "distante.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "tel.jpg", "/fotos/DCIM",
+            data=base + timedelta(hours=3),
+            gps=(43.95, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "distante.jpg")
+    campos = {e.campo for e in evidencias if e.origem == "vizinhanca_temporal"}
+    assert "pais" in campos
+    assert "cidade" not in campos
+    heranca = next(e for e in evidencias if e.origem == "vizinhanca_temporal")
+    assert "não a cidade" in heranca.justificativa

@@ -1,7 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { api, type Media } from "../api";
+import { api, type Media, type MediaDetalhe } from "../api";
 import { Confianca } from "./Confianca";
+
+/** Só o que NÃO é foto ganha rótulo: dizer "foto" em toda foto é ruído. */
+const ROTULOS_TIPO: Record<string, string> = {
+  captura: "captura de tela",
+  recebida: "recebida em mensageiro",
+  baixada: "baixada da web",
+};
 
 export default function Inspector({ media }: { media: Media | null }) {
   const { data: detalhe } = useQuery({
@@ -47,7 +55,7 @@ export default function Inspector({ media }: { media: Media | null }) {
               }
             />
             <Linha
-              rotulo={detalhe?.local?.estimado ? "Lugar · estimado" : "Lugar"}
+              rotulo={rotuloDoLugar(detalhe?.local)}
               valor={
                 detalhe?.local
                   ? [detalhe.local.cidade, detalhe.local.regiao, detalhe.local.pais]
@@ -75,6 +83,10 @@ export default function Inspector({ media }: { media: Media | null }) {
                 : "."}
             </div>
           )}
+
+          <TipoDaImagem media={media} detalhe={detalhe} />
+
+          <MetadadosDoArquivo mediaId={media.id} />
 
           {detalhe?.sugestao && (
             <div className="mt-3 border-t border-borda pt-3">
@@ -105,6 +117,144 @@ export default function Inspector({ media }: { media: Media | null }) {
       )}
     </aside>
   );
+}
+
+/** A classificação do detector é PROVISÓRIA até você responder.
+ *
+ * Enquanto `tipo_provisorio` for true, o painel pergunta em vez de afirmar —
+ * e a resposta vai para `tipo_confirmado`, que nenhuma geração de sugestões
+ * sobrescreve. Sem essa separação, corrigir o tipo seria desfeito em
+ * silêncio na próxima passagem do motor.
+ */
+function TipoDaImagem({
+  media,
+  detalhe,
+}: {
+  media: Media;
+  detalhe?: MediaDetalhe;
+}) {
+  const queryClient = useQueryClient();
+  const confirmar = useMutation({
+    mutationFn: (tipo: string | null) => api.confirmarTipo(media.id, tipo),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["detalhe", media.id] });
+      void queryClient.invalidateQueries({ queryKey: ["midia"] });
+      void queryClient.invalidateQueries({ queryKey: ["panorama"] });
+    },
+  });
+
+  const tipo = detalhe?.tipo_imagem;
+  const provisorio = detalhe?.tipo_provisorio ?? false;
+  // O detector conclui "foto" por padrão — na dúvida, é foto. Perguntar
+  // "isto parece foto, não uma foto?" em toda foto do acervo é ruído: eram
+  // 5.071 das 5.601. Só a conclusão de que NÃO é foto merece pergunta.
+  // Quando o próprio usuário disse "é foto", aí sim aparece — com o desfazer.
+  if (!tipo || (tipo === "foto" && provisorio)) return null;
+  const rotulo = ROTULOS_TIPO[tipo] ?? tipo;
+
+  if (provisorio) {
+    return (
+      <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5">
+        <div className="text-texto-2">
+          Isto parece <span className="text-texto">{rotulo}</span>, não uma
+          foto. Confere?
+        </div>
+        <div className="mt-1.5 flex gap-1.5">
+          <button
+            onClick={() => confirmar.mutate(tipo)}
+            disabled={confirmar.isPending}
+            className="rounded-md border border-borda px-2 py-0.5 hover:border-ok hover:text-ok disabled:opacity-50"
+          >
+            Confere
+          </button>
+          <button
+            onClick={() => confirmar.mutate("foto")}
+            disabled={confirmar.isPending}
+            className="rounded-md border border-borda px-2 py-0.5 hover:border-borda-forte disabled:opacity-50"
+          >
+            Não, é foto
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2 text-texto-2">
+      <span>
+        {rotulo} · <span className="text-texto-3">classificado por você</span>
+      </span>
+      <button
+        onClick={() => confirmar.mutate(null)}
+        className="rounded px-1 text-texto-3 hover:text-texto"
+        title="Devolver a decisão ao detector"
+      >
+        desfazer
+      </button>
+    </div>
+  );
+}
+
+/** Tudo que estava gravado no arquivo — EXIF, GPS, IPTC, XMP, RAW.
+ *
+ * Fechado por padrão e buscado só ao abrir: um JPEG editado traz dezenas de
+ * chaves XMP, e o inspetor é recarregado a cada seleção na grade. */
+function MetadadosDoArquivo({ mediaId }: { mediaId: number }) {
+  const [aberto, setAberto] = useState(false);
+  const { data, isPending } = useQuery({
+    queryKey: ["metadados", mediaId],
+    queryFn: () => api.metadados(mediaId),
+    enabled: aberto,
+  });
+
+  return (
+    <div className="mt-3 border-t border-borda pt-3">
+      <button
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        className="titulo-painel flex w-full items-center gap-1.5 px-0 hover:text-texto"
+      >
+        <span className="w-2">{aberto ? "▾" : "▸"}</span>
+        Metadados do arquivo
+        {data && <span className="text-texto-3">({data.total})</span>}
+      </button>
+
+      {aberto && isPending && (
+        <div className="mt-1 text-texto-3">lendo…</div>
+      )}
+      {aberto && data && data.total === 0 && (
+        <div className="mt-1 text-texto-3">
+          Este arquivo não trouxe metadado nenhum.
+        </div>
+      )}
+      {aberto &&
+        data?.namespaces.map((ns) => (
+          <div key={ns.nome} className="mt-2">
+            <div className="mb-1 text-[11px] text-texto-3">{ns.rotulo}</div>
+            <dl className="space-y-0.5">
+              {ns.itens.map((item) => (
+                <div key={item.chave} className="flex gap-2">
+                  <dt className="w-24 shrink-0 break-all text-texto-3">
+                    {item.chave}
+                  </dt>
+                  <dd className="min-w-0 break-all text-texto-2">{item.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+/** O rótulo carrega a granularidade: um lugar herdado de horas atrás diz o
+ *  país, e chamar isso de "Lugar · estimado" faria o usuário ler a linha
+ *  como se a cidade estivesse ali (D-025). */
+function rotuloDoLugar(local?: MediaDetalhe["local"]): string {
+  if (!local?.estimado) return "Lugar";
+  if (local.granularidade === "regiao") return "Lugar · região estimada";
+  if (local.granularidade === "pais") return "Lugar · país estimado";
+  return "Lugar · estimado";
 }
 
 function Linha({ rotulo, valor }: { rotulo: string; valor?: string | null }) {

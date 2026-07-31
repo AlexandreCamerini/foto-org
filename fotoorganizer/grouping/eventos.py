@@ -9,6 +9,9 @@ from __future__ import annotations
 import re
 
 from fotoorganizer.geolocation.folder_names import _normalizar, identificar_pais
+# A lista de sufixos de pacote mora no discovery (módulo folha, sem
+# dependência do projeto) para não existir em duas versões que divergem.
+from fotoorganizer.scanner.discovery import SUFIXOS_DE_CODIGO
 from fotoorganizer.grouping.datas import separar_data
 
 # Palavras que indicam evento (comparadas sem acento/caixa).
@@ -64,6 +67,12 @@ def keyword_de_evento(segmento: str) -> bool:
 def pasta_tecnica(segmento: str) -> bool:
     norm = _normalizar(segmento)
     if _RE_TECNICO.match(norm):
+        return True
+    # Pacote de software conhecido: aqui o SUFIXO decide sozinho, o miolo não
+    # importa. Sem isto, "BoraChurrascoRio.imageset" passou por nome de álbum
+    # e batizou 1.314 fotos de um acervo real. É a segunda linha de defesa —
+    # a primeira é o scanner nem entrar nessas pastas.
+    if segmento.lower().endswith(SUFIXOS_DE_CODIGO):
         return True
     # Contêiner de software com extensão no nome da pasta ("Pictures.wrp2",
     # "Backup.photoslibrary"): o miolo é que diz o que é.

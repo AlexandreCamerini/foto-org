@@ -73,6 +73,7 @@ def test_detalhe_expoe_o_lugar_resolvido(client, migrated_engine):
         "fonte": "offline:reverse_geocode",
         # Esta foto tem GPS próprio (img_0 do fixture): o lugar é medido.
         "estimado": False,
+        "granularidade": "cidade",
     }
 
 
@@ -719,3 +720,116 @@ def test_lacuna_sem_coordenada_ignora_quem_tem_estimativa(client, migrated_engin
     # 5 fotos, 1 com GPS próprio, 1 agora com estimativa → 3 sem nada.
     assert lacunas["sem_gps"] == 3
     assert lacunas["local_estimado"] == 1
+
+
+def test_metadados_agrupa_por_padrao_com_rotulo_legivel(client, migrated_engine):
+    """A pergunta do dono era "mapeamento total das informações gravadas no
+    arquivo". Elas já eram escritas em metadata_entries desde o M1 e não
+    saíam de lá — nenhum endpoint as devolvia."""
+    from fotoorganizer.models import MediaFile, MetadataEntry
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).first()
+        media_id = media.id
+        session.add_all([
+            MetadataEntry(media_id=media_id, namespace="iptc",
+                          chave="By-line", valor="Alexandre Camerini"),
+            MetadataEntry(media_id=media_id, namespace="iptc",
+                          chave="Keywords", valor="viagem; franca"),
+            MetadataEntry(media_id=media_id, namespace="xmp",
+                          chave="dc.rights", valor="(c) 2024"),
+        ])
+        session.commit()
+
+    dados = client.get(f"/api/midia/{media_id}/metadados").json()
+    por_nome = {ns["nome"]: ns for ns in dados["namespaces"]}
+
+    assert dados["total"] >= 3
+    assert por_nome["iptc"]["rotulo"] == "IPTC (autor, direitos, palavras-chave)"
+    chaves = {i["chave"]: i["valor"] for i in por_nome["iptc"]["itens"]}
+    assert chaves["By-line"] == "Alexandre Camerini"
+    assert por_nome["xmp"]["itens"][0]["valor"] == "(c) 2024"
+
+
+def test_metadados_de_foto_sem_nada_devolve_vazio(client):
+    achados = client.get("/api/midia", params={"busca": "img_3"}).json()
+    dados = client.get(
+        f"/api/midia/{achados['itens'][0]['id']}/metadados"
+    ).json()
+    assert dados["total"] >= 0 and isinstance(dados["namespaces"], list)
+
+
+def test_confirmar_tipo_grava_a_palavra_do_usuario(client, migrated_engine):
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).first()
+        media.tipo_imagem = "captura"     # opinião do detector
+        media_id = media.id
+        session.commit()
+
+    r = client.post(f"/api/midia/{media_id}/tipo", json={"tipo": "foto"})
+    assert r.json() == {"tipo_imagem": "foto", "tipo_provisorio": False}
+
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["tipo_imagem"] == "foto"
+    assert detalhe["tipo_provisorio"] is False
+
+    # Devolver ao detector: volta a valer a opinião dele, e a provisoriedade.
+    client.post(f"/api/midia/{media_id}/tipo", json={"tipo": None})
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["tipo_imagem"] == "captura"
+    assert detalhe["tipo_provisorio"] is True
+
+
+def test_tipo_invalido_e_recusado(client):
+    media_id = client.get("/api/midia").json()["itens"][0]["id"]
+    r = client.post(f"/api/midia/{media_id}/tipo", json={"tipo": "meme"})
+    assert r.status_code == 422
+    assert "meme" in r.json()["detail"]
+
+
+def test_lugar_herdado_de_longe_nao_entrega_a_cidade(client, migrated_engine):
+    """D-025 na borda que o usuário enxerga.
+
+    O motor já emitia só a evidência de país para uma herança de horas, mas
+    o detalhe continuava devolvendo a cidade resolvida da coordenada — e a
+    tela mostraria "Avignon" com a mesma cara de sempre. A regra tem de
+    valer também aqui, senão a interface afirma o que ninguém apurou.
+    """
+    from fotoorganizer.models import Location, MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        local = Location(pais="França", regiao="Provence", cidade="Avignon",
+                         fonte="offline:reverse_geocode", cache_key="43.9,4.8")
+        session.add(local)
+        session.flush()
+        media = session.scalars(select(MediaFile)).first()
+        media.location_id = local.id
+        media.gps_lat = media.gps_lon = None          # sem GPS próprio
+        media.gps_lat_estimado, media.gps_lon_estimado = 43.95, 4.81
+        media.gps_estimado_delta_s = 4 * 3600          # 4 h de distância
+        media_id = media.id
+        session.commit()
+
+    local = client.get(f"/api/midia/{media_id}").json()["local"]
+    assert local["pais"] == "França"
+    assert local["regiao"] is None
+    assert local["cidade"] is None
+    assert local["granularidade"] == "pais"
+    assert local["estimado"] is True
+
+
+def test_todo_namespace_gravado_tem_rotulo_legivel():
+    """O usuário não precisa saber o que é "makernotes" — precisa saber de
+    onde o dado veio. Namespace novo no extrator sem rótulo aqui vaza o nome
+    técnico para a tela."""
+    from fotoorganizer.metadata.exiftool import _GRUPOS
+    from fotoorganizer.server.app import ROTULOS_NAMESPACE
+
+    gravados = set(_GRUPOS.values()) | {"libraw", "apple", "google", "lightroom"}
+    sem_rotulo = gravados - set(ROTULOS_NAMESPACE)
+    assert not sem_rotulo, f"sem rótulo legível: {sorted(sem_rotulo)}"

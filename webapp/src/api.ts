@@ -28,6 +28,10 @@ export interface Media {
   trip_id: number | null;
   event_id: number | null;
   erro_leitura: string | null;
+  /** foto | captura | recebida | baixada. null = não avaliado. */
+  tipo_imagem: string | null;
+  /** true = o detector opinou e você ainda não respondeu. */
+  tipo_provisorio: boolean;
   /** true quando a coordenada veio de outra câmera, não do arquivo. */
   gps_estimado: boolean;
   gps_lat_efetivo: number | null;
@@ -39,6 +43,9 @@ export interface Media {
     cidade: string | null;
     fonte: string;
     estimado: boolean;
+    /** Até onde o lugar pode ser afirmado: "cidade" | "regiao" | "pais".
+     *  Lugar herdado de horas atrás diz o país, não a cidade (D-025). */
+    granularidade: string | null;
   };
   /** Só no detalhe, e só quando a coordenada foi herdada: de quem veio e a
    *  que distância no tempo. É o que torna a estimativa auditável. */
@@ -70,6 +77,18 @@ export interface Sugestao {
 }
 
 export type MediaDetalhe = Media & { sugestao?: Sugestao };
+
+/** Tudo que estava gravado no arquivo, agrupado por padrão. */
+export interface NamespaceMetadados {
+  nome: string;
+  rotulo: string;
+  itens: { chave: string; valor: string }[];
+}
+
+export interface Metadados {
+  total: number;
+  namespaces: NamespaceMetadados[];
+}
 
 export interface PaginaMidia {
   total: number;
@@ -233,6 +252,12 @@ export const api = {
     return json<PaginaMidia>(`/api/midia?${params}`);
   },
   detalhe: (id: number) => json<MediaDetalhe>(`/api/midia/${id}`),
+  metadados: (id: number) => json<Metadados>(`/api/midia/${id}/metadados`),
+  confirmarTipo: (id: number, tipo: string | null) =>
+    post<{ tipo_imagem: string | null; tipo_provisorio: boolean }>(
+      `/api/midia/${id}/tipo`,
+      { tipo },
+    ),
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),

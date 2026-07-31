@@ -31,12 +31,17 @@ from fotoorganizer.config.settings import ScannerSettings
 from fotoorganizer.metadata.base import MetadataExtractor
 from fotoorganizer.models import (
     MediaFile,
+    MediaRole,
     MetadataEntry,
     ScanSession,
     ScanStatus,
     Source,
 )
-from fotoorganizer.scanner.discovery import DiscoveryConfig, iter_media_files
+from fotoorganizer.scanner.discovery import (
+    DiscoveryConfig,
+    dentro_de_pacote,
+    iter_media_files,
+)
 from fotoorganizer.security.hashing import quick_signature
 from fotoorganizer.thumbnails import ThumbnailCache
 
@@ -301,6 +306,10 @@ class CatalogScanner:
             source_id=source_id, caminho=caminho, pasta="", nome="", extensao="",
             tamanho=0,
         )
+        # Reavaliado a cada passagem: uma pasta pode virar pacote entre scans.
+        media.papel = (
+            MediaRole.SINAL if dentro_de_pacote(path) else MediaRole.ACERVO
+        )
         media.pasta = str(path.parent)
         media.nome = path.name
         media.extensao = path.suffix.lower().lstrip(".")
@@ -324,7 +333,11 @@ class CatalogScanner:
         if existing is None:
             session.add(media)
 
-        if meta.extras:
+        # A base bruta serve para o usuário inspecionar a foto dele. Ninguém
+        # abre o IPTC de uma miniatura de cache: guardar isso custou 685 mil
+        # linhas e 134 MB num acervo real, sem nada em troca. A testemunha
+        # doa data, GPS e câmera — que ficam nas colunas acima.
+        if meta.extras and media.papel is not MediaRole.SINAL:
             session.flush()
             # Re-scan reescreve a base bruta do arquivo: sem isto, cada nova
             # leitura empilharia outra cópia das mesmas dezenas de tags.

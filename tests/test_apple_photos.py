@@ -56,6 +56,31 @@ def test_sem_gps_e_sem_data():
 
 
 def test_biblioteca_inacessivel_da_erro_claro(tmp_path):
+    """Este caminho de erro só existe DEPOIS do import de osxphotos: sem o
+    extra [apple], o provider para antes, com outra mensagem (testada
+    abaixo). Sem o skip, uma instalação limpa recebe a suíte vermelha por
+    causa de uma dependência opcional."""
+    pytest.importorskip("osxphotos", reason="erro de TCC só existe com o extra [apple]")
+
     provider = ApplePhotosProvider(tmp_path / "Nao Existe.photoslibrary")
     with pytest.raises(ApplePhotosError, match="Acesso Total ao Disco"):
+        list(provider.iter_assets())
+
+
+def test_sem_o_extra_apple_a_mensagem_diz_o_que_instalar(tmp_path, monkeypatch):
+    """O outro lado: sem osxphotos, o erro tem de ensinar a resolver — e
+    não pode derrubar o resto do app."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def sem_osxphotos(nome, *args, **kwargs):
+        if nome == "osxphotos":
+            raise ImportError("simulado: extra [apple] ausente")
+        return real_import(nome, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", sem_osxphotos)
+
+    provider = ApplePhotosProvider(tmp_path / "Qualquer.photoslibrary")
+    with pytest.raises(ApplePhotosError, match=r"fotoorganizer\[apple\]"):
         list(provider.iter_assets())

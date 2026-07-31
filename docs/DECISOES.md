@@ -381,3 +381,120 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   cara com 500 mil linhas já escritas.
 - Como reverter: não se aplica; nada foi migrado.
 - Status: decidido por timeout
+
+---
+
+## D-024 — Registro que não é acervo é rebaixado, nunca apagado
+
+- Data: 2026-07-31
+- Contexto: o scanner entrou no pacote `Photos Library.photoslibrary` e
+  catalogou 45.822 miniaturas internas do Apple Fotos (540×360 e semelhantes)
+  como se fossem fotos. Elas representavam 89% do acervo local e inundaram a
+  revisão: 45.822 das 51.280 sugestões pendentes eram sobre miniatura.
+- Opções: (a) apagar as 45.822 do catálogo; (b) rebaixá-las a fonte de sinal,
+  fora da grade, da revisão e do plano, mas dentro da correlação.
+- Escolhida: (b), e o dono elevou isso a invariante 8 do `CLAUDE.md`.
+- Por quê: medido em cópia do catálogo real, apagar derruba as fotos de
+  verdade com lugar estimado de **2.117 para 162**. As miniaturas carregam
+  GPS que as referências do `osxphotos` não reportam — são a única testemunha
+  do lugar de fotos que não têm coordenada própria (nenhum dos 5.601 arquivos
+  reais do acervo tem GPS no arquivo). Rebaixar entrega o mesmo alívio na
+  revisão (5.458 pendentes) sem perder nada.
+- Como reverter: o campo `papel` volta a `acervo` com um UPDATE; nenhuma
+  linha foi removida, então não há o que restaurar.
+- Status: decidido pelo dono
+
+---
+
+## D-025 — A janela da herança depende do que se herda
+
+- Data: 2026-07-31
+- Contexto: 5.434 das 5.601 fotos do acervo do dono não têm lugar nenhum —
+  nenhuma tem GPS no arquivo. A janela única de 10 minutos alcança 167. A
+  doadora mais próxima de outra origem está a 10–30 min de 762 delas, a
+  30 min–2 h de 1.998 e a 2–12 h de outras 2.235.
+- Opções: (a) manter 10 min; (b) alargar para 30 min; (c) uma janela por
+  campo — cidade em minutos, região em horas, país em mais horas.
+- Escolhida: (c).
+- Por quê: a granularidade do que dá para afirmar depende do intervalo. Em
+  duas horas se troca de cidade, não de país. A janela única era obrigada a
+  adotar o limite da cidade e, com isso, jogava fora a informação de país que
+  seria segura para milhares de fotos. Uma sugestão errada com aparência de
+  fundamentada é pior que nenhuma — e afirmar "Brasil" quando só dá para
+  afirmar "Brasil" é o oposto disso.
+- Janelas: cidade 10 min, região 2 h, país 12 h. A busca pela doadora usa a
+  maior; cada campo entra na evidência só se couber na sua.
+- Como reverter: `JANELAS_POR_CAMPO` em `grouping/correlacao.py` volta a um
+  valor único; nada é persistido de forma irreversível — regerar refaz.
+- Status: decidido pelo dono
+
+---
+
+## D-026 — exiftool passa a ser o extrator padrão quando instalado
+
+- Data: 2026-07-31
+- Contexto: o `ExifToolExtractor` que a arquitetura previa desde o começo
+  nunca foi construído, e o fallback puro-Python vinha sendo tratado como
+  teto. Num acervo real, 2.949 CR3 ficaram sem `Make`/`Model`: o libraw
+  entrega abertura, ISO e obturador, não a câmera.
+- Opções: (a) manter o puro-Python e aceitar a lacuna; (b) exiftool como
+  extra opt-in; (c) exiftool como padrão quando o binário existir.
+- Escolhida: (c), com fallback automático.
+- Por quê: medido em 40 CR3 do acervo real — câmera identificada 0/40 → 40/40,
+  tags 320 → 14.440, e **mais rápido**: 285 ms → 67 ms por arquivo, porque o
+  exiftool lê cabeçalho onde o libraw decodifica o RAW inteiro. Não há
+  trade-off a ponderar; sem câmera não há correção de deriva de relógio nem
+  "outra origem" na herança de GPS, e a lacuna se propaga para a
+  classificação inteira.
+- Como reverter: `criar_extrator(preferir_exiftool=False)` devolve o
+  puro-Python; nada no catálogo depende de qual extrator gravou.
+- Status: decidido pelo dono (instalou o binário a pedido)
+
+---
+
+## D-027 — MakerNotes fica fora da base bruta
+
+- Data: 2026-07-31
+- Contexto: o extrator novo (D-026) passou a gravar o bloco proprietário do
+  fabricante. Num acervo real eram 969.074 linhas — 83% de todo o metadado e
+  51,8 MB de texto, contra 4,8 MB de EXIF.
+- Opções: (a) manter tudo; (b) manter só campos selecionados do bloco;
+  (c) excluir o namespace da base bruta.
+- Escolhida: (c).
+- Por quê: o bloco descreve o estado interno da câmera — modo de foco,
+  posição do estabilizador, contador do obturador, temperatura do sensor — e
+  nada ali ajuda a decidir viagem, evento ou lugar, que é o que este app faz.
+  A opção (b) exigiria manter uma lista por fabricante, e o único campo que
+  interessava (`LensType`) já é lido para a coluna `lente`, do JSON inteiro,
+  sem depender da base bruta. Medido: catálogo de 164 MB para 51 MB.
+- Como reverter: devolver `"MakerNotes": "makernotes"` a `_GRUPOS` em
+  `metadata/exiftool.py` e rodar `scan --reprocessar`. O rótulo legível
+  continua em `ROTULOS_NAMESPACE`, à espera.
+- Status: decidido pelo dono
+
+---
+
+## D-028 — Lightroom entra como fonte externa, e é a principal do discovery
+
+- Data: 2026-07-31
+- Contexto: o dono corrigiu uma premissa que eu vinha usando errada — o
+  catálogo não é o acervo. O acervo é desconhecido, grande, e espalhado por
+  um NAS e HDs externos antigos. Descobri-lo é o objetivo do app, não um
+  detalhe.
+- Opções: (a) varrer discos quando montados; (b) ler o catálogo do Lightroom;
+  (c) as duas.
+- Escolhida: (b) primeiro, (a) depois.
+- Por quê: o `.lrcat` responde **com os discos desligados**. Medido no acervo
+  real: 54.086 fotos conhecidas, 45.397 delas num volume desmontado. Uma
+  varredura de disco encontraria zero. E o catálogo traz o que o dono
+  decidiu — nota, sinalização, coleção, palavra-chave — que é intenção
+  declarada, não inferência nossa.
+- Forma: referência, nunca acervo. Nenhum byte de imagem é aberto; o valor
+  está em saber que a foto existe, onde estava e o que se sabe dela. O
+  `.lrcat` é lido com `immutable=1`: sem lock, sem journal, sem escrita, com
+  o Lightroom aberto ao lado (invariante 1).
+- Junto: `ExternalAsset` ganhou `caminho_original` — sem ele uma referência
+  sabe a data e o GPS e não sabe dizer de que disco veio, que é justamente a
+  pergunta do discovery.
+- Como reverter: remover a fonte do catálogo; nada mais depende dela.
+- Status: decidido pelo dono

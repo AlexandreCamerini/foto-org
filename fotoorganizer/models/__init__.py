@@ -4,6 +4,7 @@ enxerga todas as tabelas (necessário para o Alembic)."""
 from fotoorganizer.models.base import Base
 from fotoorganizer.models.catalog import (
     MediaFile,
+    MediaRole,
     MetadataEntry,
     ScanSession,
     ScanStatus,
@@ -42,6 +43,7 @@ from fotoorganizer.models.tagging import MediaTag, Tag
 __all__ = [
     "Base",
     "Source", "SourceType", "ScanSession", "ScanStatus", "MediaFile",
+    "MediaRole",
     "MetadataEntry",
     "Location", "Trip", "Event",
     "Person", "FaceEmbedding", "FaceOccurrence", "FaceState",

@@ -25,12 +25,27 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from statistics import median
 
-JANELA_HERANCA = timedelta(minutes=10)
+# Quanto tempo de distância cada granularidade aguenta (D-025). Em duas horas
+# se troca de cidade, não de país — uma janela única seria obrigada a adotar o
+# limite da cidade e jogaria fora a informação de país que é segura por muito
+# mais tempo. Do mais fino para o mais grosso.
+JANELAS_POR_CAMPO: tuple[tuple[str, timedelta], ...] = (
+    ("cidade", timedelta(minutes=10)),
+    ("regiao", timedelta(hours=2)),
+    ("pais", timedelta(hours=12)),
+)
+# A busca pela doadora usa a maior das janelas; cada campo é filtrado depois.
+JANELA_HERANCA = max(janela for _, janela in JANELAS_POR_CAMPO)
 # Δt até este limite: confiança cheia da origem; acima, decai até a borda.
 _JANELA_CURTA = timedelta(minutes=2)
 # Âncoras com desvios muito espalhados indicam pareamento ruim — descarta.
 _DISPERSAO_MAX = timedelta(minutes=3)
 _MIN_ANCORAS = 2
+# Multiplicador quando a hora de alguma das duas fotos veio do mtime. Escolhido
+# para derrubar a herança de "alta" para "média" mesmo com Δt curto: 1.0×0.6
+# fica abaixo do piso de alta, e a diferença entre medir e supor a hora tem de
+# aparecer na badge, não só na justificativa.
+_PENALIDADE_HORA_DE_ARQUIVO = 0.6
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,10 +60,21 @@ class FotoRef:
     lon: float | None = None
     hash_rapido: str | None = None
     hash_perceptual: str | None = None
+    # `quando` veio do EXIF ou do mtime do arquivo? O mtime costuma ser a
+    # hora em que o arquivo foi COPIADO, não em que a foto foi tirada — usar
+    # os dois como se valessem o mesmo põe a foto no ponto errado da linha
+    # do tempo e produz vizinhança que nunca existiu.
+    hora_do_arquivo: bool = False
 
     @property
     def tem_gps(self) -> bool:
         return self.lat is not None and self.lon is not None
+
+    def outra_origem(self, outra: "FotoRef") -> bool:
+        """Fonte ou câmera diferente: duas fotos da mesma câmera na mesma
+        fonte já vivem na mesma linha do tempo e não acrescentam nada."""
+        return (self.source_id != outra.source_id
+                or self.camera != outra.camera)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +84,24 @@ class Heranca:
     lat: float
     lon: float
     delta: timedelta
-    score_fator: float  # 1.0 na janela curta, decaindo até a borda
+    # O que dá para afirmar com este Δt, do mais grosso para o mais fino,
+    # com o fator de confiança de cada um. Vazio nunca acontece: uma herança
+    # sem nenhum campo confiável não é criada.
+    campos: tuple[tuple[str, float], ...]
+    # True quando alguma das duas horas veio do mtime do arquivo. A herança
+    # continua valendo — é melhor que nada — mas com score menor e dizendo
+    # isso na justificativa.
+    hora_incerta: bool = False
+
+    def fator_de(self, campo: str) -> float | None:
+        """O fator do campo, ou None quando o Δt não permite afirmá-lo."""
+        return next((f for c, f in self.campos if c == campo), None)
+
+    @property
+    def granularidade(self) -> str:
+        """O campo mais fino que este Δt sustenta — o que a justificativa
+        precisa dizer para não prometer precisão que não existe."""
+        return self.campos[-1][0]
 
 
 def estimar_offsets(
@@ -137,39 +180,78 @@ def herdar_gps(
         return []
     tempos = [corrigida(d) for d in doadores]
 
+    def procurar(alvo: datetime, foto: FotoRef, inicio: int, passo: int):
+        """O doador de OUTRA origem mais próximo, indo para um lado só.
+
+        Os doadores estão ordenados no tempo, então o primeiro que serve
+        deste lado é o mais próximo deste lado — e assim que o Δt passa da
+        janela, ninguém mais adiante serve. A versão anterior olhava apenas
+        os dois vizinhos imediatos e desistia quando ambos eram da mesma
+        origem, sem nunca alcançar o terceiro: num acervo real isso barrou
+        27.117 candidatos que tinham doador válido logo atrás deles.
+        """
+        j = inicio
+        while 0 <= j < len(doadores):
+            delta = abs(tempos[j] - alvo)
+            if delta > janela:
+                return None
+            if foto.outra_origem(doadores[j]):
+                return delta, doadores[j]
+            j += passo
+        return None
+
     herancas: list[Heranca] = []
     for foto in fotos:
         if foto.tem_gps:
             continue
         alvo = corrigida(foto)
         i = bisect_left(tempos, alvo)
-        melhor: tuple[timedelta, FotoRef] | None = None
-        for j in (i - 1, i):
-            if 0 <= j < len(doadores):
-                doador = doadores[j]
-                # Outra origem: fonte diferente OU câmera diferente —
-                # duas fotos da mesma câmera na mesma fonte já vivem na
-                # mesma linha do tempo e não acrescentam informação.
-                if (doador.source_id == foto.source_id
-                        and doador.camera == foto.camera):
-                    continue
-                delta = abs(tempos[j] - alvo)
-                if melhor is None or delta < melhor[0]:
-                    melhor = (delta, doador)
-        if melhor is None:
+        candidatos = [
+            achado for achado in (
+                procurar(alvo, foto, i - 1, -1),   # para trás no tempo
+                procurar(alvo, foto, i, +1),       # para frente
+            )
+            if achado is not None
+        ]
+        if not candidatos:
             continue
-        delta, doador = melhor
+        delta, doador = min(candidatos, key=lambda c: c[0])
+        # Hora de arquivo em qualquer um dos lados enfraquece a proximidade:
+        # "2 minutos de distância" só significa alguma coisa se as duas horas
+        # forem de captura. Vale menos, não vale zero — num acervo onde a
+        # câmera não gravou data, é a única pista que sobra.
+        incerta = foto.hora_do_arquivo or doador.hora_do_arquivo
+        campos = campos_confiaveis(delta, incerta)
+        if not campos:
+            continue
+        herancas.append(Heranca(
+            media_id=foto.media_id, doador_id=doador.media_id,
+            lat=doador.lat, lon=doador.lon, delta=delta,
+            campos=campos, hora_incerta=incerta,
+        ))
+    return herancas
+
+
+def campos_confiaveis(
+    delta: timedelta, hora_incerta: bool = False
+) -> tuple[tuple[str, float], ...]:
+    """O que dá para afirmar com este Δt, do mais grosso ao mais fino.
+
+    Cada campo decai dentro da PRÓPRIA janela: 1.0 até a janela curta, caindo
+    a 0.6 na borda dele. Assim "país a 6 h" e "cidade a 6 min" não competem
+    na mesma escala — cada um é medido contra o que a sua granularidade
+    aguenta.
+    """
+    resultado: list[tuple[str, float]] = []
+    for campo, janela in sorted(JANELAS_POR_CAMPO, key=lambda cj: -cj[1]):
         if delta > janela:
             continue
         if delta <= _JANELA_CURTA:
             fator = 1.0
         else:
-            # Decai linearmente de 1.0 (janela curta) a 0.6 (borda).
             resto = (delta - _JANELA_CURTA) / (janela - _JANELA_CURTA)
             fator = 1.0 - 0.4 * resto
-        herancas.append(Heranca(
-            media_id=foto.media_id, doador_id=doador.media_id,
-            lat=doador.lat, lon=doador.lon, delta=delta,
-            score_fator=round(fator, 3),
-        ))
-    return herancas
+        if hora_incerta:
+            fator *= _PENALIDADE_HORA_DE_ARQUIVO
+        resultado.append((campo, round(fator, 3)))
+    return tuple(resultado)

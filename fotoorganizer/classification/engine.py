@@ -24,8 +24,12 @@ from fotoorganizer.classification.confidence import (
     elo_mais_fraco,
     nivel_para_score,
 )
+from fotoorganizer.classification.tipo_imagem import ROTULOS as ROTULOS_TIPO
+from fotoorganizer.classification.tipo_imagem import classificar as classificar_tipo
+from fotoorganizer.classification.tipo_imagem import FOTO as TIPO_FOTO
 from fotoorganizer.classification.templates import (
     DESTINO_NAO_CLASSIFICADO,
+    DESTINO_NAO_FOTO,
     TEMPLATE_PADRAO,
     render_destino,
 )
@@ -85,6 +89,8 @@ _CAMPOS_QUE_NOMEIAM = ("categoria", "viagem", "evento", "pais", "regiao",
 # Lugar: entra na sugestão mesmo quando não vira pasta — é a resposta a
 # "por que aqui?" e a única superfície da herança de GPS entre câmeras.
 _CAMPOS_DE_LUGAR = ("pais", "regiao", "cidade")
+# Como cada granularidade se lê numa frase (D-025).
+_GRANULARIDADE = {"pais": "o país", "regiao": "a região", "cidade": "a cidade"}
 # Fotos geocodificadas mínimas para um país contar como perna da viagem —
 # uma escala de aeroporto com 1-2 fotos não nomeia a viagem.
 _MIN_FOTOS_PERNA = 3
@@ -158,15 +164,18 @@ class SuggestionEngine:
             herancas = self._correlacionar(midias)
             self._persistir_herancas(midias, herancas)
 
-            # Daqui em diante só o que o usuário pode ver e organizar: uma
-            # referência não tem arquivo para agrupar nem para copiar.
-            organizaveis = [m for m in midias if not m.arquivo_ausente]
+            # Daqui em diante só o que o usuário pode ver e organizar. Uma
+            # referência não tem arquivo para copiar; uma miniatura de cache
+            # tem arquivo e ainda assim não é acervo dele — as duas doaram o
+            # que sabiam na correlação acima e param aqui.
+            organizaveis = [m for m in midias if m.organizavel]
+            orfas = self._descartar_sugestoes_orfas(session)
 
             sessoes, sessao_da_media = self._montar_sessoes(
                 session, organizaveis, herancas
             )
             self._persistir_agrupamentos(
-                session, organizaveis, sessoes, sessao_da_media
+                session, organizaveis, midias, sessoes, sessao_da_media
             )
 
             geradas = 0
@@ -189,6 +198,7 @@ class SuggestionEngine:
                 "eventos": sum(1 for s in sessoes if s.tipo == "evento"),
                 "herancas_gps": len(herancas),
                 "preservadas": len(decididas),
+                "descartadas": orfas,
             }
 
     @staticmethod
@@ -227,6 +237,7 @@ class SuggestionEngine:
                 lat=m.gps_lat, lon=m.gps_lon,
                 hash_rapido=m.hash_rapido,
                 hash_perceptual=m.hash_perceptual,
+                hora_do_arquivo=m.data_capturada is None,
             )
             for m in midias
             if (m.data_capturada or m.mtime) is not None
@@ -372,11 +383,18 @@ class SuggestionEngine:
             location = self._resolver.resolve(session, *coords)
             if location is None:
                 continue
-            if location.pais:
+            # Coordenada herdada só vale até onde o Δt sustenta (D-025). País
+            # aguenta horas; cidade não. Sem este corte, uma foto correlata a
+            # 6 h de distância nomearia a viagem com a cidade errada.
+            heranca = herancas.get(media.id) if media.gps_lat is None else None
+            pode = (lambda campo: heranca.fator_de(campo) is not None) \
+                if heranca is not None else (lambda campo: True)
+            if location.pais and pode("pais"):
                 paises[location.pais] += 1
                 if location.pais not in ordem_paises:
                     ordem_paises.append(location.pais)
-            lugar = ", ".join(filter(None, [location.cidade, location.pais]))
+            cidade = location.cidade if pode("cidade") else None
+            lugar = ", ".join(filter(None, [cidade, location.pais]))
             if lugar and lugar not in lugares:
                 lugares.append(lugar)
         dominante = paises.most_common(1)[0][0] if paises else None
@@ -410,11 +428,15 @@ class SuggestionEngine:
             )
 
     # -- persistência de viagens/eventos -----------------------------------
-    def _persistir_agrupamentos(self, session: Session, midias,
+    def _persistir_agrupamentos(self, session: Session, midias, todas,
                                 sessoes: list[_Sessao],
                                 sessao_da_media: dict[int, _Sessao]) -> None:
         # Deriváveis (sem edição do usuário no MVP): regenera tudo.
-        for media in midias:
+        #
+        # A limpeza percorre TODAS as mídias, não só as organizáveis: uma que
+        # foi rebaixada a testemunha guarda o trip_id da geração anterior, e
+        # o DELETE abaixo esbarraria na chave estrangeira dela.
+        for media in todas:
             media.trip_id = None
             media.event_id = None
         session.execute(delete(Trip))
@@ -449,6 +471,36 @@ class SuggestionEngine:
                          herancas: dict[int, Heranca],
                          por_id: dict[int, MediaFile]) -> list[_Draft]:
         drafts: list[_Draft] = []
+
+        # Foto de câmera ou imagem que só passou pelo disco? Decide antes de
+        # tudo: o que não é foto não deve ser organizado por viagem, e a
+        # justificativa precisa aparecer junto do resto.
+        veredito = classificar_tipo(
+            nome=media.nome, pasta=media.pasta, extensao=media.extensao or "",
+            largura=media.largura, altura=media.altura,
+            make=media.make, model=media.model, lente=media.lente,
+            # GPS LIDO do arquivo, não o efetivo: a coordenada herdada é
+            # justamente o que uma captura de tela feita no meio da viagem
+            # ganha das fotos vizinhas. Usar a efetiva aqui transformaria a
+            # herança em atestado de que o arquivo veio de uma câmera.
+            tem_gps=media.gps_lat is not None,
+        )
+        # O detector sempre opina — a opinião é reescrita a cada geração,
+        # porque um arquivo reprocessado pode ganhar EXIF. O que ele NUNCA
+        # toca é `tipo_confirmado`: aquilo é palavra do usuário.
+        media.tipo_imagem = veredito.tipo
+        if media.tipo_confirmado is not None:
+            if media.tipo_confirmado != TIPO_FOTO:
+                drafts.append(_Draft(
+                    "tipo", "usuario", ROTULOS_TIPO[media.tipo_confirmado],
+                    "classificado por você", score_override=1.0,
+                ))
+        elif not veredito.e_foto:
+            drafts.append(_Draft(
+                "tipo", "arquivo", ROTULOS_TIPO[veredito.tipo],
+                veredito.justificativa + " — a confirmar",
+                score_override=veredito.score,
+            ))
 
         if media.data_capturada is not None:
             drafts.append(_Draft(
@@ -533,19 +585,38 @@ class SuggestionEngine:
                     f"{_camera_legivel(doador)} — tirada a "
                     f"{_delta_legivel(heranca.delta)} de distância"
                 )
-                score = round(
-                    SCORES_REFERENCIA["vizinhanca_temporal"]
-                    * heranca.score_fator, 3,
-                )
-                return [
-                    _Draft(campo, "vizinhanca_temporal", valor, just,
-                           score_override=score)
-                    for campo, valor in [
-                        ("pais", location.pais), ("regiao", location.regiao),
-                        ("cidade", location.cidade),
-                    ]
-                    if valor
-                ]
+                if heranca.granularidade != "cidade":
+                    # A distância no tempo não sustenta a cidade. Dizer só
+                    # "a 3h de distância" deixaria o usuário concluir sozinho
+                    # que a cidade veio junto — ela não veio.
+                    just += (
+                        f"; a essa distância dá para afirmar "
+                        f"{_GRANULARIDADE[heranca.granularidade]}, não a cidade"
+                    )
+                if heranca.hora_incerta:
+                    # Sem esta frase o usuário lê "a 2min de distância" e
+                    # acredita numa precisão que a hora usada não tem.
+                    just += (
+                        "; a hora de uma delas é a do arquivo, não a da "
+                        "captura — a proximidade pode ser coincidência"
+                    )
+                drafts = []
+                for campo, valor in [
+                    ("pais", location.pais), ("regiao", location.regiao),
+                    ("cidade", location.cidade),
+                ]:
+                    fator = heranca.fator_de(campo)
+                    if not valor or fator is None:
+                        continue
+                    score = round(
+                        SCORES_REFERENCIA["vizinhanca_temporal"] * fator, 3
+                    )
+                    drafts.append(
+                        _Draft(campo, "vizinhanca_temporal", valor, just,
+                               score_override=score)
+                    )
+                if drafts:
+                    return drafts
 
         # 2) Nome das pastas.
         hierarquia = extrair_hierarquia_da_pasta(media.pasta)
@@ -596,6 +667,19 @@ class SuggestionEngine:
         return None
 
     @staticmethod
+    def _destino_nao_foto(media: MediaFile, evidencias: dict) -> str:
+        """Ramo do que não é foto: por tipo e ano.
+
+        Separado por tipo porque as decisões são diferentes — captura de tela
+        quase sempre se apaga, imagem recebida às vezes se guarda. Por ano
+        porque um balde único com milhares não é revisável.
+        """
+        raiz = f"{DESTINO_NAO_FOTO}/{ROTULOS_TIPO[media.tipo_efetivo].capitalize()}"
+        if "data" in evidencias:
+            return f"{raiz}/{datetime.fromisoformat(evidencias['data'].valor).year}"
+        return raiz
+
+    @staticmethod
     def _destino_nao_classificado(media: MediaFile, evidencias: dict) -> str:
         """Ramo das fotos que nenhum sinal nomeia, quebrado por ano e mês.
 
@@ -642,6 +726,43 @@ class SuggestionEngine:
             if campo in evidencias and campo not in usados
         }
 
+    @staticmethod
+    def _descartar_sugestoes_orfas(session: Session) -> int:
+        """Sugestão pendente de mídia que deixou de ser acervo.
+
+        Sem isto, um registro rebaixado a testemunha leva sua sugestão
+        antiga junto: `_persistir_sugestao` só limpa a mídia que está
+        processando, e essa não passa mais por lá. Num catálogo real foram
+        45.822 sugestões que ficariam pedindo decisão sobre miniatura.
+
+        Só as PENDENTES. Aprovada e rejeitada são decisão do usuário, e
+        decisão dele não se apaga por mudança de classificação nossa.
+
+        O alvo é uma subconsulta, não uma lista de ids: com 45.822 mídias
+        rebaixadas de uma vez, o `IN (?, ?, …)` estoura o limite de
+        variáveis do SQLite.
+        """
+        alvos = (
+            select(Suggestion.id)
+            .join(MediaFile, MediaFile.id == Suggestion.media_id)
+            .where(
+                Suggestion.status == SuggestionStatus.PENDENTE,
+                ~MediaFile.organizavel,
+            )
+            .scalar_subquery()
+        )
+        session.execute(delete(suggestion_evidence).where(
+            suggestion_evidence.c.suggestion_id.in_(alvos)
+        ))
+        removidas = session.execute(
+            delete(Suggestion).where(Suggestion.id.in_(alvos))
+        ).rowcount
+        session.flush()
+        if removidas:
+            log.info("descartadas %d sugestões de mídia que não é acervo",
+                     removidas)
+        return removidas
+
     def _persistir_sugestao(self, session: Session, media: MediaFile,
                             drafts: list[_Draft]) -> None:
         antigas = list(
@@ -687,6 +808,18 @@ class SuggestionEngine:
         # ele só não vira pasta.
         if campos.get("viagem") or campos.get("evento"):
             campos["pais"] = campos["regiao"] = campos["cidade"] = None
+
+        # O que não é foto sai do fluxo de organização por viagem: captura
+        # de tela não pertence a "Viagens/2024 - França" por ter sido feita
+        # durante a viagem. Vai para um ramo próprio, por tipo e ano, onde
+        # dá para revisar em lote e apagar se quiser.
+        if media.tipo_efetivo and media.tipo_efetivo != TIPO_FOTO:
+            destino = self._destino_nao_foto(media, evidencias)
+            usados = {"tipo": evidencias["tipo"]} if "tipo" in evidencias else {}
+            if "data" in evidencias:
+                usados["data"] = evidencias["data"]
+            self._salvar_sugestao(session, media, destino, usados)
+            return
 
         if sem_nome:
             # Nada nomeia a foto: em vez do template (que renderiza só o
