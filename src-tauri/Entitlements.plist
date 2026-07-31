@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Carregar as .dylib nativas embarcadas (libraw/rawpy, libheif/
+       pillow-heif) assinadas com o mesmo Developer ID: sem isto o
+       hardened runtime recusa as libs por validação de biblioteca. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Alguns módulos nativos do Python fazem mmap executável. Comece
+       sem esta chave; ative só se um dep quebrar na inicialização. -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

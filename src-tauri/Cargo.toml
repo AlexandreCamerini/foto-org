@@ -1,0 +1,22 @@
+[package]
+name = "foto-organizer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+description = "Foto Organizer — app macOS local-first de catalogação de fotos"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# SIGTERM (shutdown gracioso do backend) sem shell-out.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+# por padrão o Tauri usa o webview do sistema (WKWebView no macOS).
+default = []
