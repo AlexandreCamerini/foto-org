@@ -190,15 +190,37 @@ describe("Inspector", () => {
   });
 
   it("foto normal não ganha bloco de tipo", async () => {
+    // Foto normal é o detector dizendo "foto" SEM o usuário ter respondido —
+    // `tipo_provisorio: true`. O fixture antigo usava `false`, um estado que
+    // quase não existe, e por isso o caso real passava sem teste: o inspetor
+    // perguntava "isto parece foto, não uma foto?" em 5.071 das 5.601 fotos.
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "foto",
+                        tipo_provisorio: true },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    // Esperar pelo NOME não serve: ele vem do prop `media` e aparece antes
+    // de a consulta do detalhe resolver — a asserção rodava no DOM vazio e
+    // passava com qualquer condição. Esperar por algo que só existe no
+    // detalhe é o que faz este teste medir alguma coisa.
+    await screen.findByText("Canon EOS R5");
+    expect(screen.queryByText(/Isto parece/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/classificado por você/)).not.toBeInTheDocument();
+  });
+
+  it("quem respondeu 'é foto' consegue voltar atrás", async () => {
+    // Antes o bloco sumia depois da correção: o usuário derrubava o veredito
+    // do detector e ficava sem caminho de volta pela interface.
     servirApi({
       "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "foto",
                         tipo_provisorio: false },
     });
     montar(<Inspector media={MEDIA} />);
 
-    await screen.findByText("DSC_0100.jpg");
+    expect(await screen.findByText(/classificado por você/)).toBeInTheDocument();
+    expect(screen.getByText("desfazer")).toBeInTheDocument();
     expect(screen.queryByText(/Isto parece/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/classificado por você/)).not.toBeInTheDocument();
   });
 
   it("foto sem lugar resolvido não inventa linha vazia", async () => {
@@ -244,3 +266,4 @@ describe("granularidade do lugar herdado", () => {
     expect(screen.queryByText(/Avignon/)).not.toBeInTheDocument();
   });
 });
+

@@ -144,10 +144,15 @@ function TipoDaImagem({
   });
 
   const tipo = detalhe?.tipo_imagem;
-  if (!tipo || (tipo === "foto" && !detalhe?.tipo_provisorio)) return null;
+  const provisorio = detalhe?.tipo_provisorio ?? false;
+  // O detector conclui "foto" por padrão — na dúvida, é foto. Perguntar
+  // "isto parece foto, não uma foto?" em toda foto do acervo é ruído: eram
+  // 5.071 das 5.601. Só a conclusão de que NÃO é foto merece pergunta.
+  // Quando o próprio usuário disse "é foto", aí sim aparece — com o desfazer.
+  if (!tipo || (tipo === "foto" && provisorio)) return null;
   const rotulo = ROTULOS_TIPO[tipo] ?? tipo;
 
-  if (detalhe?.tipo_provisorio) {
+  if (provisorio) {
     return (
       <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5">
         <div className="text-texto-2">
