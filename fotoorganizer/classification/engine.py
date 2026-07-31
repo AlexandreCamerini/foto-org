@@ -162,15 +162,18 @@ class SuggestionEngine:
             herancas = self._correlacionar(midias)
             self._persistir_herancas(midias, herancas)
 
-            # Daqui em diante só o que o usuário pode ver e organizar: uma
-            # referência não tem arquivo para agrupar nem para copiar.
-            organizaveis = [m for m in midias if not m.arquivo_ausente]
+            # Daqui em diante só o que o usuário pode ver e organizar. Uma
+            # referência não tem arquivo para copiar; uma miniatura de cache
+            # tem arquivo e ainda assim não é acervo dele — as duas doaram o
+            # que sabiam na correlação acima e param aqui.
+            organizaveis = [m for m in midias if m.organizavel]
+            orfas = self._descartar_sugestoes_orfas(session)
 
             sessoes, sessao_da_media = self._montar_sessoes(
                 session, organizaveis, herancas
             )
             self._persistir_agrupamentos(
-                session, organizaveis, sessoes, sessao_da_media
+                session, organizaveis, midias, sessoes, sessao_da_media
             )
 
             geradas = 0
@@ -193,6 +196,7 @@ class SuggestionEngine:
                 "eventos": sum(1 for s in sessoes if s.tipo == "evento"),
                 "herancas_gps": len(herancas),
                 "preservadas": len(decididas),
+                "descartadas": orfas,
             }
 
     @staticmethod
@@ -414,11 +418,15 @@ class SuggestionEngine:
             )
 
     # -- persistência de viagens/eventos -----------------------------------
-    def _persistir_agrupamentos(self, session: Session, midias,
+    def _persistir_agrupamentos(self, session: Session, midias, todas,
                                 sessoes: list[_Sessao],
                                 sessao_da_media: dict[int, _Sessao]) -> None:
         # Deriváveis (sem edição do usuário no MVP): regenera tudo.
-        for media in midias:
+        #
+        # A limpeza percorre TODAS as mídias, não só as organizáveis: uma que
+        # foi rebaixada a testemunha guarda o trip_id da geração anterior, e
+        # o DELETE abaixo esbarraria na chave estrangeira dela.
+        for media in todas:
             media.trip_id = None
             media.event_id = None
         session.execute(delete(Trip))
@@ -688,6 +696,43 @@ class SuggestionEngine:
             for campo in _CAMPOS_DE_LUGAR
             if campo in evidencias and campo not in usados
         }
+
+    @staticmethod
+    def _descartar_sugestoes_orfas(session: Session) -> int:
+        """Sugestão pendente de mídia que deixou de ser acervo.
+
+        Sem isto, um registro rebaixado a testemunha leva sua sugestão
+        antiga junto: `_persistir_sugestao` só limpa a mídia que está
+        processando, e essa não passa mais por lá. Num catálogo real foram
+        45.822 sugestões que ficariam pedindo decisão sobre miniatura.
+
+        Só as PENDENTES. Aprovada e rejeitada são decisão do usuário, e
+        decisão dele não se apaga por mudança de classificação nossa.
+
+        O alvo é uma subconsulta, não uma lista de ids: com 45.822 mídias
+        rebaixadas de uma vez, o `IN (?, ?, …)` estoura o limite de
+        variáveis do SQLite.
+        """
+        alvos = (
+            select(Suggestion.id)
+            .join(MediaFile, MediaFile.id == Suggestion.media_id)
+            .where(
+                Suggestion.status == SuggestionStatus.PENDENTE,
+                ~MediaFile.organizavel,
+            )
+            .scalar_subquery()
+        )
+        session.execute(delete(suggestion_evidence).where(
+            suggestion_evidence.c.suggestion_id.in_(alvos)
+        ))
+        removidas = session.execute(
+            delete(Suggestion).where(Suggestion.id.in_(alvos))
+        ).rowcount
+        session.flush()
+        if removidas:
+            log.info("descartadas %d sugestões de mídia que não é acervo",
+                     removidas)
+        return removidas
 
     def _persistir_sugestao(self, session: Session, media: MediaFile,
                             drafts: list[_Draft]) -> None:

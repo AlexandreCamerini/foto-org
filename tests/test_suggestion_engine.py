@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.classification.confidence import nivel_para_score
@@ -12,6 +12,7 @@ from fotoorganizer.models import (
     ConfidenceLevel,
     Evidence,
     MediaFile,
+    MediaRole,
     Source,
     Suggestion,
     SuggestionStatus,
@@ -881,3 +882,105 @@ def test_confirmar_como_nao_foto_manda_para_o_ramo_certo(migrated_engine):
         vinculadas = {e.campo: e for e in sugestao.evidencias}
         assert vinculadas["tipo"].origem == "usuario"
         assert "por você" in vinculadas["tipo"].justificativa
+
+
+def test_miniatura_de_cache_doa_gps_mas_nao_vira_sugestao(migrated_engine):
+    """A separação que salvou a revisão: 89% do acervo local de um usuário
+    real eram miniaturas 540×360 do pacote do Apple Fotos, e cada uma virava
+    uma sugestão de destino.
+
+    Apagá-las custaria caro — elas carregam o GPS que o catálogo externo não
+    reporta. Então elas doam e ficam de fora (invariante 8, D-024).
+    """
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    biblioteca = "/Users/x/Pictures/Fotos.photoslibrary/resources/derivatives"
+    with factory() as session:
+        fonte = Source(caminho="/Users/x/Pictures")
+        session.add(fonte)
+        session.flush()
+        # A foto do usuário, de câmera, sem GPS nenhum.
+        session.add(_media(
+            fonte.id, "ACM_0001.jpg", "/Users/x/Pictures/2024",
+            data=base, make="Canon", model="EOS R6",
+        ))
+        # A miniatura interna, com GPS, um minuto depois.
+        mini = _media(
+            fonte.id, "ABC_4_5005_c.jpeg", biblioteca,
+            data=base + timedelta(minutes=1), gps=(43.95, 4.8083),
+            make="Apple", model="iPhone 15",
+        )
+        mini.papel = MediaRole.SINAL
+        session.add(mini)
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    resultado = engine.gerar()
+
+    with factory() as session:
+        foto = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "ACM_0001.jpg")
+        )
+        miniatura = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "ABC_4_5005_c.jpeg")
+        )
+        # A doação aconteceu: a foto do usuário ganhou lugar estimado.
+        assert foto.gps_lat_estimado == 43.95
+        assert foto.gps_estimado_de_id == miniatura.id
+        # E a miniatura não entrou na fila de decisão de ninguém.
+        sugestoes = session.scalars(select(Suggestion)).all()
+        assert [s.media_id for s in sugestoes] == [foto.id]
+    assert resultado["herancas_gps"] == 1
+
+
+def test_sugestao_de_quem_deixou_de_ser_acervo_e_descartada(migrated_engine):
+    """Rebaixar uma mídia a testemunha tem de levar a sugestão pendente
+    dela junto — senão a fila continua pedindo decisão sobre miniatura.
+
+    A decisão já tomada pelo usuário fica: aprovada não se desfaz por
+    reclassificação nossa.
+    """
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for nome in ("mini_pendente.jpg", "mini_aprovada.jpg"):
+            session.add(_media(
+                fonte.id, nome, "/fotos/Lib.photoslibrary/derivatives",
+                data=base, gps=(43.95, 4.8083),
+            ))
+        session.add(_media(fonte.id, "real.jpg", "/fotos/2024", data=base))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()  # ainda sem papel: as três recebem sugestão
+
+    with factory() as session:
+        assert session.scalar(select(func.count(Suggestion.id))) == 3
+        aprovada = session.scalar(select(Suggestion).join(MediaFile).where(
+            MediaFile.nome == "mini_aprovada.jpg"
+        ))
+        aprovada.status = SuggestionStatus.APROVADA
+        for m in session.scalars(select(MediaFile).where(
+            MediaFile.pasta.like("%.photoslibrary%")
+        )):
+            m.papel = MediaRole.SINAL
+        session.commit()
+
+    resultado = engine.gerar()
+    assert resultado["descartadas"] == 1
+
+    with factory() as session:
+        restantes = {
+            nome: status
+            for nome, status in session.execute(
+                select(MediaFile.nome, Suggestion.status)
+                .join(Suggestion, Suggestion.media_id == MediaFile.id)
+            )
+        }
+    assert restantes == {
+        "real.jpg": SuggestionStatus.PENDENTE,
+        "mini_aprovada.jpg": SuggestionStatus.APROVADA,
+    }

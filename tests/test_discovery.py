@@ -1,6 +1,7 @@
 import os
 
 from fotoorganizer.scanner import DiscoveryConfig, iter_media_files
+from fotoorganizer.scanner.discovery import dentro_de_pacote
 from tests.fixtures import make_jpeg
 
 EXTS = frozenset({".jpg", ".jpeg", ".png"})
@@ -53,3 +54,31 @@ def test_extensao_desconhecida_ignorada(tmp_path):
     (tmp_path / "video.mp4").write_bytes(b"nao e foto")
     (tmp_path / "Thumbs.db").write_bytes(b"lixo de sistema")
     assert _paths(tmp_path, DiscoveryConfig(extensoes=EXTS)) == ["foto.jpg"]
+
+
+def test_pacote_de_biblioteca_e_reconhecido_pelo_sufixo(tmp_path):
+    """O nome real é "<Qualquer Nome>.photoslibrary", nunca ".photoslibrary".
+
+    A versão anterior comparava o nome inteiro contra um conjunto e nunca
+    casava: um acervo real entrou com 45.822 miniaturas internas do Apple
+    Fotos catalogadas como se fossem fotos do usuário.
+    """
+    dentro = (tmp_path / "Photos Library.photoslibrary" / "resources"
+              / "derivatives" / "masters" / "ABC_4_5005_c.jpeg")
+    make_jpeg(dentro)
+    make_jpeg(tmp_path / "Viagens" / "foto.jpg")
+
+    assert dentro_de_pacote(dentro) is True
+    assert dentro_de_pacote(tmp_path / "Viagens" / "foto.jpg") is False
+    # Continua sendo descoberto: o derivado carrega o GPS que o catálogo
+    # externo não reporta. O que muda é o papel, não a visibilidade.
+    assert len(_paths(tmp_path, DiscoveryConfig(extensoes=EXTS))) == 2
+
+
+def test_pacote_reconhecido_em_qualquer_nivel_do_caminho(tmp_path):
+    """Os derivados ficam vários níveis abaixo da raiz do pacote."""
+    fundo = (tmp_path / "Fotos.photolibrary" / "a" / "b" / "c" / "d" / "x.jpg")
+    make_jpeg(fundo)
+    assert dentro_de_pacote(fundo) is True
+    # Pasta que só *menciona* o sufixo no meio do nome não é pacote.
+    assert dentro_de_pacote(tmp_path / "backup photoslibrary antiga" / "x.jpg") is False

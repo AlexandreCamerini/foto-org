@@ -5,7 +5,16 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, Enum, ForeignKey, Index, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Enum,
+    ForeignKey,
+    Index,
+    Text,
+    UniqueConstraint,
+    and_,
+)
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fotoorganizer.models.base import Base, utcnow
@@ -26,6 +35,25 @@ class SourceType(enum.StrEnum):
     PASTA = "pasta"
     APPLE_PHOTOS = "apple_photos"
     GOOGLE_TAKEOUT = "google_takeout"
+
+
+class MediaRole(enum.StrEnum):
+    """O que um registro é para o catálogo — acervo ou testemunha.
+
+    ACERVO é foto do usuário: entra na grade, na revisão e no plano de cópia.
+
+    SINAL não é acervo — miniatura interna de outro app, derivado de
+    biblioteca, referência de catálogo externo. Fica fora de tudo que
+    organiza e continua doando data, GPS e correlação.
+
+    A separação existe porque as duas coisas se misturaram: 89% do acervo
+    local eram miniaturas 540×360 do pacote do Apple Fotos, e elas inundaram
+    a revisão. Apagá-las seria pior — são a única testemunha do lugar de
+    milhares de fotos sem GPS próprio (invariante 8, D-024).
+    """
+
+    ACERVO = "acervo"
+    SINAL = "sinal"
 
 
 class ReviewStatus(enum.StrEnum):
@@ -78,6 +106,7 @@ class MediaFile(Base):
         Index("ix_media_files_hash_rapido", "hash_rapido"),
         Index("ix_media_files_data_capturada", "data_capturada"),
         Index("ix_media_files_mtime_tamanho", "mtime", "tamanho"),
+        Index("ix_media_files_papel", "papel"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -87,6 +116,11 @@ class MediaFile(Base):
     # arquivo no disco. Ela doa horário e GPS para a correlação e fica fora
     # de grade, miniatura, duplicata e plano de cópia — não há o que copiar.
     arquivo_ausente: Mapped[bool] = mapped_column(default=False)
+    # Acervo ou testemunha. Ortogonal a `arquivo_ausente`: uma miniatura do
+    # pacote do Apple Fotos existe no disco e mesmo assim não é acervo.
+    papel: Mapped[MediaRole] = mapped_column(
+        Enum(MediaRole, native_enum=False), default=MediaRole.ACERVO
+    )
     volume: Mapped[str | None]
     pasta: Mapped[str] = mapped_column(Text)
     nome: Mapped[str]
@@ -136,6 +170,28 @@ class MediaFile(Base):
     )
     erro_leitura: Mapped[str | None] = mapped_column(Text)
     indexado_em: Mapped[datetime] = mapped_column(default=utcnow)
+
+    @hybrid_property
+    def organizavel(self) -> bool:
+        """Entra na grade, na revisão e no plano de cópia.
+
+        Uma referência sem arquivo não tem o que copiar; uma miniatura tem
+        arquivo e ainda assim não é acervo. As duas ficam de fora.
+
+        É `hybrid` para valer nos dois lados: em memória ao percorrer mídias,
+        e em SQL dentro de um WHERE. Filtrar por lista de ids em Python
+        estourou o limite de variáveis do SQLite num acervo real — a
+        condição precisa poder descer para o banco.
+        """
+        return self.papel == MediaRole.ACERVO and not self.arquivo_ausente
+
+    @organizavel.inplace.expression
+    @classmethod
+    def _organizavel_sql(cls):
+        return and_(
+            cls.papel == MediaRole.ACERVO,
+            cls.arquivo_ausente.is_(False),
+        )
 
     @property
     def tipo_efetivo(self) -> str | None:

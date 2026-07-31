@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from fotoorganizer.models import (
     ConfidenceLevel,
     MediaFile,
+    MediaRole,
     Source,
     Suggestion,
 )
@@ -28,6 +29,13 @@ ORDENACOES = {
 # COALESCE em SQL: `tipo_efetivo` do modelo é property Python e não serve
 # em cláusula WHERE.
 _TIPO_EFETIVO = func.coalesce(MediaFile.tipo_confirmado, MediaFile.tipo_imagem)
+
+# O acervo do usuário: o que a grade mostra, a revisão decide e o plano copia.
+# Fica de fora quem não tem arquivo (referência de catálogo externo) e quem
+# tem arquivo mas não é foto dele (miniatura interna de outro app). Os dois
+# doam data, GPS e correlação — ver MediaRole e o invariante 8.
+_ACERVO = MediaFile.organizavel
+_TESTEMUNHA = ~_ACERVO
 
 # O que impede uma foto de ser organizada sozinha. A chave é o filtro; o
 # rótulo é o que o usuário lê. Ordem = ordem de exibição no panorama.
@@ -107,10 +115,9 @@ class MediaRepository:
         self._factory = session_factory
 
     def _query(self, filters: MediaFilters):
-        # Referências não têm arquivo: ficam fora da biblioteca visível, das
-        # contagens e de qualquer filtro. Existem só para doar GPS e horário
-        # à correlação.
-        stmt = select(MediaFile).where(MediaFile.arquivo_ausente.is_(False))
+        # Testemunhas ficam fora da biblioteca visível, das contagens e de
+        # qualquer filtro. Existem só para doar GPS e horário à correlação.
+        stmt = select(MediaFile).where(_ACERVO)
         if filters.busca:
             like = f"%{filters.busca}%"
             stmt = stmt.where(
@@ -174,8 +181,9 @@ class MediaRepository:
                 .outerjoin(
                     MediaFile,
                     (MediaFile.source_id == Source.id)
-                    # A contagem da barra lateral é do que dá para abrir.
-                    & MediaFile.arquivo_ausente.is_(False),
+                    # A contagem da barra lateral é do acervo, não do
+                    # que a fonte doou de sinal.
+                    & _ACERVO,
                 )
                 .group_by(Source.id)
                 .order_by(Source.caminho)
@@ -191,7 +199,7 @@ class MediaRepository:
         só existe no Google Fotos e nunca foi baixado.
         """
         ano_expr = func.strftime("%Y", MediaFile.data_capturada)
-        proprias = MediaFile.arquivo_ausente.is_(False)
+        proprias = _ACERVO
         with self._factory() as session:
             def contar(condicao) -> int:
                 return session.scalar(
@@ -272,14 +280,14 @@ class MediaRepository:
                     select(func.count(MediaFile.id)).where(*filtros)
                 ) or 0
 
-            proprias = MediaFile.arquivo_ausente.is_(False)
-            referencias = MediaFile.arquivo_ausente.is_(True)
+            proprias = _ACERVO
+            referencias = _TESTEMUNHA
             return {
                 "total": contar(proprias),
                 "erros": contar(proprias, MediaFile.erro_leitura.is_not(None)),
                 "fontes": session.scalar(select(func.count(Source.id))) or 0,
-                # Fotos que o app conhece sem ter o arquivo (iCloud): não
-                # entram na biblioteca, doam GPS para a correlação.
+                # O que o app conhece mas não organiza — referência do
+                # iCloud e miniatura de cache. Doam GPS para a correlação.
                 "referencias": contar(referencias),
                 "referencias_com_gps": contar(
                     referencias, MediaFile.gps_lat.is_not(None)

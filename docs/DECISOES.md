@@ -381,3 +381,25 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   cara com 500 mil linhas já escritas.
 - Como reverter: não se aplica; nada foi migrado.
 - Status: decidido por timeout
+
+---
+
+## D-024 — Registro que não é acervo é rebaixado, nunca apagado
+
+- Data: 2026-07-31
+- Contexto: o scanner entrou no pacote `Photos Library.photoslibrary` e
+  catalogou 45.822 miniaturas internas do Apple Fotos (540×360 e semelhantes)
+  como se fossem fotos. Elas representavam 89% do acervo local e inundaram a
+  revisão: 45.822 das 51.280 sugestões pendentes eram sobre miniatura.
+- Opções: (a) apagar as 45.822 do catálogo; (b) rebaixá-las a fonte de sinal,
+  fora da grade, da revisão e do plano, mas dentro da correlação.
+- Escolhida: (b), e o dono elevou isso a invariante 8 do `CLAUDE.md`.
+- Por quê: medido em cópia do catálogo real, apagar derruba as fotos de
+  verdade com lugar estimado de **2.117 para 162**. As miniaturas carregam
+  GPS que as referências do `osxphotos` não reportam — são a única testemunha
+  do lugar de fotos que não têm coordenada própria (nenhum dos 5.601 arquivos
+  reais do acervo tem GPS no arquivo). Rebaixar entrega o mesmo alívio na
+  revisão (5.458 pendentes) sem perder nada.
+- Como reverter: o campo `papel` volta a `acervo` com um UPDATE; nenhuma
+  linha foi removida, então não há o que restaurar.
+- Status: decidido pelo dono

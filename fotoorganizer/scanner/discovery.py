@@ -18,7 +18,34 @@ from typing import Iterator
 log = logging.getLogger(__name__)
 
 SYSTEM_JUNK = {"thumbs.db", "desktop.ini", ".ds_store"}
-JUNK_DIRS = {"@eadir", ".thumbnails", ".photoslibrary"}
+JUNK_DIRS = {"@eadir", ".thumbnails"}
+
+# Pacotes de biblioteca de foto do macOS. O nome real é "<Qualquer
+# Nome>.photoslibrary", então o casamento é por SUFIXO — antes estavam em
+# JUNK_DIRS, comparados por nome exato, e nunca casavam: um acervo real
+# entrou com 45.822 miniaturas internas do Apple Fotos catalogadas como foto.
+#
+# Descer neles continua valendo: os derivados carregam GPS que o catálogo
+# externo não reporta. O que muda é o papel — entram como testemunha, não
+# como acervo (invariante 8, D-024).
+SUFIXOS_DE_PACOTE = (
+    ".photoslibrary",
+    ".photolibrary",
+    ".migratedphotolibrary",
+    ".aplibrary",
+)
+
+
+def dentro_de_pacote(caminho: Path | str) -> bool:
+    """True quando o arquivo mora dentro de um pacote de biblioteca de foto.
+
+    Olha o caminho inteiro, não só o pai: os derivados ficam vários níveis
+    abaixo, em `.../resources/derivatives/masters/`.
+    """
+    partes = Path(caminho).parts
+    return any(
+        parte.lower().endswith(SUFIXOS_DE_PACOTE) for parte in partes
+    )
 
 
 @dataclass(frozen=True)
