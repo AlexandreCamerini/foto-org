@@ -813,3 +813,71 @@ def test_foto_com_camera_nao_vai_para_o_ramo_de_nao_fotos(migrated_engine):
 
     sugestao, _ = _sugestao_de(factory, "image (2).jpg")
     assert not sugestao.destino_sugerido.startswith("Não são fotos")
+
+
+def test_correcao_do_usuario_sobrevive_a_regeneracao(migrated_engine):
+    """`tipo_imagem` é a opinião do detector e é reescrita a cada geração —
+    tem de ser, porque um arquivo reprocessado pode ganhar EXIF. Se a
+    correção do usuário morasse ali, a próxima passagem a desfaria em
+    silêncio."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # Nome de captura de tela, mas é uma foto de verdade que o usuário
+        # renomeou. O detector vai insistir que é captura.
+        session.add(_media(fonte.id, "Screenshot da praia.png", "/fotos",
+                           data=datetime(2024, 5, 4, 10, 0)))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        assert media.tipo_imagem == "captura"
+        assert media.tipo_provisorio is True
+        media.tipo_confirmado = "foto"      # o usuário discorda
+        session.commit()
+
+    engine.gerar()   # regenera tudo
+
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        # O detector continua achando o que achava — e continua irrelevante.
+        assert media.tipo_imagem == "captura"
+        assert media.tipo_confirmado == "foto"
+        assert media.tipo_efetivo == "foto"
+        assert media.tipo_provisorio is False
+        sugestao = session.scalar(select(Suggestion))
+        assert not sugestao.destino_sugerido.startswith("Não são fotos")
+
+
+def test_confirmar_como_nao_foto_manda_para_o_ramo_certo(migrated_engine):
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        # O detector acha que é foto (tem câmera); o usuário sabe que é lixo.
+        session.add(_media(fonte.id, "recibo.jpg", "/fotos",
+                           data=datetime(2024, 5, 4, 10, 0),
+                           make="Canon", model="EOS R5"))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        assert media.tipo_imagem == "foto"
+        media.tipo_confirmado = "baixada"
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        sugestao = session.scalar(select(Suggestion))
+        assert sugestao.destino_sugerido.startswith("Não são fotos/Baixada")
+        vinculadas = {e.campo: e for e in sugestao.evidencias}
+        assert vinculadas["tipo"].origem == "usuario"
+        assert "por você" in vinculadas["tipo"].justificativa

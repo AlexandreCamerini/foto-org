@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { api, type Media } from "../api";
+import { api, type Media, type MediaDetalhe } from "../api";
 import { Confianca } from "./Confianca";
 
 /** Só o que NÃO é foto ganha rótulo: dizer "foto" em toda foto é ruído. */
@@ -64,14 +64,6 @@ export default function Inspector({ media }: { media: Media | null }) {
                   : null
               }
             />
-            <Linha
-              rotulo="Tipo"
-              valor={
-                detalhe?.tipo_imagem && detalhe.tipo_imagem !== "foto"
-                  ? ROTULOS_TIPO[detalhe.tipo_imagem] ?? detalhe.tipo_imagem
-                  : null
-              }
-            />
             <Linha rotulo="Pasta" valor={detalhe?.pasta} />
           </dl>
 
@@ -91,6 +83,8 @@ export default function Inspector({ media }: { media: Media | null }) {
                 : "."}
             </div>
           )}
+
+          <TipoDaImagem media={media} detalhe={detalhe} />
 
           <MetadadosDoArquivo mediaId={media.id} />
 
@@ -122,6 +116,77 @@ export default function Inspector({ media }: { media: Media | null }) {
         </div>
       )}
     </aside>
+  );
+}
+
+/** A classificação do detector é PROVISÓRIA até você responder.
+ *
+ * Enquanto `tipo_provisorio` for true, o painel pergunta em vez de afirmar —
+ * e a resposta vai para `tipo_confirmado`, que nenhuma geração de sugestões
+ * sobrescreve. Sem essa separação, corrigir o tipo seria desfeito em
+ * silêncio na próxima passagem do motor.
+ */
+function TipoDaImagem({
+  media,
+  detalhe,
+}: {
+  media: Media;
+  detalhe?: MediaDetalhe;
+}) {
+  const queryClient = useQueryClient();
+  const confirmar = useMutation({
+    mutationFn: (tipo: string | null) => api.confirmarTipo(media.id, tipo),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["detalhe", media.id] });
+      void queryClient.invalidateQueries({ queryKey: ["midia"] });
+      void queryClient.invalidateQueries({ queryKey: ["panorama"] });
+    },
+  });
+
+  const tipo = detalhe?.tipo_imagem;
+  if (!tipo || (tipo === "foto" && !detalhe?.tipo_provisorio)) return null;
+  const rotulo = ROTULOS_TIPO[tipo] ?? tipo;
+
+  if (detalhe?.tipo_provisorio) {
+    return (
+      <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5">
+        <div className="text-texto-2">
+          Isto parece <span className="text-texto">{rotulo}</span>, não uma
+          foto. Confere?
+        </div>
+        <div className="mt-1.5 flex gap-1.5">
+          <button
+            onClick={() => confirmar.mutate(tipo)}
+            disabled={confirmar.isPending}
+            className="rounded-md border border-borda px-2 py-0.5 hover:border-ok hover:text-ok disabled:opacity-50"
+          >
+            Confere
+          </button>
+          <button
+            onClick={() => confirmar.mutate("foto")}
+            disabled={confirmar.isPending}
+            className="rounded-md border border-borda px-2 py-0.5 hover:border-borda-forte disabled:opacity-50"
+          >
+            Não, é foto
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2 text-texto-2">
+      <span>
+        {rotulo} · <span className="text-texto-3">classificado por você</span>
+      </span>
+      <button
+        onClick={() => confirmar.mutate(null)}
+        className="rounded px-1 text-texto-3 hover:text-texto"
+        title="Devolver a decisão ao detector"
+      >
+        desfazer
+      </button>
+    </div>
   );
 }
 

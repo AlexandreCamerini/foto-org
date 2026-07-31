@@ -596,3 +596,34 @@ def test_metadados_de_foto_sem_nada_devolve_vazio(client):
         f"/api/midia/{achados['itens'][0]['id']}/metadados"
     ).json()
     assert dados["total"] >= 0 and isinstance(dados["namespaces"], list)
+
+
+def test_confirmar_tipo_grava_a_palavra_do_usuario(client, migrated_engine):
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).first()
+        media.tipo_imagem = "captura"     # opinião do detector
+        media_id = media.id
+        session.commit()
+
+    r = client.post(f"/api/midia/{media_id}/tipo", json={"tipo": "foto"})
+    assert r.json() == {"tipo_imagem": "foto", "tipo_provisorio": False}
+
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["tipo_imagem"] == "foto"
+    assert detalhe["tipo_provisorio"] is False
+
+    # Devolver ao detector: volta a valer a opinião dele, e a provisoriedade.
+    client.post(f"/api/midia/{media_id}/tipo", json={"tipo": None})
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["tipo_imagem"] == "captura"
+    assert detalhe["tipo_provisorio"] is True
+
+
+def test_tipo_invalido_e_recusado(client):
+    media_id = client.get("/api/midia").json()["itens"][0]["id"]
+    r = client.post(f"/api/midia/{media_id}/tipo", json={"tipo": "meme"})
+    assert r.status_code == 422
+    assert "meme" in r.json()["detail"]

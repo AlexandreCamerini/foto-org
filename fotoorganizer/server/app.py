@@ -29,7 +29,10 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from datetime import datetime, timezone
+
 from fotoorganizer import __version__
+from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.models import (
     Event,
@@ -91,12 +94,19 @@ class PrincipalBody(BaseModel):
     media_id: int
 
 
+class TipoBody(BaseModel):
+    """`None` devolve a decisão ao detector."""
+    tipo: str | None = None
+
+
 class PlanoBody(BaseModel):
     raiz_destino: str
     nome: str | None = None
 
 # O usuário não precisa saber o que é "libraw" — precisa saber de onde o
 # dado veio. O nome técnico fica na chave; o rótulo explica a origem.
+TIPOS_VALIDOS = frozenset(TIPOS_IMAGEM)
+
 ROTULOS_NAMESPACE = {
     "exif": "EXIF (gravado pela câmera)",
     "gps": "GPS (coordenadas no arquivo)",
@@ -130,7 +140,10 @@ def _media_json(m: MediaFile) -> dict:
         "gps_lon": m.gps_lon,
         # Coordenada efetiva + se ela é estimada: a grade precisa marcar a
         # diferença sem uma consulta por miniatura.
-        "tipo_imagem": m.tipo_imagem,
+        "tipo_imagem": m.tipo_efetivo,
+        # Provisório: o detector opinou e o usuário ainda não respondeu. A
+        # interface pergunta em vez de afirmar.
+        "tipo_provisorio": m.tipo_provisorio,
         "gps_estimado": m.coordenada_estimada,
         "gps_lat_efetivo": m.coordenada[0] if m.coordenada else None,
         "gps_lon_efetivo": m.coordenada[1] if m.coordenada else None,
@@ -318,6 +331,32 @@ def create_app(
                 for nome, itens in grupos.items()
             ],
         }
+
+    @app.post("/api/midia/{media_id}/tipo")
+    def confirmar_tipo(media_id: int, body: TipoBody) -> dict:
+        """A palavra do usuário sobre o que a imagem é.
+
+        Grava em `tipo_confirmado`, que nenhuma geração de sugestões
+        sobrescreve — ao contrário de `tipo_imagem`, que é a opinião do
+        detector e é recalculada a cada passagem. `tipo: null` devolve a
+        decisão ao detector.
+        """
+        if body.tipo is not None and body.tipo not in TIPOS_VALIDOS:
+            raise HTTPException(422, f"tipo desconhecido: {body.tipo}")
+        with session_factory() as session:
+            media = session.get(MediaFile, media_id)
+            if media is None:
+                raise HTTPException(404, "foto não encontrada")
+            media.tipo_confirmado = body.tipo
+            media.tipo_confirmado_em = (
+                datetime.now(timezone.utc).replace(tzinfo=None)
+                if body.tipo else None
+            )
+            session.commit()
+            return {
+                "tipo_imagem": media.tipo_efetivo,
+                "tipo_provisorio": media.tipo_provisorio,
+            }
 
     # -- imagens ---------------------------------------------------------------
     @app.get("/api/midia/{media_id}/thumb")

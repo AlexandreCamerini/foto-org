@@ -30,6 +30,8 @@ export interface Media {
   erro_leitura: string | null;
   /** foto | captura | recebida | baixada. null = não avaliado. */
   tipo_imagem: string | null;
+  /** true = o detector opinou e você ainda não respondeu. */
+  tipo_provisorio: boolean;
   /** true quando a coordenada veio de outra câmera, não do arquivo. */
   gps_estimado: boolean;
   gps_lat_efetivo: number | null;
@@ -235,6 +237,11 @@ export const api = {
   },
   detalhe: (id: number) => json<MediaDetalhe>(`/api/midia/${id}`),
   metadados: (id: number) => json<Metadados>(`/api/midia/${id}/metadados`),
+  confirmarTipo: (id: number, tipo: string | null) =>
+    post<{ tipo_imagem: string | null; tipo_provisorio: boolean }>(
+      `/api/midia/${id}/tipo`,
+      { tipo },
+    ),
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),

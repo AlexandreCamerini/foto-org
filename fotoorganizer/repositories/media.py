@@ -25,6 +25,10 @@ ORDENACOES = {
     "tamanho_desc": (MediaFile.tamanho.desc(),),
 }
 
+# COALESCE em SQL: `tipo_efetivo` do modelo é property Python e não serve
+# em cláusula WHERE.
+_TIPO_EFETIVO = func.coalesce(MediaFile.tipo_confirmado, MediaFile.tipo_imagem)
+
 # O que impede uma foto de ser organizada sozinha. A chave é o filtro; o
 # rótulo é o que o usuário lê. Ordem = ordem de exibição no panorama.
 LACUNAS: dict[str, str] = {
@@ -32,6 +36,7 @@ LACUNAS: dict[str, str] = {
     "sem_gps": "sem coordenada",
     "local_estimado": "lugar estimado de outra câmera",
     "nao_e_foto": "não é foto (captura, recebida, baixada)",
+    "tipo_a_confirmar": "classificação a confirmar",
     "sem_grupo": "fora de viagem ou evento",
     "sem_camera": "sem câmera identificada",
     "sem_sugestao": "sem sugestão de destino",
@@ -61,7 +66,15 @@ def _condicao_lacuna(chave: str):
         # Não é falta: é uma inferência que vale conferir antes de organizar.
         "local_estimado": MediaFile.gps_lat_estimado.is_not(None),
         # NULL = ainda não avaliado; só conta o que o detector já viu.
+        # O tipo que vale é o do usuário, senão o do detector.
         "nao_e_foto": and_(
+            _TIPO_EFETIVO.is_not(None),
+            _TIPO_EFETIVO != "foto",
+        ),
+        # O que o detector marcou e você ainda não respondeu — a fila de
+        # triagem. Some sozinha conforme você decide.
+        "tipo_a_confirmar": and_(
+            MediaFile.tipo_confirmado.is_(None),
             MediaFile.tipo_imagem.is_not(None),
             MediaFile.tipo_imagem != "foto",
         ),

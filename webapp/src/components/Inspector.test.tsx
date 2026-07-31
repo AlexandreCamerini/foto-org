@@ -148,6 +148,58 @@ describe("Inspector", () => {
     ).toBeInTheDocument();
   });
 
+  it("classificação provisória pergunta, em vez de afirmar", async () => {
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "captura",
+                        tipo_provisorio: true },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText(/Isto parece/)).toBeInTheDocument();
+    expect(screen.getByText("captura de tela")).toBeInTheDocument();
+    expect(screen.getByText("Confere")).toBeInTheDocument();
+    expect(screen.getByText("Não, é foto")).toBeInTheDocument();
+  });
+
+  it("responder grava a palavra do usuário, não a do detector", async () => {
+    const chamadas = servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "captura",
+                        tipo_provisorio: true },
+      "/api/midia/7/tipo": { tipo_imagem: "foto", tipo_provisorio: false },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await usuario.click(await screen.findByText("Não, é foto"));
+
+    const post = chamadas.find((c) => c.caminho === "/api/midia/7/tipo");
+    expect(post?.metodo).toBe("POST");
+    expect(post?.corpo).toEqual({ tipo: "foto" });
+  });
+
+  it("classificação já confirmada não volta a perguntar", async () => {
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "captura",
+                        tipo_provisorio: false },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText(/classificado por você/)).toBeInTheDocument();
+    expect(screen.queryByText("Confere")).not.toBeInTheDocument();
+  });
+
+  it("foto normal não ganha bloco de tipo", async () => {
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, tipo_imagem: "foto",
+                        tipo_provisorio: false },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    expect(screen.queryByText(/Isto parece/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/classificado por você/)).not.toBeInTheDocument();
+  });
+
   it("foto sem lugar resolvido não inventa linha vazia", async () => {
     servirApi({
       "/api/midia/7": {

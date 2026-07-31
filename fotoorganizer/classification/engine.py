@@ -467,11 +467,21 @@ class SuggestionEngine:
             # herança em atestado de que o arquivo veio de uma câmera.
             tem_gps=media.gps_lat is not None,
         )
+        # O detector sempre opina — a opinião é reescrita a cada geração,
+        # porque um arquivo reprocessado pode ganhar EXIF. O que ele NUNCA
+        # toca é `tipo_confirmado`: aquilo é palavra do usuário.
         media.tipo_imagem = veredito.tipo
-        if not veredito.e_foto:
+        if media.tipo_confirmado is not None:
+            if media.tipo_confirmado != TIPO_FOTO:
+                drafts.append(_Draft(
+                    "tipo", "usuario", ROTULOS_TIPO[media.tipo_confirmado],
+                    "classificado por você", score_override=1.0,
+                ))
+        elif not veredito.e_foto:
             drafts.append(_Draft(
                 "tipo", "arquivo", ROTULOS_TIPO[veredito.tipo],
-                veredito.justificativa, score_override=veredito.score,
+                veredito.justificativa + " — a confirmar",
+                score_override=veredito.score,
             ))
 
         if media.data_capturada is not None:
@@ -627,7 +637,7 @@ class SuggestionEngine:
         quase sempre se apaga, imagem recebida às vezes se guarda. Por ano
         porque um balde único com milhares não é revisável.
         """
-        raiz = f"{DESTINO_NAO_FOTO}/{ROTULOS_TIPO[media.tipo_imagem].capitalize()}"
+        raiz = f"{DESTINO_NAO_FOTO}/{ROTULOS_TIPO[media.tipo_efetivo].capitalize()}"
         if "data" in evidencias:
             return f"{raiz}/{datetime.fromisoformat(evidencias['data'].valor).year}"
         return raiz
@@ -729,7 +739,7 @@ class SuggestionEngine:
         # de tela não pertence a "Viagens/2024 - França" por ter sido feita
         # durante a viagem. Vai para um ramo próprio, por tipo e ano, onde
         # dá para revisar em lote e apagar se quiser.
-        if media.tipo_imagem and media.tipo_imagem != TIPO_FOTO:
+        if media.tipo_efetivo and media.tipo_efetivo != TIPO_FOTO:
             destino = self._destino_nao_foto(media, evidencias)
             usados = {"tipo": evidencias["tipo"]} if "tipo" in evidencias else {}
             if "data" in evidencias:

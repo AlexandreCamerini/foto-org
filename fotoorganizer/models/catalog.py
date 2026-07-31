@@ -120,9 +120,13 @@ class MediaFile(Base):
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"))
-    # foto | captura | recebida | baixada. NULL = ainda não avaliado.
-    # Ver fotoorganizer/classification/tipo_imagem.py.
+    # O que o DETECTOR concluiu: foto | captura | recebida | baixada.
+    # NULL = ainda não avaliado. Reescrito a cada geração de sugestões.
     tipo_imagem: Mapped[str | None]
+    # O que o USUÁRIO disse. Nada no motor sobrescreve isto — é o que separa
+    # "o sistema achou" de "eu decidi".
+    tipo_confirmado: Mapped[str | None]
+    tipo_confirmado_em: Mapped[datetime | None]
     hash_rapido: Mapped[str | None]
     hash_sha256: Mapped[str | None]
     # phash 64-bit em hex — calculado sob demanda pela detecção de duplicatas.
@@ -132,6 +136,19 @@ class MediaFile(Base):
     )
     erro_leitura: Mapped[str | None] = mapped_column(Text)
     indexado_em: Mapped[datetime] = mapped_column(default=utcnow)
+
+    @property
+    def tipo_efetivo(self) -> str | None:
+        """O tipo que vale: o do usuário, senão o do detector."""
+        return self.tipo_confirmado or self.tipo_imagem
+
+    @property
+    def tipo_provisorio(self) -> bool:
+        """True quando o detector opinou e o usuário ainda não respondeu.
+
+        É o que permite a interface perguntar em vez de afirmar.
+        """
+        return self.tipo_confirmado is None and self.tipo_imagem is not None
 
     @property
     def coordenada(self) -> tuple[float, float] | None:
