@@ -120,6 +120,7 @@ ROTULOS_NAMESPACE = {
     "png": "PNG (cabeçalho do arquivo)",
     "apple": "Apple Fotos (catálogo importado)",
     "google": "Google Takeout (catálogo importado)",
+    "lightroom": "Lightroom (catálogo importado)",
 }
 
 _PREVIEW_SIZE = 2048

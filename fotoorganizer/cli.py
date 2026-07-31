@@ -114,8 +114,10 @@ def cmd_importar(args: argparse.Namespace) -> int:
         ApplePhotosProvider,
         ExternalCatalogImporter,
         GoogleTakeoutProvider,
+        LightroomProvider,
     )
     from fotoorganizer.sources.apple_photos import ApplePhotosError
+    from fotoorganizer.sources.lightroom import LightroomError
     from fotoorganizer.thumbnails import ThumbnailCache
 
     settings, factory = _abrir_catalogo(args)
@@ -123,6 +125,11 @@ def cmd_importar(args: argparse.Namespace) -> int:
         provider = ApplePhotosProvider(
             Path(args.caminho).expanduser() if args.caminho else None
         )
+    elif args.fonte == "lightroom":
+        if not args.caminho:
+            print("Informe o arquivo .lrcat do Lightroom Classic.")
+            return 1
+        provider = LightroomProvider(Path(args.caminho).expanduser())
     else:
         if not args.caminho:
             print("Informe a pasta do Takeout descompactado.")
@@ -148,7 +155,7 @@ def cmd_importar(args: argparse.Namespace) -> int:
     )
     try:
         metrics = importer.importar(provider, progress=progresso)
-    except ApplePhotosError as exc:
+    except (ApplePhotosError, LightroomError) as exc:
         print(f"\n{exc}")
         return 1
     print(f"\n{metrics.importados} importados, {metrics.pulados} pulados, "
@@ -336,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     p_imp = sub.add_parser(
         "importar", help="importa Apple Fotos ou Google Takeout (read-only)"
     )
-    p_imp.add_argument("fonte", choices=["apple", "takeout"])
+    p_imp.add_argument("fonte", choices=["apple", "takeout", "lightroom"])
     p_imp.add_argument(
         "caminho", nargs="?",
         help="pasta do Takeout; para apple, biblioteca alternativa (opcional)",

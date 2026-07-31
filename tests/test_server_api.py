@@ -669,6 +669,6 @@ def test_todo_namespace_gravado_tem_rotulo_legivel():
     from fotoorganizer.metadata.exiftool import _GRUPOS
     from fotoorganizer.server.app import ROTULOS_NAMESPACE
 
-    gravados = set(_GRUPOS.values()) | {"libraw", "apple", "google"}
+    gravados = set(_GRUPOS.values()) | {"libraw", "apple", "google", "lightroom"}
     sem_rotulo = gravados - set(ROTULOS_NAMESPACE)
     assert not sem_rotulo, f"sem rótulo legível: {sorted(sem_rotulo)}"

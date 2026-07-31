@@ -35,6 +35,7 @@ class SourceType(enum.StrEnum):
     PASTA = "pasta"
     APPLE_PHOTOS = "apple_photos"
     GOOGLE_TAKEOUT = "google_takeout"
+    LIGHTROOM = "lightroom"
 
 
 class MediaRole(enum.StrEnum):

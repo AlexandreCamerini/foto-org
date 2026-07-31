@@ -40,6 +40,10 @@ class ExternalAsset:
 
     caminho: Path | None
     referencia: str | None = None
+    # Onde o catálogo externo acredita que o arquivo está. Numa referência,
+    # é a única pista de LUGAR que sobra — e é justamente o que responde
+    # "onde estão minhas fotos?" com o disco desligado. Não é aberto.
+    caminho_original: Path | None = None
     nome: str | None = None
     tamanho: int | None = None
     data_capturada: datetime | None = None
@@ -53,6 +57,9 @@ class ExternalAsset:
     # facial por padrão — invariante 6 — mas aproveita o que o usuário já
     # nomeou em outro lugar, como qualquer outro metadado importado).
     pessoas: tuple[str, ...] = field(default=())
+    # Etiquetas que o dono escreveu noutro app. Como álbum e pessoa, é
+    # intenção declarada — não inferência nossa.
+    palavras_chave: tuple[str, ...] = field(default=())
 
 
 class ExternalCatalogProvider(Protocol):

@@ -471,3 +471,30 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   `metadata/exiftool.py` e rodar `scan --reprocessar`. O rótulo legível
   continua em `ROTULOS_NAMESPACE`, à espera.
 - Status: decidido pelo dono
+
+---
+
+## D-028 — Lightroom entra como fonte externa, e é a principal do discovery
+
+- Data: 2026-07-31
+- Contexto: o dono corrigiu uma premissa que eu vinha usando errada — o
+  catálogo não é o acervo. O acervo é desconhecido, grande, e espalhado por
+  um NAS e HDs externos antigos. Descobri-lo é o objetivo do app, não um
+  detalhe.
+- Opções: (a) varrer discos quando montados; (b) ler o catálogo do Lightroom;
+  (c) as duas.
+- Escolhida: (b) primeiro, (a) depois.
+- Por quê: o `.lrcat` responde **com os discos desligados**. Medido no acervo
+  real: 54.086 fotos conhecidas, 45.397 delas num volume desmontado. Uma
+  varredura de disco encontraria zero. E o catálogo traz o que o dono
+  decidiu — nota, sinalização, coleção, palavra-chave — que é intenção
+  declarada, não inferência nossa.
+- Forma: referência, nunca acervo. Nenhum byte de imagem é aberto; o valor
+  está em saber que a foto existe, onde estava e o que se sabe dela. O
+  `.lrcat` é lido com `immutable=1`: sem lock, sem journal, sem escrita, com
+  o Lightroom aberto ao lado (invariante 1).
+- Junto: `ExternalAsset` ganhou `caminho_original` — sem ele uma referência
+  sabe a data e o GPS e não sabe dizer de que disco veio, que é justamente a
+  pergunta do discovery.
+- Como reverter: remover a fonte do catálogo; nada mais depende dela.
+- Status: decidido pelo dono

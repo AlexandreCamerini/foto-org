@@ -1,6 +1,7 @@
 from fotoorganizer.sources.apple_photos import ApplePhotosError, ApplePhotosProvider
 from fotoorganizer.sources.base import ExternalAsset, ExternalCatalogProvider
 from fotoorganizer.sources.google_takeout import GoogleTakeoutProvider
+from fotoorganizer.sources.lightroom import LightroomError, LightroomProvider
 from fotoorganizer.sources.importer import ExternalCatalogImporter, ImportMetrics
 
 __all__ = [
@@ -10,5 +11,6 @@ __all__ = [
     "ExternalCatalogProvider",
     "ExternalCatalogImporter",
     "GoogleTakeoutProvider",
+    "LightroomProvider", "LightroomError",
     "ImportMetrics",
 ]
