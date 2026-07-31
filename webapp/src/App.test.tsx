@@ -10,8 +10,12 @@ describe("App", () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
 
-    expect(await screen.findByText("8 fotos no catálogo.", { exact: false }))
-      .toBeInTheDocument();
+    // "8 fotos no catálogo" virou "das 8 fotos que dá para organizar agora":
+    // o total da tela passou a ser o acervo conhecido, e as lacunas dizem
+    // explicitamente sobre que subconjunto falam.
+    expect(
+      await screen.findByText(/das 8 fotos que dá para organizar agora/),
+    ).toBeInTheDocument();
     expect(screen.getByText("sem data de captura")).toBeInTheDocument();
     expect(screen.getByText("sem coordenada")).toBeInTheDocument();
   });
@@ -95,5 +99,31 @@ describe("App", () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
     expect(await screen.findByText("8 fotos · 1 fontes")).toBeInTheDocument();
+  });
+});
+
+
+describe("o acervo, antes das lacunas", () => {
+  it("abre com o que existe, não com o que dá para abrir agora", async () => {
+    // Num acervo real eram 100.164 fotos conhecidas e 4.932 alcançáveis. A
+    // tela abria com "5.191 no catálogo" e escondia o resto — respondendo a
+    // pergunta errada para quem está tentando descobrir o que tem.
+    servirApi(ROTAS_BASE);
+    montar(<App />);
+
+    expect(await screen.findByText("O acervo")).toBeInTheDocument();
+    expect(screen.getByText("30")).toBeInTheDocument();
+    expect(screen.getByText(/8 alcançáveis agora/)).toBeInTheDocument();
+
+    // O disco na gaveta aparece, com o motivo.
+    expect(screen.getByText("/Volumes/photo")).toBeInTheDocument();
+    expect(
+      screen.getByText(/fora de alcance — volume não montado/),
+    ).toBeInTheDocument();
+
+    // E as lacunas ficam explicitamente escopadas ao organizável.
+    expect(
+      await screen.findByText(/das 8 fotos que dá para organizar agora/),
+    ).toBeInTheDocument();
   });
 });

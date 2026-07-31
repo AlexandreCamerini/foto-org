@@ -70,6 +70,28 @@ export const ROTAS_BASE: Record<string, unknown> = {
   "/api/sugestoes": { contagens: {}, itens: [] },
   "/api/duplicatas": [],
   "/api/operacoes": [],
+  "/api/inventario": {
+    fotos: 30,
+    alcancaveis: 8,
+    registros: 34,
+    sem_caminho: 4,
+    lugares: [
+      {
+        raiz: "/Volumes/photo",
+        fotos: 18,
+        alcancaveis: 0,
+        so_no_catalogo: 18,
+        fontes: ["Lightroom"],
+      },
+      {
+        raiz: "/Users/eu",
+        fotos: 8,
+        alcancaveis: 8,
+        so_no_catalogo: 0,
+        fontes: ["Pictures"],
+      },
+    ],
+  },
   "/api/panorama": {
     total: 8,
     lacunas: [

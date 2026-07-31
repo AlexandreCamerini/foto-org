@@ -248,6 +248,7 @@ export const api = {
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),
+  inventario: () => json<Inventario>("/api/inventario"),
   viagens: () => json<Agrupamento[]>("/api/viagens"),
   eventos: () => json<Agrupamento[]>("/api/eventos"),
   sugestoes: (status: string, offset = 0, limit = 200) =>
@@ -287,4 +288,20 @@ export interface GrupoDuplicatas {
   bytes_recuperaveis: number;
   n_fontes: number;
   membros: MembroDuplicata[];
+}
+
+/** O acervo inteiro — alcançável ou não. A grade responde "o que dá para
+ *  abrir agora"; num acervo em NAS e discos externos isso é a minoria. */
+export interface Inventario {
+  fotos: number;
+  alcancaveis: number;
+  registros: number;
+  sem_caminho: number;
+  lugares: {
+    raiz: string;
+    fotos: number;
+    alcancaveis: number;
+    so_no_catalogo: number;
+    fontes: string[];
+  }[];
 }

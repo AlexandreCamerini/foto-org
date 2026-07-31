@@ -672,3 +672,30 @@ def test_todo_namespace_gravado_tem_rotulo_legivel():
     gravados = set(_GRUPOS.values()) | {"libraw", "apple", "google", "lightroom"}
     sem_rotulo = gravados - set(ROTULOS_NAMESPACE)
     assert not sem_rotulo, f"sem rótulo legível: {sorted(sem_rotulo)}"
+
+
+def test_inventario_expoe_o_acervo_inteiro(client, migrated_engine):
+    """O Panorama respondia só sobre o alcançável. Num acervo em NAS e HDs
+    externos isso é a minoria — 5.191 de 100.164 num caso real."""
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        gaveta = Source(caminho="/Volumes/photo", apelido="photo",
+                        disponivel=False)
+        session.add(gaveta)
+        session.flush()
+        session.add(MediaFile(
+            source_id=gaveta.id, caminho="lightroom://UUID-1",
+            pasta="/Volumes/photo/Portfolio", nome="a.dng", extensao="dng",
+            tamanho=1, arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    inv = client.get("/api/inventario").json()
+    assert inv["fotos"] > inv["alcancaveis"]
+    gaveta_json = next(l for l in inv["lugares"] if l["raiz"] == "/Volumes/photo")
+    assert gaveta_json["fotos"] == 1
+    assert gaveta_json["alcancaveis"] == 0
+    assert gaveta_json["so_no_catalogo"] == 1
+    assert gaveta_json["fontes"] == ["photo"]

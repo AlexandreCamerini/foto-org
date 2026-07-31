@@ -51,6 +51,7 @@ from fotoorganizer.repositories import (
     OperationRepository,
     SuggestionRepository,
 )
+from fotoorganizer.repositories.inventario import levantar
 from fotoorganizer.repositories.media import LACUNAS, MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters
 from fotoorganizer.server.jobs import JobManager
@@ -268,6 +269,33 @@ def create_app(
     @app.get("/api/panorama")
     def panorama() -> dict:
         return media_repo.panorama()
+
+    @app.get("/api/inventario")
+    def inventario() -> dict:
+        """O acervo inteiro, alcançável ou não.
+
+        O Panorama respondia só sobre o que dá para abrir agora. Num acervo
+        em NAS e discos externos isso é a minoria — 5.191 de 100.164 num caso
+        real —, e a pergunta de quem está descobrindo é outra: o que existe,
+        e onde.
+        """
+        inv = levantar(session_factory)
+        return {
+            "fotos": inv.fotos,
+            "alcancaveis": inv.alcancaveis,
+            "registros": inv.total_registros,
+            "sem_caminho": inv.sem_caminho,
+            "lugares": [
+                {
+                    "raiz": lugar.raiz,
+                    "fotos": lugar.fotos,
+                    "alcancaveis": lugar.alcancaveis,
+                    "so_no_catalogo": lugar.so_no_catalogo,
+                    "fontes": list(lugar.fontes),
+                }
+                for lugar in inv.lugares
+            ],
+        }
 
     @app.get("/api/midia/{media_id}")
     def detalhe_midia(media_id: int) -> dict:
