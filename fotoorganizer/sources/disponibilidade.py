@@ -53,14 +53,22 @@ class EstadoDaFonte:
             self.identidade_gravada or ""
         ).startswith("caminho:")
 
+    @property
+    def volume_montado(self) -> bool:
+        return self.volume is None or self.volume.montado
+
     def resumo(self) -> str:
         if self.mudou_de_lugar:
             return f"mudou de lugar → {self.ponto_atual}"
         if self.disponivel:
             return "disponível"
-        if self.reconhecivel:
-            return "na gaveta (volume conhecido, não montado)"
-        return "indisponível"
+        if not self.volume_montado:
+            return ("na gaveta (volume conhecido, não montado)"
+                    if self.reconhecivel else "volume não montado")
+        # O disco está aqui e a pasta não. Isso não é indisponibilidade: é
+        # ausência, e a ação do usuário é outra — procurar backup, não
+        # plugar cabo.
+        return "a pasta não existe mais neste volume"
 
 
 def verificar(factory: sessionmaker[Session]) -> list[EstadoDaFonte]:

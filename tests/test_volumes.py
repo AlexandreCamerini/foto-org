@@ -172,3 +172,21 @@ def test_volume_que_voltou_noutro_ponto_e_apontado(migrated_engine, monkeypatch)
         # A verificação NÃO reescreve o caminho: mover as linhas de mídia é
         # operação do usuário, não efeito colateral.
         assert session.scalar(select(Source)).caminho == "/Volumes/photo/Portfolio"
+
+
+def test_pasta_apagada_no_disco_montado_nao_e_gaveta(migrated_engine, tmp_path):
+    """Disco presente e pasta ausente é ausência, não indisponibilidade — e
+    a ação do dono é outra: procurar backup, não plugar cabo.
+
+    Um acervo real tinha as duas situações lado a lado, e a primeira versão
+    chamava as duas de "na gaveta"."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        _fonte(session, str(tmp_path / "pasta que foi apagada"),
+               apelido="apagada", volume_id="uuid:DISCO-DE-BOOT")
+        session.commit()
+
+    (estado,) = verificar(factory)
+    assert estado.disponivel is False
+    assert estado.volume_montado is True
+    assert estado.resumo() == "a pasta não existe mais neste volume"
