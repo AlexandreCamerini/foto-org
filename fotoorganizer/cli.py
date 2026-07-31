@@ -324,7 +324,18 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
 
 def cmd_web(args: argparse.Namespace) -> int:
-    """Servidor local da UI web — escuta apenas em 127.0.0.1."""
+    """Servidor local da UI web — escuta apenas em 127.0.0.1.
+
+    Com ``--porta 0`` o SO escolhe uma porta livre; a porta efetiva é
+    anunciada no stdout como ``FOTOORG_READY http://127.0.0.1:<porta>``
+    assim que o socket está ligado, para um supervisor (ex.: o shell
+    Tauri) saber onde abrir a janela sem depender de porta fixa. O
+    ``uvicorn.Server`` instala handlers de SIGINT/SIGTERM, então o
+    processo encerra limpo (checkpoint WAL, lifespan) quando o app pai
+    o encerra.
+    """
+    import socket
+
     import uvicorn
 
     from fotoorganizer.database import (
@@ -339,9 +350,19 @@ def cmd_web(args: argparse.Namespace) -> int:
     upgrade_to_head(settings.db_path)
     factory = create_session_factory(create_db_engine(settings.db_path))
     app = create_app(settings, factory)
-    print(f"Foto Organizer web em http://127.0.0.1:{args.porta} "
-          f"(catálogo: {settings.db_path})")
-    uvicorn.run(app, host="127.0.0.1", port=args.porta, log_level="warning")
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", args.porta))
+    porta = sock.getsockname()[1]
+    url = f"http://127.0.0.1:{porta}"
+
+    print(f"Foto Organizer web em {url} (catálogo: {settings.db_path})")
+    # Linha estável para o supervisor descobrir a porta (inclusive efêmera).
+    print(f"FOTOORG_READY {url}", flush=True)
+
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+    server.run(sockets=[sock])
     return 0
 
 
