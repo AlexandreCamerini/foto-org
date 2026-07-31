@@ -660,3 +660,15 @@ def test_lugar_herdado_de_longe_nao_entrega_a_cidade(client, migrated_engine):
     assert local["cidade"] is None
     assert local["granularidade"] == "pais"
     assert local["estimado"] is True
+
+
+def test_todo_namespace_gravado_tem_rotulo_legivel():
+    """O usuário não precisa saber o que é "makernotes" — precisa saber de
+    onde o dado veio. Namespace novo no extrator sem rótulo aqui vaza o nome
+    técnico para a tela."""
+    from fotoorganizer.metadata.exiftool import _GRUPOS
+    from fotoorganizer.server.app import ROTULOS_NAMESPACE
+
+    gravados = set(_GRUPOS.values()) | {"libraw", "apple", "google"}
+    sem_rotulo = gravados - set(ROTULOS_NAMESPACE)
+    assert not sem_rotulo, f"sem rótulo legível: {sorted(sem_rotulo)}"

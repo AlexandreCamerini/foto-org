@@ -114,6 +114,10 @@ ROTULOS_NAMESPACE = {
     "iptc": "IPTC (autor, direitos, palavras-chave)",
     "xmp": "XMP (escrito por editor de imagem)",
     "libraw": "RAW (lido do arquivo bruto)",
+    "makernotes": "MakerNotes (bloco do fabricante da câmera)",
+    "icc": "ICC (perfil de cor)",
+    "quicktime": "QuickTime (contêiner de vídeo e RAW moderno)",
+    "png": "PNG (cabeçalho do arquivo)",
     "apple": "Apple Fotos (catálogo importado)",
     "google": "Google Takeout (catálogo importado)",
 }
