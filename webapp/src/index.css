@@ -21,6 +21,11 @@
      com a imagem em toda tela. O "acento" é o próprio branco em opacidade
      maior; cor fica reservada para ESTADO. */
   --color-acento: #d6d9dd;
+  /* Texto sobre o acento (ex.: botão de confirmação) precisa de contraste
+     contra um fundo CLARO — herdar --color-texto (quase branco) sobre
+     --color-acento (quase branco também) é ilegível. Reaproveita a cor da
+     janela: mesmo par de tokens, invertido. Contraste medido ~14:1. */
+  --color-texto-invertido: var(--color-janela);
   /* Estado, dessaturado. Confiança alta e média não têm cor: são
      quantidade (ver componente Confianca). Só a baixa pede olho humano. */
   --color-atencao: #c2833a;

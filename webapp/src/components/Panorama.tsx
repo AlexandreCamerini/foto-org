@@ -34,7 +34,7 @@ function ListaFacetas({
 }) {
   return (
     <section className="min-w-0 flex-1">
-      <h3 className="titulo-painel mb-1.5">
+      <h3 className="titulo-painel mb-2">
         {titulo}
       </h3>
       {itens.slice(0, 12).map((f) => (
@@ -105,7 +105,7 @@ export default function Panorama({
       </p>
 
       <section className="mb-5">
-        <h3 className="titulo-painel mb-1.5">
+        <h3 className="titulo-painel mb-2">
           Lacunas
         </h3>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -116,7 +116,7 @@ export default function Panorama({
                 aoRecortar({ lacuna: l.chave, nome: `${l.rotulo}` })
               }
               disabled={l.quantidade === 0}
-              className="rounded-md border border-borda bg-cartao px-2.5 py-2 text-left hover:border-acento disabled:opacity-40 disabled:hover:border-borda"
+              className="rounded-md border border-borda bg-cartao px-3 py-2 text-left hover:border-acento disabled:opacity-40 disabled:hover:border-borda"
             >
               <div className="text-[15px]">{l.quantidade}</div>
               <div className="truncate text-texto-2">{l.rotulo}</div>
@@ -128,7 +128,7 @@ export default function Panorama({
 
       {fontesComFotos.length > 0 && anos.length > 0 && (
         <section className="mb-5">
-          <h3 className="titulo-painel mb-1.5">
+          <h3 className="titulo-painel mb-2">
             Ano por fonte
           </h3>
           <div className="overflow-x-auto">

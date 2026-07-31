@@ -146,7 +146,7 @@ export default function Review({ job }: { job: Job }) {
                 {aberto &&
                   doGrupo.map((s) => (
                     <div key={s.id} className="border-b border-borda/60">
-                      <div className="flex items-center gap-3 px-3 py-1.5 hover:bg-painel">
+                      <div className="flex items-center gap-3 px-3 py-2 hover:bg-painel">
                         <img
                           src={api.thumbUrl(s.media_id)}
                           alt={s.nome}
@@ -175,7 +175,7 @@ export default function Review({ job }: { job: Job }) {
                           <Confianca nivel={s.nivel} />
                         </button>
                         {status === "pendente" ? (
-                          <div className="flex shrink-0 gap-1.5">
+                          <div className="flex shrink-0 gap-2">
                             <button
                               onClick={() =>
                                 acao.mutate({ ids: [s.id], tipo: "aprovar" })

@@ -66,7 +66,7 @@ function Card({ grupo, onAbrir }: { grupo: Agrupamento; onAbrir: () => void }) {
   return (
     <button
       onClick={onAbrir}
-      className="group relative aspect-[3/2] overflow-hidden rounded-lg bg-cartao text-left shadow-sm transition-transform hover:scale-[1.02]"
+      className="group relative aspect-[3/2] overflow-hidden rounded-md bg-cartao text-left outline outline-2 outline-offset-[-2px] outline-transparent transition-colors hover:outline-acento"
     >
       {grupo.capa_id != null && !capaFalhou && (
         <img

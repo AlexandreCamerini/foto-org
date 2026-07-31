@@ -147,7 +147,7 @@ export default function Duplicates({ job }: { job: Job }) {
             {grupo.membros.map((m) => (
               <figure
                 key={m.member_id}
-                className={`overflow-hidden rounded-lg border bg-cartao ${
+                className={`overflow-hidden rounded-md border bg-cartao ${
                   m.papel === "principal"
                     ? "border-ok"
                     : m.papel === "ignorado"

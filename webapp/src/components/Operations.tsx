@@ -195,7 +195,7 @@ export default function Operations({ job }: { job: Job }) {
                         ? "O dry-run não encontrou nenhum arquivo copiável"
                         : "Copia os arquivos para o destino"
                   }
-                  className="shrink-0 whitespace-nowrap rounded-md bg-acento px-3 py-1 text-white hover:opacity-90 disabled:opacity-40"
+                  className="shrink-0 whitespace-nowrap rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90 disabled:opacity-40"
                 >
                   Copiar {plano.prontos ?? plano.total_itens - plano.concluidos}{" "}
                   arquivos
