@@ -20,6 +20,25 @@ log = logging.getLogger(__name__)
 SYSTEM_JUNK = {"thumbs.db", "desktop.ini", ".ds_store"}
 JUNK_DIRS = {"@eadir", ".thumbnails"}
 
+# Pastas de trabalho de programação. Diferente dos pacotes de biblioteca de
+# foto abaixo, estas não são testemunha de nada: um ícone de app não tem data
+# de captura nem GPS para doar. O estrago é duplo — entram na contagem como se
+# fossem fotos e, pior, emprestam o nome da pasta para batizar evento de foto
+# de verdade: num acervo real, 1.314 fotos foram parar num evento chamado
+# "BoraChurrascoRio.imageset", vindo de um Assets.xcassets.
+PASTAS_DE_CODIGO = {
+    "node_modules", "bower_components", "__pycache__", "site-packages",
+    "deriveddata", "pods", "venv", "vendor", "target",
+}
+# Pacotes de software cujo nome é "<QualquerCoisa>.sufixo". O miolo do nome
+# não importa: o sufixo já diz que aquilo é um contêiner de app, não uma pasta
+# de fotos.
+SUFIXOS_DE_CODIGO = (
+    ".xcassets", ".imageset", ".appiconset", ".colorset", ".dataset",
+    ".xcodeproj", ".xcworkspace", ".playground", ".lproj",
+    ".framework", ".bundle", ".app",
+)
+
 # Pacotes de biblioteca de foto do macOS. O nome real é "<Qualquer
 # Nome>.photoslibrary", então o casamento é por SUFIXO — antes estavam em
 # JUNK_DIRS, comparados por nome exato, e nunca casavam: um acervo real
@@ -34,6 +53,12 @@ SUFIXOS_DE_PACOTE = (
     ".migratedphotolibrary",
     ".aplibrary",
 )
+
+
+def e_pasta_de_codigo(nome: str) -> bool:
+    """Pasta de trabalho de programação — nem acervo, nem testemunha."""
+    norm = nome.lower()
+    return norm in PASTAS_DE_CODIGO or norm.endswith(SUFIXOS_DE_CODIGO)
 
 
 def dentro_de_pacote(caminho: Path | str) -> bool:
@@ -93,7 +118,7 @@ def iter_media_files(root: Path, config: DiscoveryConfig) -> Iterator[Path]:
                 if entry.is_dir(follow_symlinks=config.seguir_symlinks):
                     if is_symlink and not config.seguir_symlinks:
                         continue
-                    if name.lower() in JUNK_DIRS:
+                    if name.lower() in JUNK_DIRS or e_pasta_de_codigo(name):
                         continue
                     stack.append(Path(entry.path))
                 elif entry.is_file(follow_symlinks=config.seguir_symlinks):

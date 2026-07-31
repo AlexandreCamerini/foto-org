@@ -96,3 +96,22 @@ def test_conteiner_de_software_com_extensao_e_tecnico():
         assert pasta_tecnica(conteiner), conteiner
     # Uma data com ponto não pode ser confundida com extensão.
     assert not pasta_tecnica("Pantanal Jul.2023")
+
+
+def test_pacote_de_codigo_nao_nomeia_evento():
+    """Segunda linha de defesa: mesmo que a pasta entre no catálogo, o nome
+    dela não pode virar nome de evento.
+
+    "BoraChurrascoRio.imageset" tem miolo que parece nome de festa — passou
+    pelo teste de contêiner (que olha o miolo) e batizou um evento com 1.314
+    fotos de um acervo real dentro. Aqui quem decide é o sufixo.
+    """
+    from fotoorganizer.grouping.eventos import nome_de_album, pasta_tecnica
+
+    for pacote in ["BoraChurrascoRio.imageset", "Assets.xcassets",
+                   "Meu App.framework", "Projeto.xcodeproj"]:
+        assert pasta_tecnica(pacote), pacote
+        assert not nome_de_album(pacote), pacote
+
+    # E o que é festa de verdade continua nomeando.
+    assert nome_de_album("Bora Churrasco Rio")

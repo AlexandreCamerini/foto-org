@@ -82,3 +82,29 @@ def test_pacote_reconhecido_em_qualquer_nivel_do_caminho(tmp_path):
     assert dentro_de_pacote(fundo) is True
     # Pasta que só *menciona* o sufixo no meio do nome não é pacote.
     assert dentro_de_pacote(tmp_path / "backup photoslibrary antiga" / "x.jpg") is False
+
+
+def test_pasta_de_codigo_nao_e_varrida(tmp_path):
+    """`node_modules` e asset catalog não são acervo nem testemunha.
+
+    Num acervo real entraram 499 ícones de app e skins de emulador — e uma
+    pasta `BoraChurrascoRio.imageset` acabou batizando um evento com 1.314
+    fotos de verdade dentro.
+    """
+    make_jpeg(tmp_path / "Viagens" / "real.jpg")
+    make_jpeg(tmp_path / "projeto" / "node_modules" / "pacote" / "icone.png")
+    make_jpeg(tmp_path / "app" / "Assets.xcassets" / "Splash.imageset" / "s.png")
+    make_jpeg(tmp_path / "app" / "Meu.framework" / "recurso.jpg")
+
+    assert _paths(tmp_path, DiscoveryConfig(extensoes=EXTS)) == [
+        "Viagens/real.jpg"
+    ]
+
+
+def test_pasta_de_fotos_com_nome_parecido_continua_valendo(tmp_path):
+    """O casamento é por nome inteiro ou sufixo de pacote, não por pedaço:
+    uma pasta chamada "Vendor Feira" ou "App do Casamento" é foto."""
+    make_jpeg(tmp_path / "Vendor Feira" / "a.jpg")
+    make_jpeg(tmp_path / "App do Casamento" / "b.jpg")
+    achados = _paths(tmp_path, DiscoveryConfig(extensoes=EXTS))
+    assert achados == ["App do Casamento/b.jpg", "Vendor Feira/a.jpg"]
