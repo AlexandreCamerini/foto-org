@@ -235,6 +235,7 @@ class SuggestionEngine:
                 lat=m.gps_lat, lon=m.gps_lon,
                 hash_rapido=m.hash_rapido,
                 hash_perceptual=m.hash_perceptual,
+                hora_do_arquivo=m.data_capturada is None,
             )
             for m in midias
             if (m.data_capturada or m.mtime) is not None
@@ -575,6 +576,13 @@ class SuggestionEngine:
                     f"{_camera_legivel(doador)} — tirada a "
                     f"{_delta_legivel(heranca.delta)} de distância"
                 )
+                if heranca.hora_incerta:
+                    # Sem esta frase o usuário lê "a 2min de distância" e
+                    # acredita numa precisão que a hora usada não tem.
+                    just += (
+                        "; a hora de uma delas é a do arquivo, não a da "
+                        "captura — a proximidade pode ser coincidência"
+                    )
                 score = round(
                     SCORES_REFERENCIA["vizinhanca_temporal"]
                     * heranca.score_fator, 3,
