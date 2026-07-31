@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from fotoorganizer.geolocation.folder_names import _normalizar, identificar_pais
+from fotoorganizer.grouping.albuns import album_nomeia
 # A lista de sufixos de pacote mora no discovery (módulo folha, sem
 # dependência do projeto) para não existir em duas versões que divergem.
 from fotoorganizer.scanner.discovery import SUFIXOS_DE_CODIGO
@@ -80,11 +81,17 @@ def pasta_tecnica(segmento: str) -> bool:
     return sem_extensao != norm and bool(_RE_TECNICO.match(sem_extensao))
 
 
-def nome_de_album(segmento: str) -> bool:
+def nome_de_album(segmento: str, cameras: frozenset[str] = frozenset()) -> bool:
     """Segmento que nomeia conteúdo: não técnico, não país, não categoria,
-    não prateleira de arrumação."""
+    não prateleira de arrumação, não aparelho e não app.
+
+    Uma pasta "Canon EOS R6m2" ou "WhatsApp" descreve por onde a foto passou,
+    não o que aconteceu — o mesmo problema que os álbuns de catálogo externo
+    têm, e resolvido pelo mesmo filtro."""
     norm = _normalizar(segmento)
     if not norm or pasta_tecnica(segmento):
+        return False
+    if not album_nomeia(segmento, cameras):
         return False
     if identificar_pais(segmento) is not None:
         return False

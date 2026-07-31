@@ -18,6 +18,11 @@ no catálogo inteiro.
 from __future__ import annotations
 
 import re
+from fotoorganizer.grouping.origens import (
+    PASTAS_BAIXADA,
+    PASTAS_CAPTURA,
+    PASTAS_RECEBIDA,
+)
 from dataclasses import dataclass
 
 # Tipos. `foto` é o padrão e o que o resto do motor organiza por viagem.
@@ -67,9 +72,9 @@ _RE_BAIXADA = re.compile(
     re.I,
 )
 
-_PASTAS_RECEBIDA = ("whatsapp", "telegram", "signal", "messenger")
-_PASTAS_BAIXADA = ("downloads", "transferências", "transferencias")
-_PASTAS_CAPTURA = ("screenshots", "capturas de tela", "capturas")
+_PASTAS_RECEBIDA = PASTAS_RECEBIDA
+_PASTAS_BAIXADA = PASTAS_BAIXADA
+_PASTAS_CAPTURA = PASTAS_CAPTURA
 
 # Resoluções de tela comuns (Apple e monitores), nas duas orientações. Uma
 # imagem com EXATAMENTE a dimensão de uma tela é captura com folga.
