@@ -105,6 +105,34 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_volumes(args: argparse.Namespace) -> int:
+    """Onde cada fonte está — e o que está fora de alcance agora."""
+    from fotoorganizer.sources.disponibilidade import verificar
+
+    _settings, factory = _abrir_catalogo(args)
+    estados = verificar(factory)
+    if not estados:
+        print("Nenhuma fonte cadastrada.")
+        return 0
+
+    largura = max(len(e.apelido) for e in estados)
+    for e in estados:
+        marca = "✓" if e.disponivel else ("→" if e.mudou_de_lugar else "·")
+        print(f"  {marca} {e.apelido:<{largura}}  {e.resumo()}")
+        print(f"    {e.caminho}")
+        if e.volume is not None:
+            aviso = "" if e.volume.estavel else "   (identidade frágil: é o caminho)"
+            print(f"    volume: {e.volume.identidade}{aviso}")
+
+    fora = [e for e in estados if not e.disponivel]
+    if fora:
+        print(f"\n{len(fora)} de {len(estados)} fontes fora de alcance.")
+        if any(e.mudou_de_lugar for e in fora):
+            print("Alguma voltou noutro ponto de montagem — veja as marcadas "
+                  "com →. Reaponte a fonte para o caminho novo antes de varrer.")
+    return 0
+
+
 def cmd_importar(args: argparse.Namespace) -> int:
     """Importa catálogo externo. Existe como comando porque o Acesso Total ao
     Disco é concedido por app: rodar daqui, no terminal do usuário, usa a
@@ -344,6 +372,10 @@ def main(argv: list[str] | None = None) -> int:
         "importar",
         help="importa Apple Fotos, Google Takeout ou Lightroom (read-only)"
     )
+    sub.add_parser(
+        "volumes", help="onde cada fonte está e o que está fora de alcance"
+    ).set_defaults(func=cmd_volumes)
+
     p_imp.add_argument("fonte", choices=["apple", "takeout", "lightroom"])
     p_imp.add_argument(
         "caminho", nargs="?",

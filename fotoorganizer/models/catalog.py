@@ -73,7 +73,16 @@ class Source(Base):
     )
     apelido: Mapped[str | None]
     ativo: Mapped[bool] = mapped_column(default=True)
+    # Alcançável AGORA. Um HD na gaveta é indisponível, não perdido — e a
+    # diferença muda o que a interface deve dizer ao usuário.
     disponivel: Mapped[bool] = mapped_column(default=True)
+    # Identidade do volume (`security/volumes.py`): "uuid:…", "rede:…" ou
+    # "caminho:…". É ela que reencontra um disco que voltou noutro ponto de
+    # montagem — com o caminho como identidade, remontar vira disco novo e
+    # 45 mil fotos são recatalogadas do zero.
+    volume_id: Mapped[str | None]
+    volume_nome: Mapped[str | None]
+    visto_em: Mapped[datetime | None]
     # Padrões glob de pastas a ignorar dentro desta fonte.
     padroes_ignorados: Mapped[list] = mapped_column(JSON, default=list)
     criado_em: Mapped[datetime] = mapped_column(default=utcnow)
