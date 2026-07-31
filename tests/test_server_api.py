@@ -73,6 +73,7 @@ def test_detalhe_expoe_o_lugar_resolvido(client, migrated_engine):
         "fonte": "offline:reverse_geocode",
         # Esta foto tem GPS próprio (img_0 do fixture): o lugar é medido.
         "estimado": False,
+        "granularidade": "cidade",
     }
 
 
@@ -627,3 +628,35 @@ def test_tipo_invalido_e_recusado(client):
     r = client.post(f"/api/midia/{media_id}/tipo", json={"tipo": "meme"})
     assert r.status_code == 422
     assert "meme" in r.json()["detail"]
+
+
+def test_lugar_herdado_de_longe_nao_entrega_a_cidade(client, migrated_engine):
+    """D-025 na borda que o usuário enxerga.
+
+    O motor já emitia só a evidência de país para uma herança de horas, mas
+    o detalhe continuava devolvendo a cidade resolvida da coordenada — e a
+    tela mostraria "Avignon" com a mesma cara de sempre. A regra tem de
+    valer também aqui, senão a interface afirma o que ninguém apurou.
+    """
+    from fotoorganizer.models import Location, MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        local = Location(pais="França", regiao="Provence", cidade="Avignon",
+                         fonte="offline:reverse_geocode", cache_key="43.9,4.8")
+        session.add(local)
+        session.flush()
+        media = session.scalars(select(MediaFile)).first()
+        media.location_id = local.id
+        media.gps_lat = media.gps_lon = None          # sem GPS próprio
+        media.gps_lat_estimado, media.gps_lon_estimado = 43.95, 4.81
+        media.gps_estimado_delta_s = 4 * 3600          # 4 h de distância
+        media_id = media.id
+        session.commit()
+
+    local = client.get(f"/api/midia/{media_id}").json()["local"]
+    assert local["pais"] == "França"
+    assert local["regiao"] is None
+    assert local["cidade"] is None
+    assert local["granularidade"] == "pais"
+    assert local["estimado"] is True

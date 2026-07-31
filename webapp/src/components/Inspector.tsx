@@ -55,7 +55,7 @@ export default function Inspector({ media }: { media: Media | null }) {
               }
             />
             <Linha
-              rotulo={detalhe?.local?.estimado ? "Lugar · estimado" : "Lugar"}
+              rotulo={rotuloDoLugar(detalhe?.local)}
               valor={
                 detalhe?.local
                   ? [detalhe.local.cidade, detalhe.local.regiao, detalhe.local.pais]
@@ -240,6 +240,16 @@ function MetadadosDoArquivo({ mediaId }: { mediaId: number }) {
         ))}
     </div>
   );
+}
+
+/** O rótulo carrega a granularidade: um lugar herdado de horas atrás diz o
+ *  país, e chamar isso de "Lugar · estimado" faria o usuário ler a linha
+ *  como se a cidade estivesse ali (D-025). */
+function rotuloDoLugar(local?: MediaDetalhe["local"]): string {
+  if (!local?.estimado) return "Lugar";
+  if (local.granularidade === "regiao") return "Lugar · região estimada";
+  if (local.granularidade === "pais") return "Lugar · país estimado";
+  return "Lugar · estimado";
 }
 
 function Linha({ rotulo, valor }: { rotulo: string; valor?: string | null }) {

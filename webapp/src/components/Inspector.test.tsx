@@ -28,6 +28,7 @@ const DETALHE_HERDADO = {
     cidade: "Avignon",
     fonte: "offline:reverse_geocode",
     estimado: true,
+    granularidade: "cidade",
   },
   estimativa: {
     doadora_id: 6,
@@ -211,5 +212,35 @@ describe("Inspector", () => {
 
     await screen.findByText("DSC_0100.jpg");
     expect(screen.queryByText("Lugar")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("granularidade do lugar herdado", () => {
+  it("herança de horas anuncia o país, não a cidade", async () => {
+    // A API já devolve regiao/cidade nulas nesse caso (D-025); o que se
+    // testa aqui é o rótulo — "Lugar · estimado" seco faria o usuário ler
+    // a linha como se a cidade tivesse sido apurada.
+    servirApi({
+      "/api/midia/7": {
+        ...DETALHE_HERDADO,
+        // sem sugestão: o bloco de evidências cita a cidade por conta
+        // própria, e aqui o alvo é a linha "Lugar".
+        sugestao: null,
+        local: {
+          pais: "França",
+          regiao: null,
+          cidade: null,
+          fonte: "offline:reverse_geocode",
+          estimado: true,
+          granularidade: "pais",
+        },
+      },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("Lugar · país estimado")).toBeInTheDocument();
+    expect(screen.getByText("França")).toBeInTheDocument();
+    expect(screen.queryByText(/Avignon/)).not.toBeInTheDocument();
   });
 });

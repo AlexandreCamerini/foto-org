@@ -43,6 +43,9 @@ export interface Media {
     cidade: string | null;
     fonte: string;
     estimado: boolean;
+    /** Até onde o lugar pode ser afirmado: "cidade" | "regiao" | "pais".
+     *  Lugar herdado de horas atrás diz o país, não a cidade (D-025). */
+    granularidade: string | null;
   };
   /** Só no detalhe, e só quando a coordenada foi herdada: de quem veio e a
    *  que distância no tempo. É o que torna a estimativa auditável. */

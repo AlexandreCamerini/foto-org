@@ -29,11 +29,12 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fotoorganizer import __version__
 from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
+from fotoorganizer.grouping.correlacao import campos_confiaveis
 from fotoorganizer.models import (
     Event,
     Location,
@@ -120,6 +121,21 @@ ROTULOS_NAMESPACE = {
 _PREVIEW_SIZE = 2048
 
 _WEBAPP_DIST = Path(__file__).resolve().parents[2] / "webapp" / "dist"
+
+
+def _campos_do_lugar(m: MediaFile) -> tuple[str, ...]:
+    """Que partes do lugar dá para mostrar, do mais grosso ao mais fino.
+
+    GPS lido no arquivo entrega tudo. Lugar herdado entrega só o que o Δt
+    até a doadora sustenta — a mesma regra que o motor usou para montar a
+    evidência (D-025), aplicada aqui para a tela não afirmar mais que ela.
+    """
+    if not m.coordenada_estimada:
+        return ("pais", "regiao", "cidade")
+    if m.gps_estimado_delta_s is None:
+        return ("pais",)
+    campos = campos_confiaveis(timedelta(seconds=m.gps_estimado_delta_s))
+    return tuple(campo for campo, _ in campos)
 
 
 def _media_json(m: MediaFile) -> dict:
@@ -261,12 +277,17 @@ def create_app(
             if media.location_id is not None:
                 local = session.get(Location, media.location_id)
                 if local is not None:
+                    # Lugar herdado só é entregue até onde o Δt sustenta
+                    # (D-025). Devolver a cidade quando a evidência só afirma
+                    # o país mostraria na tela uma precisão que ninguém apurou.
+                    pode = _campos_do_lugar(media)
                     detalhe["local"] = {
-                        "pais": local.pais,
-                        "regiao": local.regiao,
-                        "cidade": local.cidade,
+                        "pais": local.pais if "pais" in pode else None,
+                        "regiao": local.regiao if "regiao" in pode else None,
+                        "cidade": local.cidade if "cidade" in pode else None,
                         "fonte": local.fonte,
                         "estimado": media.coordenada_estimada,
+                        "granularidade": pode[-1] if pode else None,
                     }
             if media.gps_estimado_de_id is not None:
                 doadora = session.get(MediaFile, media.gps_estimado_de_id)
