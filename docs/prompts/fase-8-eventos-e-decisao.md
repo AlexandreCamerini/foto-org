@@ -82,7 +82,55 @@ que a cascata atual ignora ou subusa:
 A aba passa a ser de eventos, com viagem como um tipo de evento — não o
 contrário.
 
-## Problema 4 — Onde a IA entra, e onde ela não entra
+## Problema 4 — O Apple Fotos entra e some
+
+O dono diz que o sistema conecta, lê as fotos e "esquece". A medição confirma
+o sintoma e corrige a causa:
+
+| | |
+|---|---|
+| Registros importados do Apple Fotos | 44.661 |
+| …com data de captura | 44.661 |
+| …com GPS | 16.421 |
+| …visíveis na Biblioteca | **0** |
+| Arquivos em `Photos Library.photoslibrary/originals` | **0 (pasta vazia)** |
+
+A importação está correta: a biblioteca está em "Otimizar armazenamento do
+Mac", os originais vivem no iCloud, e `osxphotos` não devolve caminho porque
+não há arquivo. O app não pode organizar o que não pode copiar.
+
+O erro é outro: **44.661 fotos do dono viraram invisíveis sem explicação**. Ele
+mandou o app ler a biblioteca dele e recebeu um `(0)` na barra lateral.
+
+A Biblioteca precisa mostrá-las, marcadas pelo que são — foto conhecida, sem
+arquivo neste Mac — e oferecer a saída, que é do usuário e não do app: baixar
+os originais no Apple Fotos. O mesmo tratamento serve para as 45.397 do
+Lightroom em volume desmontado; é a mesma categoria com outra causa.
+
+Decida se isso é um modo da Biblioteca, um filtro, ou a grade mostrando tudo
+com marcação. A restrição: uma foto sem arquivo continua fora da revisão e do
+plano de cópia — ela é visível, não organizável.
+
+## Problema 5 — A barra lateral parece navegação e é filtro
+
+Os dois menus se atrapalham, e o motivo é concreto: a lateral define `fonte`,
+o menu de cima define `aba`, e **`fonte` só tem efeito na Biblioteca**. Nas
+outras cinco telas a lateral continua visível e clicável sem mudar nada.
+
+Há ainda dois caminhos diferentes para filtrar a mesma grade, com aparência e
+tempo de vida distintos: `fonte`, que a lateral define e persiste em silêncio,
+e `recorte`, que vem do Panorama ou de Viagens, troca de aba sozinho e aparece
+como chip removível.
+
+Alvo: um modelo de navegação em que todo controle visível age sobre o que está
+na tela, e em que o estado de filtro é um só, legível e reversível.
+
+Use as skills `design` e `engineering:system-design` para esta parte. Elas
+existem para não inventarmos um modelo de navegação por intuição; o resultado
+entra em `docs/DIRECAO_DE_ARTE.md` como regra, não como descrição do que foi
+feito.
+
+## Problema 6 — Onde a IA entra, e onde ela não entra
 
 O dono observou que não há uso de IA nas correlações. Está certo: a cascata é
 determinística e o advisor LLM existe, está desligado por padrão e só é
@@ -102,6 +150,13 @@ isso se mede, e os 17 cenários atuais são o piso a não regredir.
 Se a resposta for "modelo ajuda aqui", diga qual, local ou remoto, com que
 custo por mil fotos e que dado sai da máquina (`docs/PRIVACIDADE.md` manda).
 Se for "a regra basta", diga isso com o número que sustenta.
+
+Chame a skill `ai-firstify:ai-firstify` para esta parte, com uma pergunta
+específica: **onde neste app existe uso de IA que a regra determinística não
+alcança?** O pedido do dono é que ela confirme ou derrube a hipótese de que
+não há — e uma auditoria que só devolve "poderia usar IA em X" sem dizer o que
+X ganha sobre a cascata atual não responde nada. O veredito precisa citar caso
+concreto do acervo dele.
 
 ## Fronteira
 
@@ -124,15 +179,28 @@ IA, qualquer coisa que envie dado para fora — pergunte e siga com a
 recomendação se não houver resposta em 10 minutos, registrando em
 `docs/DECISOES.md` como decidido por timeout.
 
+## Plano antes de código
+
+O dono está fora e acompanha pelo controle remoto. Antes de implementar,
+entregue um plano curto: as fatias em ordem, o que cada uma resolve, e quais
+delas mudam o que o app afirma (essas ele decide). Plano que não cabe numa
+tela de celular não serve para o que ele vai fazer com ele.
+
+Depois disso, implemente uma fatia por vez, avisando ao terminar cada uma.
+
 ## Aceite
 
 1. Uma linha da revisão responde destino, regra, firmeza e como desfazer, sem
    abrir outra tela — e diz quando o arquivo está fora de alcance.
 2. A grade distingue miniatura pronta, em geração e arquivo inalcançável.
-3. Dois acontecimentos no mesmo dia, na mesma cidade, com a mesma câmera,
+3. As 44.661 fotos do Apple Fotos e as 45.397 do Lightroom aparecem na
+   Biblioteca, marcadas pelo que são, e continuam fora da revisão e do plano.
+4. Todo controle visível age sobre a tela em que está, e o estado de filtro é
+   um só. A regra nova está em `docs/DIRECAO_DE_ARTE.md`.
+5. Dois acontecimentos no mesmo dia, na mesma cidade, com a mesma câmera,
    viram dois eventos. Existe cenário rotulado que prova isso e que falhava
    antes.
-4. Os 17 cenários atuais continuam passando.
-5. `docs/EVENTOS.md` explica o modelo novo, com a medida de antes e depois.
-6. A pergunta da IA está respondida com número: onde a regra basta, onde o
+6. Os 17 cenários atuais continuam passando.
+7. `docs/EVENTOS.md` explica o modelo novo, com a medida de antes e depois.
+8. O veredito da IA cita caso concreto do acervo: onde a regra basta, onde o
    modelo ganha, e o que custa.
