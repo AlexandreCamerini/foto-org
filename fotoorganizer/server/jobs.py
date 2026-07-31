@@ -27,6 +27,7 @@ from fotoorganizer.operations import (
 )
 from fotoorganizer.scanner import CatalogScanner, ScanControl
 from fotoorganizer.sources import (
+    ApplePhotosError,
     ApplePhotosProvider,
     ExternalCatalogImporter,
     GoogleTakeoutProvider,
@@ -61,6 +62,28 @@ class JobManager:
         self._control.cancelar()
         if self._exec_control is not None:
             self._exec_control.cancelar()
+
+    def pausar(self) -> bool:
+        """Pausa o scan em andamento. Só existe pausa cooperativa para
+        scan (`ScanControl`) — importação e execução de plano não a
+        oferecem. Devolve False sem efeito colateral se não houver o que
+        pausar, para a rota responder 409 em vez de estourar."""
+        estado = self.estado()
+        if (not self.ocupado() or estado.get("tipo") != "scan"
+                or estado.get("status") != "rodando"):
+            return False
+        self._control.pausar()
+        self._atualizar(status="pausado")
+        return True
+
+    def continuar(self) -> bool:
+        estado = self.estado()
+        if (not self.ocupado() or estado.get("tipo") != "scan"
+                or estado.get("status") != "pausado"):
+            return False
+        self._control.continuar()
+        self._atualizar(status="rodando")
+        return True
 
     # -- partida ---------------------------------------------------------------
     def iniciar_scan(self, caminho: Path) -> bool:
@@ -243,5 +266,38 @@ class JobManager:
                 erros=metrics.erros,
             )
         except Exception as exc:
-            # Permissão do Fotos, pasta inválida etc. — mensagem clara.
-            self._atualizar(status="erro", mensagem=str(exc))
+            self._atualizar(
+                status="erro", mensagem=_mensagem_falha_import(provider, exc)
+            )
+
+
+def _erro_de_permissao(exc: BaseException | None) -> bool:
+    """PermissionError em qualquer ponto da cadeia de causas (`__cause__`/
+    `__context__`) — sinal robusto de falta de permissão do SO (EACCES/
+    EPERM viram PermissionError automaticamente ao serem levantados),
+    melhor que caçar substring de mensagem específica de uma lib."""
+    vistos: set[int] = set()
+    while exc is not None and id(exc) not in vistos:
+        vistos.add(id(exc))
+        if isinstance(exc, PermissionError):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
+def _mensagem_falha_import(provider, exc: Exception) -> str:
+    """`ApplePhotosError` já vem com a orientação completa (inclusive o
+    app responsável pelo TCC) — repeti-la aqui jogaria fora esse detalhe.
+    O buraco é outra classe de erro (ex.: PermissionError levantado
+    durante a iteração da biblioteca, não na abertura dela) chegando cru
+    até o usuário sem dizer o que fazer."""
+    if isinstance(exc, ApplePhotosError):
+        return str(exc)
+    if isinstance(provider, ApplePhotosProvider) and _erro_de_permissao(exc):
+        return (
+            f"{exc} — provável falta de Acesso Total ao Disco para ler a "
+            "biblioteca do Apple Fotos. Ajustes → Privacidade e Segurança → "
+            "Acesso Total ao Disco, marque o app responsável e importe de "
+            "novo."
+        )
+    return str(exc)

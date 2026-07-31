@@ -129,12 +129,34 @@ class SuggestionRepository:
         regenerável pelo motor."""
         return self._set_status(ids, SuggestionStatus.PENDENTE, revisado=False)
 
-    def editar_destino(self, suggestion_id: int, novo_destino: str) -> None:
+    def editar_destino(
+        self, suggestion_id: int, novo_destino: str
+    ) -> SuggestionRow | None:
+        """Sobrescreve o destino sugerido/editado e marca EDITADA — sem
+        restrição por status anterior: o PySide6 permite editar qualquer
+        linha (aprovada, rejeitada ou pendente), porque o plano só olha o
+        destino no momento em que é criado, não quando a sugestão nasceu.
+        Devolve `None` se a sugestão não existe."""
         with self._factory() as session:
-            sugestao = session.get(Suggestion, suggestion_id)
-            if sugestao is None:
-                return
+            linha = session.execute(
+                select(Suggestion, MediaFile)
+                .join(MediaFile, Suggestion.media_id == MediaFile.id)
+                .where(Suggestion.id == suggestion_id)
+            ).first()
+            if linha is None:
+                return None
+            sugestao, media = linha
             sugestao.destino_sugerido = novo_destino
             sugestao.status = SuggestionStatus.EDITADA
             sugestao.revisado_em = _agora()
             session.commit()
+            return SuggestionRow(
+                id=sugestao.id, media_id=media.id, nome=media.nome,
+                pasta=media.pasta, destino=sugestao.destino_sugerido,
+                nivel=sugestao.nivel, status=sugestao.status,
+                data_capturada=media.data_capturada,
+                camera=" ".join(
+                    filter(None, [media.make, media.model])
+                ) or None,
+                gps_estimado=media.coordenada_estimada,
+            )

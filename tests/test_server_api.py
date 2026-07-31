@@ -140,6 +140,71 @@ def test_scan_em_background_indexa_e_reporta(migrated_engine, tmp_path):
     ).status_code == 422
 
 
+def test_pausar_continuar_sem_job_e_recusado_limpo(client):
+    """Sem trabalho pausável — nem 500, nem silenciosamente escolhendo um
+    job que não existe: 409 com detalhe."""
+    assert client.post("/api/job/pausar").status_code == 409
+    assert client.post("/api/job/continuar").status_code == 409
+
+
+def test_pausar_e_continuar_scan_em_background(migrated_engine, tmp_path, monkeypatch):
+    """Pausa cooperativa de verdade: o scan para de avançar enquanto
+    pausado (`vistos` congela) e retoma de onde parou ao continuar."""
+    import time
+
+    from fotoorganizer.metadata import purepython
+
+    extrair_original = purepython.PurePythonExtractor.extract
+
+    def _extrair_devagar(self, path):
+        time.sleep(0.05)
+        return extrair_original(self, path)
+
+    monkeypatch.setattr(purepython.PurePythonExtractor, "extract", _extrair_devagar)
+
+    fotos = tmp_path / "fotos"
+    for i in range(30):
+        make_jpeg(fotos / f"p_{i}.jpg", seed=i)
+    settings = Settings(
+        data_dir=tmp_path / "d", cache_dir=tmp_path / "c",
+        scanner=ScannerSettings(workers=1),
+    )
+    factory = create_session_factory(migrated_engine)
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+    assert client.post(
+        "/api/scan", json={"caminho": str(fotos)}
+    ).status_code == 200
+
+    # Espera o scan ter de fato começado a processar algo.
+    for _ in range(100):
+        if client.get("/api/job").json().get("vistos", 0) > 0:
+            break
+        time.sleep(0.02)
+    else:
+        raise AssertionError("scan não começou a tempo")
+
+    assert client.post("/api/job/pausar").status_code == 200
+    assert client.get("/api/job").json()["status"] == "pausado"
+
+    # A pausa é cooperativa (checada uma vez por arquivo do laço externo);
+    # dá folga para o arquivo já em voo terminar antes de tirar o retrato
+    # do "congelado" — senão o teste vira uma corrida com o próprio scan.
+    time.sleep(0.2)
+    congelado = client.get("/api/job").json()["vistos"]
+    time.sleep(0.3)
+    assert client.get("/api/job").json()["vistos"] == congelado
+
+    assert client.post("/api/job/continuar").status_code == 200
+    assert client.get("/api/job").json()["status"] == "rodando"
+
+    estado = _aguardar_job(client)
+    assert estado["status"] == "concluido"
+    assert estado["processados"] == 30
+
+
 def test_import_takeout_em_background(migrated_engine, tmp_path):
     import json as jsonlib
     import time
@@ -209,6 +274,102 @@ def test_gerar_sugestoes_e_aprovar(migrated_engine, tmp_path):
     assert client.post(
         "/api/sugestoes/acao", json={"ids": ids, "acao": "explodir"}
     ).status_code == 422
+
+
+def test_editar_destino_da_sugestao(migrated_engine, tmp_path):
+    from fotoorganizer.models import ConfidenceLevel, MediaFile, Suggestion
+
+    origem = tmp_path / "fotos"
+    make_jpeg(origem / "f.jpg", seed=1)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()) \
+        .scan_source(origem)
+
+    with factory() as session:
+        media = session.query(MediaFile).first()
+        session.add(Suggestion(
+            media_id=media.id, destino_sugerido="Viagens/2024",
+            template="t", nivel=ConfidenceLevel.ALTA, versao_logica="test",
+        ))
+        session.commit()
+        suggestion_id = session.query(Suggestion).first().id
+
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+    resposta = client.patch(
+        f"/api/sugestoes/{suggestion_id}/destino",
+        json={"destino": "Viagens/2025 - Refeita"},
+    )
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["destino"] == "Viagens/2025 - Refeita"
+    assert corpo["status"] == "editada"
+
+    # O caminho ainda estava pendente/aprovado antes — editar não é
+    # travado por status anterior (mesma semântica do PySide6): aprovar
+    # e depois editar de novo continua funcionando.
+    client.post(
+        "/api/sugestoes/acao", json={"ids": [suggestion_id], "acao": "aprovar"}
+    )
+    resposta2 = client.patch(
+        f"/api/sugestoes/{suggestion_id}/destino",
+        json={"destino": "Viagens/2026 - De novo"},
+    )
+    assert resposta2.status_code == 200
+    assert resposta2.json()["destino"] == "Viagens/2026 - De novo"
+    assert resposta2.json()["status"] == "editada"
+
+
+def test_editar_destino_recusa_path_traversal(migrated_engine, tmp_path):
+    from fotoorganizer.models import ConfidenceLevel, MediaFile, Suggestion
+
+    origem = tmp_path / "fotos"
+    make_jpeg(origem / "f.jpg", seed=1)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()) \
+        .scan_source(origem)
+
+    with factory() as session:
+        media = session.query(MediaFile).first()
+        session.add(Suggestion(
+            media_id=media.id, destino_sugerido="Viagens/2024",
+            template="t", nivel=ConfidenceLevel.ALTA, versao_logica="test",
+        ))
+        session.commit()
+        suggestion_id = session.query(Suggestion).first().id
+        destino_original = session.query(Suggestion).first().destino_sugerido
+
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+    # Um "/etc/passwd" não escapa nada aqui: vira caminho relativo comum
+    # ("etc/passwd") sob a raiz que o plano futuro escolher — a mesma
+    # semântica de resolver_destino/caminho_relativo_seguro. O que precisa
+    # ser recusado é "..", "~" e segmento vazio de verdade.
+    for tentativa in ["../../etc/passwd", "../fora", "~/segredo", "a/../../b", ""]:
+        resposta = client.patch(
+            f"/api/sugestoes/{suggestion_id}/destino",
+            json={"destino": tentativa},
+        )
+        assert resposta.status_code == 422, tentativa
+
+    with factory() as session:
+        assert (
+            session.query(Suggestion).first().destino_sugerido
+            == destino_original
+        )
+
+
+def test_editar_destino_de_sugestao_inexistente_e_404(client):
+    resposta = client.patch(
+        "/api/sugestoes/99999/destino", json={"destino": "Qualquer/Coisa"}
+    )
+    assert resposta.status_code == 404
 
 
 def test_filtro_por_viagem(client, migrated_engine):

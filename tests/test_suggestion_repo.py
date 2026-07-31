@@ -75,9 +75,26 @@ def test_rejeitar(repo):
 
 def test_editar_destino(repo):
     linha = repo.listar(SuggestionFilters(), 10, 0)[0]
-    repo.editar_destino(linha.id, "Novo/Caminho")
+    atualizada = repo.editar_destino(linha.id, "Novo/Caminho")
+    assert atualizada.destino == "Novo/Caminho"
+    assert atualizada.status == SuggestionStatus.EDITADA
     editadas = repo.listar(SuggestionFilters(status=SuggestionStatus.EDITADA), 10, 0)
     assert editadas[0].destino == "Novo/Caminho"
+
+
+def test_editar_destino_de_sugestao_ja_aprovada(repo):
+    """O PySide6 não trava edição por status anterior — o plano só olha o
+    destino no momento em que é criado. Manter a mesma semântica: aprovar
+    e depois editar substitui o destino e vira EDITADA."""
+    linha = repo.listar(SuggestionFilters(), 10, 0)[0]
+    repo.aprovar([linha.id])
+    atualizada = repo.editar_destino(linha.id, "Outro/Destino")
+    assert atualizada.status == SuggestionStatus.EDITADA
+    assert atualizada.destino == "Outro/Destino"
+
+
+def test_editar_destino_inexistente_devolve_none(repo):
+    assert repo.editar_destino(99999, "Novo/Caminho") is None
 
 
 def test_contagens_por_status(repo):

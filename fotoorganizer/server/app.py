@@ -47,7 +47,8 @@ from fotoorganizer.repositories import (
     SuggestionRepository,
 )
 from fotoorganizer.repositories.media import LACUNAS, MediaFilters
-from fotoorganizer.repositories.suggestions import SuggestionFilters
+from fotoorganizer.repositories.suggestions import SuggestionFilters, SuggestionRow
+from fotoorganizer.security.paths import CaminhoInvalido, caminho_relativo_seguro
 from fotoorganizer.server.jobs import JobManager
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.thumbnails.generator import generate_thumbnail
@@ -94,9 +95,30 @@ class PlanoBody(BaseModel):
     raiz_destino: str
     nome: str | None = None
 
+
+class EditarDestinoBody(BaseModel):
+    destino: str
+
 _PREVIEW_SIZE = 2048
 
 _WEBAPP_DIST = Path(__file__).resolve().parents[2] / "webapp" / "dist"
+
+
+def _sugestao_json(linha: SuggestionRow) -> dict:
+    return {
+        "id": linha.id,
+        "media_id": linha.media_id,
+        "nome": linha.nome,
+        "pasta": linha.pasta,
+        "destino": linha.destino,
+        "nivel": linha.nivel.value,
+        "status": linha.status.value,
+        "data_capturada": (
+            linha.data_capturada.isoformat() if linha.data_capturada else None
+        ),
+        "camera": linha.camera,
+        "gps_estimado": linha.gps_estimado,
+    }
 
 
 def _media_json(m: MediaFile) -> dict:
@@ -362,24 +384,7 @@ def create_app(
         contagens = suggestion_repo.contagens_por_status()
         return {
             "contagens": {s.value: n for s, n in contagens.items()},
-            "itens": [
-                {
-                    "id": linha.id,
-                    "media_id": linha.media_id,
-                    "nome": linha.nome,
-                    "pasta": linha.pasta,
-                    "destino": linha.destino,
-                    "nivel": linha.nivel.value,
-                    "status": linha.status.value,
-                    "data_capturada": (
-                        linha.data_capturada.isoformat()
-                        if linha.data_capturada else None
-                    ),
-                    "camera": linha.camera,
-                    "gps_estimado": linha.gps_estimado,
-                }
-                for linha in linhas
-            ],
+            "itens": [_sugestao_json(linha) for linha in linhas],
         }
 
     @app.get("/api/duplicatas")
@@ -424,6 +429,20 @@ def create_app(
         if body.acao not in acoes:
             raise HTTPException(422, f"ação desconhecida: {body.acao}")
         return {"afetadas": acoes[body.acao](body.ids)}
+
+    @app.patch("/api/sugestoes/{suggestion_id}/destino")
+    def editar_destino_sugestao(suggestion_id: int, body: EditarDestinoBody) -> dict:
+        # Mesma sanitização/segurança de caminho do planejador (invariante
+        # 5): sem isto, um destino como "../../../etc" só seria pego na
+        # hora do plano, e mesmo assim só como "conflito", não recusa.
+        try:
+            destino = str(caminho_relativo_seguro(body.destino))
+        except CaminhoInvalido as exc:
+            raise HTTPException(422, str(exc))
+        atualizada = suggestion_repo.editar_destino(suggestion_id, destino)
+        if atualizada is None:
+            raise HTTPException(404, "sugestão não encontrada")
+        return _sugestao_json(atualizada)
 
     @app.post("/api/duplicatas/detectar")
     def detectar_duplicatas() -> dict:
@@ -574,6 +593,18 @@ def create_app(
     @app.post("/api/job/cancelar")
     def job_cancelar() -> dict:
         jobs.cancelar()
+        return jobs.estado()
+
+    @app.post("/api/job/pausar")
+    def job_pausar() -> dict:
+        if not jobs.pausar():
+            raise HTTPException(409, "nenhum scan em andamento para pausar")
+        return jobs.estado()
+
+    @app.post("/api/job/continuar")
+    def job_continuar() -> dict:
+        if not jobs.continuar():
+            raise HTTPException(409, "nenhum scan pausado para continuar")
         return jobs.estado()
 
     @app.get("/api/progresso")
