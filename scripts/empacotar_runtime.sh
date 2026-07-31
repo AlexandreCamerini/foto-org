@@ -19,7 +19,8 @@ cd "$(dirname "$0")/.."
 PY_VER="3.12"
 ARCH="aarch64-apple-darwin"
 DESTINO="src-tauri/resources/runtime"
-EXTRAS="xmp"          # dev fica de fora; llm/vision são opt-in de release
+EXTRAS="xmp,apple"    # local: XMP + importação do Apple Fotos (osxphotos).
+                      # dev fica de fora; llm (envia dados) é opt-in de release.
 while [ $# -gt 0 ]; do
     case "$1" in
         --destino) DESTINO="$2"; shift 2 ;;
@@ -58,7 +59,7 @@ echo "  $("$PYBIN" --version) em $DESTINO/python"
 echo "== Imports nativos a partir do runtime =="
 "$PYBIN" - <<'PY'
 import importlib, sys
-for m in ("rawpy", "pillow_heif", "reverse_geocoder", "PIL", "fotoorganizer"):
+for m in ("rawpy", "pillow_heif", "reverse_geocode", "osxphotos", "PIL", "fotoorganizer"):
     importlib.import_module(m)
     print(f"  ok {m}")
 print("  prefix:", sys.prefix)
