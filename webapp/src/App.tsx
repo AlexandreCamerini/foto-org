@@ -50,6 +50,10 @@ export default function App() {
   // Viagens, lacuna ou faceta no Panorama. Um só, e sempre visível como
   // chip removível — filtro escondido é filtro que confunde.
   const [recorte, setRecorte] = useState<Recorte | null>(null);
+  // O dono importou 44.661 fotos do Apple Fotos e a Biblioteca respondia (0):
+  // elas não têm arquivo local e ficavam invisíveis. Agora aparecem por
+  // padrão, marcadas, e este controle isola o que é acionável.
+  const [alcance, setAlcance] = useState("tudo");
   const colunasRef = useRef(1);
 
   const filtros: FiltrosMidia = {
@@ -58,6 +62,7 @@ export default function App() {
     trip_id: recorte?.trip_id,
     event_id: recorte?.event_id,
     lacuna: recorte?.lacuna,
+    alcance,
     ano: recorte?.ano,
     extensao: recorte?.extensao,
     ordenacao,
@@ -70,7 +75,7 @@ export default function App() {
   useEffect(() => {
     setSelIndex(null);
     setLoupeAberto(false);
-  }, [busca, fonte, ordenacao, recorte]);
+  }, [busca, fonte, ordenacao, recorte, alcance]);
 
   const navegar = useCallback(
     (destino: number) => {
@@ -188,6 +193,32 @@ export default function App() {
                     {recorte.nome} ✕
                   </button>
                 )}
+                <div className="flex shrink-0 overflow-hidden rounded-md border border-borda">
+                  {[
+                    ["tudo", "Tudo"],
+                    ["organizaveis", "Organizáveis"],
+                    ["faltantes", "Fora de alcance"],
+                  ].map(([chave, rotulo]) => (
+                    <button
+                      key={chave}
+                      onClick={() => setAlcance(chave)}
+                      title={
+                        chave === "tudo"
+                          ? "tudo que o app conhece, inclusive sem arquivo local"
+                          : chave === "organizaveis"
+                            ? "só o que dá para revisar e copiar agora"
+                            : "só o que está no iCloud ou em volume desmontado"
+                      }
+                      className={`px-2.5 py-1 ${
+                        alcance === chave
+                          ? "bg-cartao text-acento"
+                          : "text-texto-2 hover:text-texto"
+                      }`}
+                    >
+                      {rotulo}
+                    </button>
+                  ))}
+                </div>
                 <input
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}

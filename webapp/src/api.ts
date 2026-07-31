@@ -109,6 +109,9 @@ export interface FiltrosMidia {
   event_id?: number;
   lacuna?: string;
   ordenacao?: string;
+  /** "tudo" | "organizaveis" | "faltantes". Uma foto sem arquivo continua
+   *  fora da revisão e do plano — aqui se decide se ela é VISÍVEL. */
+  alcance?: string;
 }
 
 export interface Faceta {

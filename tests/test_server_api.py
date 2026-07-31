@@ -731,3 +731,39 @@ def test_media_diz_por_que_nao_da_para_abrir(client, migrated_engine):
     # Uma foto de fonte disponível não ganha marca nenhuma.
     outras = client.get("/api/midia", params={"busca": "img_0"}).json()["itens"]
     assert outras and outras[0]["motivo_indisponivel"] is None
+
+
+def test_biblioteca_mostra_o_que_o_app_conhece(client, migrated_engine):
+    """O dono mandou o app ler a biblioteca do Apple Fotos, ele leu 44.661
+    fotos e a Biblioteca respondeu (0) — elas não têm arquivo local e ficavam
+    invisíveis. Aparecer é diferente de ser organizável."""
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        apple = Source(caminho="/Users/eu/Fotos.photoslibrary",
+                       apelido="Apple Fotos")
+        session.add(apple)
+        session.flush()
+        session.add(MediaFile(
+            source_id=apple.id, caminho="apple://UUID-1", pasta="",
+            nome="IMG_1.HEIC", extensao="heic", tamanho=1,
+            arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    tudo = client.get("/api/midia", params={"alcance": "tudo"}).json()
+    organizaveis = client.get(
+        "/api/midia", params={"alcance": "organizaveis"}).json()
+    faltantes = client.get("/api/midia", params={"alcance": "faltantes"}).json()
+
+    assert tudo["total"] == organizaveis["total"] + faltantes["total"]
+    assert faltantes["total"] >= 1
+    assert any(i["nome"] == "IMG_1.HEIC" for i in tudo["itens"])
+    assert not any(i["nome"] == "IMG_1.HEIC" for i in organizaveis["itens"])
+
+    # A contagem da lateral conta o que a fonte CONHECE — era o (0).
+    fontes = {f["apelido"]: f["fotos"] for f in client.get("/api/fontes").json()}
+    assert fontes["Apple Fotos"] == 1
+
+    assert client.get("/api/midia", params={"alcance": "xpto"}).status_code == 422

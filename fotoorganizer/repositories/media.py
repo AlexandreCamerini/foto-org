@@ -37,6 +37,14 @@ _TIPO_EFETIVO = func.coalesce(MediaFile.tipo_confirmado, MediaFile.tipo_imagem)
 _ACERVO = MediaFile.organizavel
 _TESTEMUNHA = ~_ACERVO
 
+# O que a grade mostra. Uma foto sem arquivo continua fora da revisão e do
+# plano de cópia — aqui se decide se ela é VISÍVEL, não se é organizável.
+ALCANCES: dict[str, str] = {
+    "tudo": "tudo que o app conhece",
+    "organizaveis": "só o que dá para organizar agora",
+    "faltantes": "só o que está fora de alcance",
+}
+
 # O que impede uma foto de ser organizada sozinha. A chave é o filtro; o
 # rótulo é o que o usuário lê. Ordem = ordem de exibição no panorama.
 LACUNAS: dict[str, str] = {
@@ -108,6 +116,11 @@ class MediaFilters:
     event_id: int | None = None
     lacuna: str | None = None
     ordenacao: str = "data_desc"
+    # O que a grade mostra. "tudo" é o padrão porque a pergunta do dono ao
+    # importar uma biblioteca é "cadê minhas fotos?": 44.661 do Apple Fotos
+    # e 45.397 do Lightroom entravam no catálogo e a Biblioteca respondia
+    # (0), sem dizer por quê. Ver ALCANCES.
+    alcance: str = "tudo"
 
 
 class MediaRepository:
@@ -117,7 +130,12 @@ class MediaRepository:
     def _query(self, filters: MediaFilters):
         # Testemunhas ficam fora da biblioteca visível, das contagens e de
         # qualquer filtro. Existem só para doar GPS e horário à correlação.
-        stmt = select(MediaFile).where(_ACERVO)
+        if filters.alcance == "organizaveis":
+            stmt = select(MediaFile).where(_ACERVO)
+        elif filters.alcance == "faltantes":
+            stmt = select(MediaFile).where(_TESTEMUNHA)
+        else:
+            stmt = select(MediaFile)
         if filters.busca:
             like = f"%{filters.busca}%"
             stmt = stmt.where(
@@ -180,10 +198,11 @@ class MediaRepository:
                 select(Source, func.count(MediaFile.id))
                 .outerjoin(
                     MediaFile,
-                    (MediaFile.source_id == Source.id)
-                    # A contagem da barra lateral é do acervo, não do
-                    # que a fonte doou de sinal.
-                    & _ACERVO,
+                    # A contagem é do que a fonte CONHECE, não do que ela
+                    # entrega para organizar: contar só o organizável fazia o
+                    # Apple Fotos aparecer como (0) depois de importar 44.661
+                    # fotos, que foi o que o dono descreveu como "esquece".
+                    MediaFile.source_id == Source.id,
                 )
                 .group_by(Source.id)
                 .order_by(Source.caminho)

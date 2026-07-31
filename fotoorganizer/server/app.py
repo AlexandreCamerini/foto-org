@@ -53,7 +53,7 @@ from fotoorganizer.repositories import (
     SuggestionRepository,
 )
 from fotoorganizer.repositories.inventario import levantar
-from fotoorganizer.repositories.media import LACUNAS, MediaFilters
+from fotoorganizer.repositories.media import ALCANCES, LACUNAS, MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters
 from fotoorganizer.server.jobs import JobManager
 from fotoorganizer.sources.disponibilidade import verificar
@@ -272,15 +272,18 @@ def create_app(
         event_id: int | None = None,
         lacuna: str | None = None,
         ordenacao: str = "data_desc",
+        alcance: str = "tudo",
         offset: int = 0,
         limit: int = 200,
     ) -> dict:
         if lacuna is not None and lacuna not in LACUNAS:
             raise HTTPException(422, f"lacuna desconhecida: {lacuna}")
+        if alcance not in ALCANCES:
+            raise HTTPException(422, f"alcance desconhecido: {alcance}")
         filters = MediaFilters(
             busca=busca, extensao=extensao, source_id=source_id,
             ano=ano, trip_id=trip_id, event_id=event_id, lacuna=lacuna,
-            ordenacao=ordenacao,
+            ordenacao=ordenacao, alcance=alcance,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
@@ -290,6 +293,10 @@ def create_app(
             "offset": offset,
             "itens": [_media_json(m, fora) for m in itens],
         }
+
+    @app.get("/api/midia/alcances")
+    def alcances() -> list[dict]:
+        return [{"chave": k, "rotulo": v} for k, v in ALCANCES.items()]
 
     @app.get("/api/midia/filtros")
     def filtros_midia() -> dict:
