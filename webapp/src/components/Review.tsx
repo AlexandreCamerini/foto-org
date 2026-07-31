@@ -34,6 +34,9 @@ export default function Review({ job }: { job: Job }) {
   const [status, setStatus] = useState<string>("pendente");
   const [fechados, setFechados] = useState<Set<string>>(new Set());
   const [porque, setPorque] = useState<number | null>(null);
+  const [editando, setEditando] = useState<number | null>(null);
+  const [valorEdicao, setValorEdicao] = useState("");
+  const [erroEdicao, setErroEdicao] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
@@ -47,6 +50,38 @@ export default function Review({ job }: { job: Job }) {
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: ["sugestoes"] }),
   });
+
+  // Editar marca a sugestão como EDITADA no servidor (fotoorganizer/
+  // repositories/suggestions.py) — ela some da aba atual ao recarregar
+  // porque deixou de ser "pendente", o que é o comportamento certo: a
+  // correção já valeu, não precisa de uma segunda aprovação.
+  const editarDestino = useMutation({
+    mutationFn: ({ id, destino }: { id: number; destino: string }) =>
+      api.editarDestino(id, destino),
+    onSuccess: () => {
+      setEditando(null);
+      setErroEdicao(null);
+      void queryClient.invalidateQueries({ queryKey: ["sugestoes"] });
+    },
+    onError: (e: Error) => setErroEdicao(e.message),
+  });
+
+  const iniciarEdicao = (item: Item) => {
+    setEditando(item.id);
+    setValorEdicao(item.destino);
+    setErroEdicao(null);
+  };
+
+  const cancelarEdicao = () => {
+    setEditando(null);
+    setErroEdicao(null);
+  };
+
+  const salvarEdicao = (id: number) => {
+    const destino = valorEdicao.trim();
+    if (!destino) return;
+    editarDestino.mutate({ id, destino });
+  };
 
   const itens = (data?.itens ?? []) as Item[];
   const contagens = data?.contagens ?? {};
@@ -146,64 +181,117 @@ export default function Review({ job }: { job: Job }) {
                 {aberto &&
                   doGrupo.map((s) => (
                     <div key={s.id} className="border-b border-borda/60">
-                      <div className="flex items-center gap-3 px-3 py-2 hover:bg-painel">
-                        <img
-                          src={api.thumbUrl(s.media_id)}
-                          alt={s.nome}
-                          loading="lazy"
-                          className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
-                        />
-                        <div className="min-w-0 flex-1">
-                          {/* Nome primeiro. Antes a pasta vinha antes e o
-                              truncate cortava a linha antes de o nome do
-                              arquivo aparecer — 63 linhas idênticas. */}
-                          <div className="truncate font-medium">{s.nome}</div>
-                          <div className="truncate text-[11px] text-texto-3">
-                            {[s.camera, formatarData(s.data_capturada)]
-                              .filter(Boolean)
-                              .join(" · ") || pastaCurta(s.pasta)}
+                      {editando === s.id ? (
+                        <div className="flex items-center gap-3 px-3 py-2">
+                          <img
+                            src={api.thumbUrl(s.media_id)}
+                            alt={s.nome}
+                            loading="lazy"
+                            className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 truncate text-[11px] text-texto-3">
+                              {s.nome}
+                            </div>
+                            <input
+                              autoFocus
+                              value={valorEdicao}
+                              onChange={(e) => setValorEdicao(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") salvarEdicao(s.id);
+                                if (e.key === "Escape") cancelarEdicao();
+                              }}
+                              className="w-full rounded-md border border-borda bg-cartao px-2 py-1 outline-none focus:border-acento"
+                            />
+                            {erroEdicao && (
+                              <div className="mt-1 text-[11px] text-erro">
+                                {erroEdicao}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                        <button
-                          onClick={() =>
-                            setPorque((p) => (p === s.media_id ? null : s.media_id))
-                          }
-                          className="shrink-0 rounded px-1 py-0.5 hover:bg-cartao"
-                          aria-expanded={porque === s.media_id}
-                          title={`Por que este destino para ${s.nome}?`}
-                        >
-                          <Confianca nivel={s.nivel} />
-                        </button>
-                        {status === "pendente" ? (
                           <div className="flex shrink-0 gap-2">
                             <button
-                              onClick={() =>
-                                acao.mutate({ ids: [s.id], tipo: "aprovar" })
-                              }
-                              className="rounded-md border border-borda px-2 py-0.5 text-ok hover:bg-cartao"
+                              onClick={() => salvarEdicao(s.id)}
+                              disabled={editarDestino.isPending}
+                              className="rounded-md border border-borda px-2 py-0.5 text-ok hover:bg-cartao disabled:opacity-50"
                             >
-                              Aprovar
+                              Salvar
                             </button>
                             <button
-                              onClick={() =>
-                                acao.mutate({ ids: [s.id], tipo: "rejeitar" })
-                              }
-                              className="rounded-md border border-borda px-2 py-0.5 text-erro hover:bg-cartao"
+                              onClick={cancelarEdicao}
+                              className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
                             >
-                              Rejeitar
+                              Cancelar
                             </button>
                           </div>
-                        ) : (
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 px-3 py-2 hover:bg-painel">
+                          <img
+                            src={api.thumbUrl(s.media_id)}
+                            alt={s.nome}
+                            loading="lazy"
+                            className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
+                          />
+                          <div className="min-w-0 flex-1">
+                            {/* Nome primeiro. Antes a pasta vinha antes e o
+                                truncate cortava a linha antes de o nome do
+                                arquivo aparecer — 63 linhas idênticas. */}
+                            <div className="truncate font-medium">{s.nome}</div>
+                            <div className="truncate text-[11px] text-texto-3">
+                              {[s.camera, formatarData(s.data_capturada)]
+                                .filter(Boolean)
+                                .join(" · ") || pastaCurta(s.pasta)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => iniciarEdicao(s)}
+                            className="shrink-0 rounded px-1 py-0.5 text-texto-3 hover:bg-cartao hover:text-texto"
+                            title={`Editar destino de ${s.nome}`}
+                          >
+                            ✎
+                          </button>
                           <button
                             onClick={() =>
-                              acao.mutate({ ids: [s.id], tipo: "desfazer" })
+                              setPorque((p) => (p === s.media_id ? null : s.media_id))
                             }
-                            className="shrink-0 rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
+                            className="shrink-0 rounded px-1 py-0.5 hover:bg-cartao"
+                            aria-expanded={porque === s.media_id}
+                            title={`Por que este destino para ${s.nome}?`}
                           >
-                            Desfazer
+                            <Confianca nivel={s.nivel} />
                           </button>
-                        )}
-                      </div>
+                          {status === "pendente" ? (
+                            <div className="flex shrink-0 gap-2">
+                              <button
+                                onClick={() =>
+                                  acao.mutate({ ids: [s.id], tipo: "aprovar" })
+                                }
+                                className="rounded-md border border-borda px-2 py-0.5 text-ok hover:bg-cartao"
+                              >
+                                Aprovar
+                              </button>
+                              <button
+                                onClick={() =>
+                                  acao.mutate({ ids: [s.id], tipo: "rejeitar" })
+                                }
+                                className="rounded-md border border-borda px-2 py-0.5 text-erro hover:bg-cartao"
+                              >
+                                Rejeitar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                acao.mutate({ ids: [s.id], tipo: "desfazer" })
+                              }
+                              className="shrink-0 rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
+                            >
+                              Desfazer
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {porque === s.media_id && <PorQue mediaId={s.media_id} />}
                     </div>
                   ))}

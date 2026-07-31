@@ -204,6 +204,19 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
   return dados as T;
 }
 
+/** Mesma ideia do `post`, para edições pontuais (PATCH) — o 422 de um
+ * destino inválido também vem com mensagem legível, não só o status. */
+async function patch<T>(url: string, body: unknown): Promise<T> {
+  const resposta = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const dados = await resposta.json();
+  if (!resposta.ok) throw new Error(dados.detail ?? `erro ${resposta.status}`);
+  return dados as T;
+}
+
 export const api = {
   status: () =>
     json<{ versao: string; total: number; erros: number; fontes: number }>(
@@ -231,6 +244,8 @@ export const api = {
     ),
   acaoSugestoes: (ids: number[], acao: string) =>
     post<{ afetadas: number }>("/api/sugestoes/acao", { ids, acao }),
+  editarDestino: (id: number, destino: string) =>
+    patch<SugestaoRow>(`/api/sugestoes/${id}/destino`, { destino }),
   duplicatas: () => json<GrupoDuplicatas[]>("/api/duplicatas"),
   planos: () => json<Plano[]>("/api/operacoes"),
   plano: (id: number) => json<PlanoDetalhe>(`/api/operacoes/${id}`),

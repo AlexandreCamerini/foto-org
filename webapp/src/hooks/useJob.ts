@@ -35,12 +35,16 @@ export function useJob() {
     es.onerror = () => es.close();
   }, [queryClient]);
 
-  // Reconecta a um trabalho que já estava rodando (ex.: recarregou a página).
+  // Reconecta a um trabalho que já estava rodando (ex.: recarregou a
+  // página) — "pausado" conta como em andamento aqui: sem isto, recarregar
+  // a página durante uma pausa perdia o indicador e o botão Continuar.
+  // Estados terminais (concluído/erro/cancelado) ficam de fora de propósito:
+  // não faz sentido ressuscitar o banner de um job antigo a cada reload.
   useEffect(() => {
     void fetch("/api/job")
       .then((r) => r.json())
       .then((dados: JobEstado) => {
-        if (dados.status === "rodando") {
+        if (dados.status === "rodando" || dados.status === "pausado") {
           setEstado(dados);
           assinar();
         }
@@ -65,6 +69,26 @@ export function useJob() {
     [assinar],
   );
 
+  // Pausar/continuar respondem 409 quando não há scan pausável/retomável
+  // (ex.: o usuário clicou duas vezes, ou o scan terminou entre o clique e
+  // a resposta). Não é um erro para a UI mostrar — o estado do job já é a
+  // fonte da verdade, então só ignoramos.
+  const pausar = useCallback(async () => {
+    try {
+      await disparar("/api/job/pausar", {});
+    } catch {
+      // 409: nada rodando para pausar.
+    }
+  }, [disparar]);
+
+  const continuar = useCallback(async () => {
+    try {
+      await disparar("/api/job/continuar", {});
+    } catch {
+      // 409: nada pausado para continuar.
+    }
+  }, [disparar]);
+
   return {
     estado,
     rodando: estado.status === "rodando",
@@ -79,6 +103,8 @@ export function useJob() {
     executarPlano: (planId: number) =>
       disparar(`/api/operacoes/${planId}/executar`, {}),
     cancelar: () => fetch("/api/job/cancelar", { method: "POST" }),
+    pausar,
+    continuar,
   };
 }
 

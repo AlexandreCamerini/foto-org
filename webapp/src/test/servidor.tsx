@@ -9,6 +9,27 @@ export interface Chamada {
   corpo?: unknown;
 }
 
+const ERRO_SIMULADO = Symbol("erro-simulado");
+
+interface ErroSimulado {
+  [ERRO_SIMULADO]: true;
+  status: number;
+  corpo: unknown;
+}
+
+/** Marca uma rota para responder com um status de erro (409/422/...) em vez
+ * de 200 — útil para testar como a UI trata erros de negócio, não só o
+ * caminho feliz. */
+export function erro(status: number, detail: string): ErroSimulado {
+  return { [ERRO_SIMULADO]: true, status, corpo: { detail } };
+}
+
+function ehErroSimulado(valor: unknown): valor is ErroSimulado {
+  return (
+    typeof valor === "object" && valor !== null && ERRO_SIMULADO in valor
+  );
+}
+
 /** Dublê do servidor local: roteia por pathname e devolve JSON. Rota não
  * declarada responde 404 com a mensagem dizendo qual faltou — teste que
  * quebra por fixture ausente deve dizer isso, não "undefined". */
@@ -30,6 +51,12 @@ export function servirApi(rotas: Record<string, unknown>): Chamada[] {
           JSON.stringify({ detail: `rota não simulada: ${caminho}` }),
           { status: 404, headers: cabecalhos },
         );
+      }
+      if (ehErroSimulado(corpo)) {
+        return new Response(JSON.stringify(corpo.corpo), {
+          status: corpo.status,
+          headers: cabecalhos,
+        });
       }
       return new Response(JSON.stringify(corpo), {
         status: 200,

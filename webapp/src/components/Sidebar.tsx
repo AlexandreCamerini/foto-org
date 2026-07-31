@@ -19,7 +19,7 @@ interface Props {
 export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
   const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
-  const [modal, setModal] = useState<"pasta" | "takeout" | null>(null);
+  const [modal, setModal] = useState<"pasta" | "takeout" | "apple" | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -86,7 +86,10 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
           {menuAberto && (
             <div className="absolute bottom-full left-0 z-10 mb-1 w-full rounded-md border border-borda bg-cartao shadow-lg">
               <button
-                onClick={() => executar(job.importarApple())}
+                onClick={() => {
+                  setMenuAberto(false);
+                  setModal("apple");
+                }}
                 className="block w-full px-2 py-2 text-left hover:bg-painel"
               >
                 🍎 Apple Fotos (somente leitura)
@@ -111,7 +114,7 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
           sidebar não é o lugar de contar isso duas vezes. */}
 
       {/* modal simples de caminho */}
-      {modal && (
+      {(modal === "pasta" || modal === "takeout") && (
         <ModalCaminho
           titulo={
             modal === "pasta"
@@ -128,7 +131,53 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
           onCancelar={() => setModal(null)}
         />
       )}
+
+      {modal === "apple" && (
+        <ModalAvisoApple
+          onConfirmar={() => executar(job.importarApple())}
+          onCancelar={() => setModal(null)}
+        />
+      )}
     </aside>
+  );
+}
+
+/** Aviso prévio antes de tocar no Apple Fotos: a leitura da biblioteca pode
+ * exigir Acesso Total ao Disco, e é melhor o usuário saber disso antes de
+ * ver um erro do macOS do que descobrir na hora. */
+function ModalAvisoApple({
+  onConfirmar,
+  onCancelar,
+}: {
+  onConfirmar: () => void;
+  onCancelar: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-96 rounded-lg border border-borda bg-painel p-4">
+        <div className="mb-2 font-semibold">Importar do Apple Fotos</div>
+        <p className="mb-3 text-texto-2">
+          A importação é somente leitura — nenhuma foto é movida, renomeada
+          ou alterada na sua biblioteca. O macOS pode pedir Acesso Total ao
+          Disco para o app conseguir abrir o catálogo do Apple Fotos: em
+          Ajustes → Privacidade e Segurança → Acesso Total ao Disco.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancelar}
+            className="rounded-md px-3 py-1 text-texto-2 hover:bg-cartao"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirmar}
+            className="rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90"
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

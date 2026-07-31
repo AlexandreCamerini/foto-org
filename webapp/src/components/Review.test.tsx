@@ -1,10 +1,10 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import Review from "./Review";
 import type { Job } from "../hooks/useJob";
-import { montar, servirApi } from "../test/servidor";
+import { erro, montar, servirApi } from "../test/servidor";
 
 function jobParado(): Job {
   return {
@@ -119,5 +119,78 @@ describe("Review", () => {
     await usuario.click(await screen.findByText("Viagens/2024 - França"));
     expect(screen.queryByText("DSC_0100.jpg")).not.toBeInTheDocument();
     expect(screen.getByText("Viagens/2024 - França")).toBeInTheDocument();
+  });
+
+  it("edita o destino inline e salva via PATCH", async () => {
+    const chamadas = servirApi({
+      "/api/sugestoes": SUGESTOES,
+      "/api/sugestoes/2/destino": {
+        id: 2, media_id: 12, nome: "DSC_0100.jpg", pasta: "/fotos/Camera",
+        destino: "Viagens/2024 - França (corrigida)", nivel: "media",
+        status: "editada",
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(screen.getByTitle("Editar destino de DSC_0100.jpg"));
+
+    const campo = screen.getByDisplayValue("Viagens/2024 - França");
+    await usuario.clear(campo);
+    await usuario.type(campo, "Viagens/2024 - França (corrigida)");
+    await usuario.click(screen.getByText("Salvar"));
+
+    await waitFor(() =>
+      expect(
+        chamadas.find((c) => c.caminho === "/api/sugestoes/2/destino"),
+      ).toBeTruthy(),
+    );
+    const chamada = chamadas.find(
+      (c) => c.caminho === "/api/sugestoes/2/destino",
+    )!;
+    expect(chamada.metodo).toBe("PATCH");
+    expect(chamada.corpo).toEqual({
+      destino: "Viagens/2024 - França (corrigida)",
+    });
+  });
+
+  it("mostra a mensagem do servidor quando o destino editado é inválido (422)",
+    async () => {
+      servirApi({
+        "/api/sugestoes": SUGESTOES,
+        "/api/sugestoes/2/destino": erro(422, "segmento proibido em '../etc'"),
+      });
+      const usuario = userEvent.setup();
+      montar(<Review job={jobParado()} />);
+
+      await screen.findByText("DSC_0100.jpg");
+      await usuario.click(screen.getByTitle("Editar destino de DSC_0100.jpg"));
+
+      const campo = screen.getByDisplayValue("Viagens/2024 - França");
+      await usuario.clear(campo);
+      await usuario.type(campo, "../etc");
+      await usuario.click(screen.getByText("Salvar"));
+
+      expect(
+        await screen.findByText("segmento proibido em '../etc'"),
+      ).toBeInTheDocument();
+      // O campo continua editável — o erro não deve fechar a edição.
+      expect(screen.getByDisplayValue("../etc")).toBeInTheDocument();
+    });
+
+  it("cancelar a edição descarta o valor digitado", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(screen.getByTitle("Editar destino de DSC_0100.jpg"));
+    await usuario.click(screen.getByText("Cancelar"));
+
+    expect(screen.getByText("DSC_0100.jpg")).toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("Viagens/2024 - França"),
+    ).not.toBeInTheDocument();
   });
 });
