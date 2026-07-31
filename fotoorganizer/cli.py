@@ -62,7 +62,7 @@ def _build_scanner(db_path: Path, settings=None):
         create_session_factory,
         upgrade_to_head,
     )
-    from fotoorganizer.metadata import PurePythonExtractor
+    from fotoorganizer.metadata import criar_extrator
     from fotoorganizer.scanner import CatalogScanner
     from fotoorganizer.thumbnails import ThumbnailCache
 
@@ -71,7 +71,7 @@ def _build_scanner(db_path: Path, settings=None):
     engine = create_db_engine(db_path)
     factory = create_session_factory(engine)
     return CatalogScanner(
-        factory, PurePythonExtractor(), settings.scanner,
+        factory, criar_extrator(), settings.scanner,
         thumb_cache=ThumbnailCache(settings.cache_dir),
     )
 
@@ -109,7 +109,7 @@ def cmd_importar(args: argparse.Namespace) -> int:
     """Importa catálogo externo. Existe como comando porque o Acesso Total ao
     Disco é concedido por app: rodar daqui, no terminal do usuário, usa a
     permissão do terminal — sem precisar autorizar o app que abriu o servidor."""
-    from fotoorganizer.metadata import PurePythonExtractor
+    from fotoorganizer.metadata import criar_extrator
     from fotoorganizer.sources import (
         ApplePhotosProvider,
         ExternalCatalogImporter,
@@ -143,7 +143,7 @@ def cmd_importar(args: argparse.Namespace) -> int:
     print(f"Importando {provider.apelido} (somente leitura) para "
           f"{settings.db_path}")
     importer = ExternalCatalogImporter(
-        factory, PurePythonExtractor(), settings.scanner,
+        factory, criar_extrator(), settings.scanner,
         thumb_cache=ThumbnailCache(settings.cache_dir),
     )
     try:

@@ -427,3 +427,25 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
 - Como reverter: `JANELAS_POR_CAMPO` em `grouping/correlacao.py` volta a um
   valor único; nada é persistido de forma irreversível — regerar refaz.
 - Status: decidido pelo dono
+
+---
+
+## D-026 — exiftool passa a ser o extrator padrão quando instalado
+
+- Data: 2026-07-31
+- Contexto: o `ExifToolExtractor` que a arquitetura previa desde o começo
+  nunca foi construído, e o fallback puro-Python vinha sendo tratado como
+  teto. Num acervo real, 2.949 CR3 ficaram sem `Make`/`Model`: o libraw
+  entrega abertura, ISO e obturador, não a câmera.
+- Opções: (a) manter o puro-Python e aceitar a lacuna; (b) exiftool como
+  extra opt-in; (c) exiftool como padrão quando o binário existir.
+- Escolhida: (c), com fallback automático.
+- Por quê: medido em 40 CR3 do acervo real — câmera identificada 0/40 → 40/40,
+  tags 320 → 14.440, e **mais rápido**: 285 ms → 67 ms por arquivo, porque o
+  exiftool lê cabeçalho onde o libraw decodifica o RAW inteiro. Não há
+  trade-off a ponderar; sem câmera não há correção de deriva de relógio nem
+  "outra origem" na herança de GPS, e a lacuna se propaga para a
+  classificação inteira.
+- Como reverter: `criar_extrator(preferir_exiftool=False)` devolve o
+  puro-Python; nada no catálogo depende de qual extrator gravou.
+- Status: decidido pelo dono (instalou o binário a pedido)

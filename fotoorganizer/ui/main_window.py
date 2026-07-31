@@ -29,7 +29,7 @@ from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.geolocation import LocationResolver
 from fotoorganizer.geolocation.offline import OfflineGeocoder
-from fotoorganizer.metadata import PurePythonExtractor
+from fotoorganizer.metadata import criar_extrator
 from fotoorganizer.duplicates import DuplicateDetector
 from fotoorganizer.repositories import (
     DuplicateRepository,
@@ -233,7 +233,7 @@ class MainWindow(QMainWindow):
         if self._scan_worker is not None and self._scan_worker.isRunning():
             return
         scanner = CatalogScanner(
-            self._session_factory, PurePythonExtractor(), self._settings.scanner,
+            self._session_factory, criar_extrator(), self._settings.scanner,
             thumb_cache=ThumbnailCache(self._settings.cache_dir),
         )
         self._scan_worker = ScanWorker(scanner, caminho, parent=self)
@@ -287,7 +287,7 @@ class MainWindow(QMainWindow):
         if self._import_worker is not None and self._import_worker.isRunning():
             return
         importer = ExternalCatalogImporter(
-            self._session_factory, PurePythonExtractor(),
+            self._session_factory, criar_extrator(),
             self._settings.scanner,
             thumb_cache=ThumbnailCache(self._settings.cache_dir),
         )

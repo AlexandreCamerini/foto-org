@@ -19,7 +19,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import Settings
-from fotoorganizer.metadata import PurePythonExtractor
+from fotoorganizer.metadata import criar_extrator
 from fotoorganizer.operations import (
     DryRunObrigatorio,
     ExecutionControl,
@@ -123,7 +123,7 @@ class JobManager:
     # -- execução ---------------------------------------------------------------
     def _rodar_scan(self, caminho: Path) -> None:
         scanner = CatalogScanner(
-            self._factory, PurePythonExtractor(), self._settings.scanner,
+            self._factory, criar_extrator(), self._settings.scanner,
             thumb_cache=ThumbnailCache(self._settings.cache_dir),
         )
 
@@ -225,7 +225,7 @@ class JobManager:
 
     def _rodar_import(self, provider) -> None:
         importer = ExternalCatalogImporter(
-            self._factory, PurePythonExtractor(), self._settings.scanner,
+            self._factory, criar_extrator(), self._settings.scanner,
             thumb_cache=ThumbnailCache(self._settings.cache_dir),
         )
 
