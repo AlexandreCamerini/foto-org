@@ -1,14 +1,18 @@
 # Artefatos de build do Tauri/Cargo
 /target
-# Código gerado pelo tauri-build (schemas, ícones processados)
+# Código gerado pelo tauri-build (schemas, permissões)
 /gen
 # Runtime Python embarcado — pesado, gerado por scripts/empacotar_runtime.sh
 /resources/runtime
-# Ícones derivados (gerados por `cargo tauri icon icons/icon.png`)
-/icons/*.icns
+# Ícones: versionamos icon.png (fonte) e icon.icns (usado no bundle macOS,
+# ver tauri.conf.json). As demais variantes são geradas por
+# `cargo tauri icon icons/icon.png` e não vão para o repo.
 /icons/*.ico
-/icons/*@2x.png
+/icons/32x32.png
+/icons/64x64.png
+/icons/128x128.png
+/icons/128x128@2x.png
 /icons/Square*.png
 /icons/StoreLogo.png
-/icons/128x128*.png
-/icons/32x32.png
+/icons/android
+/icons/ios

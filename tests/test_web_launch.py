@@ -80,3 +80,56 @@ def test_web_porta_efemera_anuncio_guard_e_shutdown(tmp_path):
                 "o servidor não encerrou em SIGTERM (shutdown não-gracioso)"
             )
     assert proc.returncode is not None
+
+
+def test_web_encerra_com_pai_nao_deixa_orfao(tmp_path):
+    """Com --encerrar-com-pai o backend se auto-encerra se o pai morrer de
+    qualquer forma (o shell Tauri usa isto para nunca deixar órfão)."""
+    # Pai intermediário: nós matamos ELE; o backend (neto) deve perceber a
+    # reparentação (ppid → 1) e sair sozinho.
+    pai_src = (
+        "import subprocess, sys, time\n"
+        f"p = subprocess.Popen([sys.executable, '-m', 'fotoorganizer',"
+        f" '--data-dir', {str(tmp_path)!r}, 'web', '--porta', '0',"
+        f" '--encerrar-com-pai'])\n"
+        "print(p.pid, flush=True)\n"
+        "time.sleep(300)\n"
+    )
+    pai = subprocess.Popen(
+        [sys.executable, "-c", pai_src], stdout=subprocess.PIPE, text=True
+    )
+    try:
+        neto_pid = int(pai.stdout.readline().strip())
+        # dá tempo do backend subir e iniciar o watchdog
+        time.sleep(4)
+        assert _pid_vivo(neto_pid), "backend não subiu"
+
+        pai.kill()  # SIGKILL no pai → backend vira órfão (ppid=1)
+
+        # o watchdog (poll de ~2s) deve encerrar o backend em poucos segundos
+        for _ in range(20):
+            if not _pid_vivo(neto_pid):
+                break
+            time.sleep(0.5)
+        assert not _pid_vivo(neto_pid), "backend ficou órfão (watchdog falhou)"
+    finally:
+        pai.kill()
+        try:
+            import os
+            import signal
+
+            os.kill(neto_pid, signal.SIGKILL)
+        except (ProcessLookupError, NameError, ValueError):
+            pass
+
+
+def _pid_vivo(pid: int) -> bool:
+    import os
+
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True

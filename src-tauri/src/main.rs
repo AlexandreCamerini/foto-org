@@ -32,7 +32,10 @@ fn main() {
             // O catálogo fica no padrão (~/Library/Application Support/...),
             // então nenhum --data-dir é passado.
             let mut child = Command::new(&py)
-                .args(["-m", "fotoorganizer", "web", "--porta", "0"])
+                // --encerrar-com-pai: o backend se auto-encerra se este
+                // processo morrer de qualquer forma (rede de segurança
+                // além do SIGTERM em ExitRequested abaixo) — nunca órfão.
+                .args(["-m", "fotoorganizer", "web", "--porta", "0", "--encerrar-com-pai"])
                 .stdout(Stdio::piped())
                 .spawn()
                 .expect("falha ao iniciar o backend Python embarcado");

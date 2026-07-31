@@ -361,6 +361,26 @@ def cmd_web(args: argparse.Namespace) -> int:
     # Linha estável para o supervisor descobrir a porta (inclusive efêmera).
     print(f"FOTOORG_READY {url}", flush=True)
 
+    # Encerra junto com o pai (shell Tauri): se o app fechar de qualquer
+    # forma — inclusive um sinal que não passa pelo handler dele —, o
+    # processo é reparentado (ppid muda) e mandamos SIGTERM em nós mesmos,
+    # deixando o uvicorn drenar e fazer o checkpoint WAL. Sem órfão.
+    if getattr(args, "encerrar_com_pai", False):
+        import os
+        import signal
+        import threading
+
+        pai = os.getppid()
+
+        def _vigia_pai() -> None:
+            while True:
+                time.sleep(2)
+                if os.getppid() != pai:
+                    os.kill(os.getpid(), signal.SIGTERM)
+                    return
+
+        threading.Thread(target=_vigia_pai, daemon=True).start()
+
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
     server.run(sockets=[sock])
     return 0
@@ -387,6 +407,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_web = sub.add_parser("web", help="UI web local (127.0.0.1)")
     p_web.add_argument("--porta", type=int, default=8765)
+    p_web.add_argument(
+        "--encerrar-com-pai", action="store_true",
+        help="encerra o servidor se o processo pai morrer (o shell Tauri "
+             "passa isto para nunca deixar o backend órfão)",
+    )
     p_web.set_defaults(func=cmd_web)
 
     p_imp = sub.add_parser(
