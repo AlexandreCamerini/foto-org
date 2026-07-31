@@ -55,6 +55,20 @@ echo "  $("$PYBIN" --version) em $DESTINO/python"
 "$PYBIN" -m pip install --quiet --upgrade pip
 "$PYBIN" -m pip install --quiet ".[$EXTRAS]"
 
+# 3b. Embarcar o webapp construído DENTRO do runtime, onde o servidor o
+# procura (server/app.py: _WEBAPP_DIST = parents[2]/webapp/dist, que no
+# runtime resolve para site-packages/webapp/dist). Sem isto o backend
+# empacotado não serve a UI e "/" dá 404.
+SITE=$("$PYBIN" -c "import site; print(site.getsitepackages()[0])")
+if [ -d webapp/dist ]; then
+    rm -rf "$SITE/webapp"; mkdir -p "$SITE/webapp"
+    cp -R webapp/dist "$SITE/webapp/dist"
+    ok_dist=1
+else
+    echo "  ⚠ webapp/dist ausente — rode antes: (cd webapp && npm run build)"
+    ok_dist=0
+fi
+
 # 4. Provar que as deps nativas importam a partir do runtime congelado.
 echo "== Imports nativos a partir do runtime =="
 "$PYBIN" - <<'PY'
