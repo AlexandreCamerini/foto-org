@@ -67,6 +67,12 @@ RAIO_PISO_M = 15.0
 # todas as bandas de deslocamento real; continuar linear até as 12 h da janela
 # de país daria 259 km de raio e não informaria nada.
 RAIO_TETO_M = 50_000.0
+# Fração dos 2.083 pares medidos em que o lugar verdadeiro coube dentro do
+# raio proposto (ponderada pelas bandas de Δt do acervo). Mora aqui, ao lado
+# das constantes que a produziram: cobertura declarada longe da fórmula é
+# número que envelhece sem ninguém perceber — e a interface promete
+# honestidade em cima dele.
+COBERTURA_MEDIDA = 0.936
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,3 +312,66 @@ def raio_incerteza(delta: timedelta) -> float:
     segundos = abs(delta.total_seconds())
     return min(RAIO_TETO_M,
                max(RAIO_PISO_M, VELOCIDADE_PLAUSIVEL_MS * segundos))
+
+
+def _metros_legiveis(metros: float) -> str:
+    """Metros até o quilômetro, quilômetros depois — com vírgula decimal."""
+    if metros < 1000:
+        return f"{round(metros)} m"
+    km = f"{metros / 1000:.1f}".rstrip("0").rstrip(".")
+    return f"{km.replace('.', ',')} km"
+
+
+def _tempo_legivel(delta: timedelta) -> str:
+    segundos = int(abs(delta.total_seconds()))
+    if segundos < 60:
+        return f"{segundos} s"
+    if segundos < 3600:
+        return f"{segundos // 60} min"
+    horas, minutos = divmod(segundos // 60, 60)
+    return f"{horas} h" if minutos == 0 else f"{horas} h {minutos} min"
+
+
+# A cobertura dita uma vez, para a legenda — e não repetida em cada um dos
+# milhares de pontos do mapa. É a mesma promessa de `COBERTURA_MEDIDA`, em
+# português.
+NOTA_DO_RAIO = (
+    f"O círculo é o tamanho da dúvida, não um erro de medição: em "
+    f"{COBERTURA_MEDIDA * 100:.1f}".replace(".", ",")
+    + "% dos pares medidos neste acervo, o lugar verdadeiro cabe dentro dele."
+)
+
+
+def frase_do_raio(delta: timedelta, doadora: str | None = None) -> str:
+    """Por que este círculo tem este tamanho, em uma frase para a tela.
+
+    Nasce aqui, e não em TypeScript, pelo mesmo motivo que `raio_incerteza`:
+    a frase cita o raio e a velocidade que o produziram. Remontá-la do outro
+    lado da API duplicaria as constantes — e constante duplicada é constante
+    que diverge no dia em que a calibração for refeita.
+
+    Três formas, porque a fórmula tem três regimes e cada um explica o
+    tamanho por um motivo diferente: no piso o círculo é o erro do receptor,
+    no teto ele parou de crescer, no meio ele é velocidade × tempo.
+    """
+    raio = raio_incerteza(delta)
+    quem = f"de {doadora}" if doadora else "de outra foto"
+    if raio <= RAIO_PISO_M:
+        return (
+            f"Lugar herdado {quem}, no mesmo instante — o raio de "
+            f"{_metros_legiveis(raio)} é só a imprecisão do receptor de GPS "
+            "que emprestou a coordenada."
+        )
+    quando = _tempo_legivel(delta)
+    if raio >= RAIO_TETO_M:
+        return (
+            f"Lugar herdado {quem}, a {quando} de distância — o raio para de "
+            f"crescer em {_metros_legiveis(raio)}: neste acervo, quem "
+            "fotografa o dia inteiro passa o dia na mesma região."
+        )
+    return (
+        f"Lugar herdado {quem}, a {quando} de distância — a "
+        f"{round(VELOCIDADE_PLAUSIVEL_MS * 3.6)} km/h, a velocidade de quem "
+        f"anda por uma cidade contando as paradas, isso dá "
+        f"{_metros_legiveis(raio)} de dúvida."
+    )

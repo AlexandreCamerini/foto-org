@@ -43,6 +43,32 @@ de cada 10 casos medidos no seu acervo, o lugar verdadeiro cabe nesse
 círculo."* Quem monta a frase deve pedir o raio ao Python, nunca recalcular
 `6.0 × Δt` em TypeScript: constante duplicada é constante que diverge.
 
+Por isso a frase também nasce aqui: `frase_do_raio(delta, doadora)` devolve o
+texto pronto, em três formas — no piso ela fala do receptor de GPS, no teto
+diz que o raio parou de crescer, no meio explica velocidade × tempo. A
+cobertura declarada vive em `COBERTURA_MEDIDA` / `NOTA_DO_RAIO`, ao lado das
+constantes que a produziram.
+
+## Como o mapa recebe isso
+
+`GET /api/mapa?trip_id=N` ou `?event_id=N` — um grupo por vez, porque sem
+cartografia real (D-031) o acervo inteiro numa tela só não tem escala em que
+informe nada. A rota é de leitura pura: não recalcula herança, não escreve.
+
+Cada ponto chega com `estimado`, `raio_m` (metros, `null` quando a coordenada
+é lida), `doadora_id` e `porque` — a frase montada em Python. O enquadramento
+(`limites`) já vem esticado pelo raio de cada círculo, e `escala` traduz
+metros em graus na latitude do grupo: sem isso a UI precisaria da constante
+geodésica, e o círculo sairia elipse fora do equador
+(`fotoorganizer/geolocation/escala.py`).
+
+Estar fora de alcance **não** tira a foto do mapa. O disco desligado leva a
+miniatura, não a coordenada — o evento "Pantanal" tem 80 das 97 fotos em
+`/Volumes/Externo`, e escondê-las deixaria o mapa vazio com todas as
+coordenadas conhecidas. O ponto vai com `motivo_indisponivel` e entra na
+contagem `fora_de_alcance`; quem não é desenhada é só quem não tem coordenada
+nenhuma (`sem_coordenada`), e essa fecha a conta com o total.
+
 ## Como foi calibrada
 
 `scripts/calibrar_raio_incerteza.py` — somente leitura, abre o catálogo em

@@ -979,3 +979,211 @@ def test_linha_do_tempo_e_filtro_por_mes(client):
     assert client.get(
         "/api/midia/linha-do-tempo", params={"alcance": "xpto"}
     ).status_code == 422
+
+
+# -- mapa do lugar estimado (docs/LOCAL_ESTIMADO.md, fase 9) ------------------
+@pytest.fixture()
+def evento_no_mapa(client, migrated_engine):
+    """Um evento com um caso de cada: ponto, círculo, sem coordenada e
+    fora de alcance — mais a doadora, que fica FORA do grupo (é assim no
+    acervo real: quem doa é uma referência do Apple Fotos, sem evento)."""
+    from fotoorganizer.models import Event, MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        evento = Event(nome="Serra")
+        session.add(evento)
+        session.flush()
+        fotos = list(session.scalars(
+            select(MediaFile).order_by(MediaFile.nome)
+        ))
+        propria, herdeira, sem_coord, longe, doadora = fotos[:5]
+
+        doadora.gps_lat, doadora.gps_lon = 43.96, 4.82
+        for media in (propria, herdeira, sem_coord, longe):
+            media.event_id = evento.id
+        for media in (herdeira, longe):
+            media.gps_lat_estimado, media.gps_lon_estimado = 43.96, 4.82
+            media.gps_estimado_de_id = doadora.id
+            media.gps_estimado_delta_s = 12 * 60
+        # Tem coordenada e mesmo assim não é desenhada: o arquivo não está
+        # aqui para responder pelo ponto.
+        longe.arquivo_ausente = True
+        session.commit()
+        dados = {
+            "evento_id": evento.id,
+            "propria": propria.id, "herdeira": herdeira.id,
+            "sem_coord": sem_coord.id, "longe": longe.id,
+            "doadora": doadora.id, "doadora_nome": doadora.nome,
+        }
+    return dados
+
+
+def test_mapa_separa_ponto_lido_de_circulo_herdado(client, evento_no_mapa):
+    """A distinção que o mapa inteiro existe para fazer: coordenada lida é
+    ponto (sem raio, não há dúvida a desenhar); coordenada herdada é círculo
+    do tamanho da dúvida, com a doadora alcançável pelo id."""
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+
+    assert mapa["grupo"] == {
+        "tipo": "evento", "id": evento_no_mapa["evento_id"],
+        "nome": "Serra", "inicio": None, "fim": None,
+    }
+    pontos = {p["media_id"]: p for p in mapa["pontos"]}
+    assert set(pontos) == {
+        evento_no_mapa["propria"], evento_no_mapa["herdeira"],
+        evento_no_mapa["longe"],
+    }
+
+    lido = pontos[evento_no_mapa["propria"]]
+    assert lido["estimado"] is False
+    assert (lido["lat"], lido["lon"]) == (43.95, 4.81)
+    # Sem raio e sem frase: um ponto lido não tem o que justificar.
+    assert lido["raio_m"] is None and lido["porque"] is None
+    assert lido["doadora_id"] is None
+
+    herdado = pontos[evento_no_mapa["herdeira"]]
+    assert herdado["estimado"] is True
+    # A coordenada desenhada é a da doadora — é o dado que existe.
+    assert (herdado["lat"], herdado["lon"]) == (43.96, 4.82)
+    assert herdado["delta_s"] == 720
+    assert herdado["doadora_id"] == evento_no_mapa["doadora"]
+    assert herdado["doadora_nome"] == evento_no_mapa["doadora_nome"]
+    # 12 min × 6 m/s: o raio vem do Python, não de uma constante em TS.
+    assert herdado["raio_m"] == 4320.0
+
+
+def test_mapa_explica_o_tamanho_do_circulo_em_uma_frase(client, evento_no_mapa):
+    """Aceite 3 da fase 9: clicar no círculo responde por que ele tem aquele
+    tamanho. A frase chega pronta — a UI não a monta, e por isso não precisa
+    conhecer nem a velocidade nem o piso nem o teto."""
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    (herdado,) = [p for p in mapa["pontos"]
+                  if p["media_id"] == evento_no_mapa["herdeira"]]
+
+    frase = herdado["porque"]
+    assert evento_no_mapa["doadora_nome"] in frase   # de quem herdou
+    assert "12 min" in frase                          # a que distância
+    assert "4,3 km" in frase                          # e o tamanho que dá
+    # A cobertura medida é da legenda, dita uma vez — não repetida em cada
+    # um dos milhares de pontos.
+    assert "93,6%" in mapa["nota_do_raio"]
+
+
+def test_mapa_conta_quem_nao_desenha_em_vez_de_sumir(client, evento_no_mapa):
+    """Aceite 6: quem não vira ponto aparece no número.
+
+    Sem coordenada é a única razão para não desenhar — e ela fecha a conta
+    com o total. Fora de alcance é outra pergunta: a foto TEM coordenada,
+    é desenhada, e o número existe para a tela dizer quantas daquelas não
+    vão mostrar miniatura.
+    """
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    contagens = mapa["contagens"]
+
+    assert contagens == {
+        "total": 4, "no_mapa": 3, "sem_coordenada": 1, "fora_de_alcance": 1
+    }
+    assert (contagens["no_mapa"] + contagens["sem_coordenada"]
+            == contagens["total"])
+    pontos = {p["media_id"]: p for p in mapa["pontos"]}
+    assert evento_no_mapa["sem_coord"] not in pontos
+
+    # Disco desligado tira a miniatura, não a coordenada: esconder o ponto
+    # apagaria da tela o que o catálogo guardou (invariante 8).
+    longe = pontos[evento_no_mapa["longe"]]
+    assert longe["motivo_indisponivel"] == "sem arquivo neste Mac"
+    assert longe["raio_m"] == 4320.0
+    assert pontos[evento_no_mapa["propria"]]["motivo_indisponivel"] is None
+
+
+def test_mapa_expoe_a_doadora_de_fora_do_grupo(client, evento_no_mapa):
+    """O traço do protótipo precisa da outra ponta, e ela quase nunca está
+    no grupo: sem esta lista a UI teria de pedir /api/midia/{id} por ponto."""
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    (doadora,) = mapa["doadoras"]
+    assert doadora["id"] == evento_no_mapa["doadora"]
+    assert (doadora["lat"], doadora["lon"]) == (43.96, 4.82)
+    assert doadora["no_grupo"] is False
+
+
+def test_mapa_enquadra_o_circulo_inteiro_e_da_a_escala(client, evento_no_mapa):
+    """Os limites vêm esticados pelo raio: num grupo em que todas herdaram
+    da mesma doadora a caixa dos pontos tem lado zero, e enquadrar só os
+    pontos cortaria fora justamente o que o mapa mostra."""
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    limites, escala = mapa["limites"], mapa["escala"]
+
+    # 4.320 m em graus de latitude ≈ 0,039 — bem além do 0,01 que separa as
+    # duas fotos. O círculo estoura a caixa dos pontos nos dois lados.
+    assert limites["lat_max"] > 43.96 + 0.03
+    assert limites["lat_min"] < 43.95 - 0.02
+    # Em Avignon (43,95° N) o grau de longitude vale bem menos que o de
+    # latitude; sem essa distinção o círculo sairia elipse.
+    assert escala["metros_por_grau_lon"] < escala["metros_por_grau_lat"]
+    assert 79_000 < escala["metros_por_grau_lon"] < 81_000
+
+
+def test_mapa_com_a_fonte_inteira_desligada_ainda_desenha(
+    client, migrated_engine, evento_no_mapa
+):
+    """O caso que derrubou o desenho anterior, medido no acervo real: o
+    evento "Pantanal" tem 80 das 97 fotos em /Volumes/Externo. Tratar volume
+    desligado como motivo para não desenhar deixaria o mapa VAZIO com todas
+    as coordenadas conhecidas — a tela perdendo o que o catálogo tem."""
+    from fotoorganizer.models import Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        session.scalars(select(Source)).one().disponivel = False
+        session.commit()
+
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    assert mapa["contagens"] == {
+        "total": 4, "no_mapa": 3, "sem_coordenada": 1, "fora_de_alcance": 3
+    }
+    assert len(mapa["pontos"]) == 3
+    assert all(p["motivo_indisponivel"] for p in mapa["pontos"])
+    assert "volume ou pasta fora de alcance" in {
+        p["motivo_indisponivel"] for p in mapa["pontos"]
+    }
+    assert mapa["limites"] is not None
+
+
+def test_mapa_aceita_viagem_e_recusa_pedido_ambiguo(client, migrated_engine):
+    from fotoorganizer.models import MediaFile, Trip
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        viagem = Trip(nome="Provence")
+        session.add(viagem)
+        session.flush()
+        session.scalars(select(MediaFile).order_by(MediaFile.nome)) \
+            .first().trip_id = viagem.id
+        viagem_id = viagem.id
+        session.commit()
+
+    mapa = client.get("/api/mapa", params={"trip_id": viagem_id}).json()
+    assert mapa["grupo"]["tipo"] == "viagem"
+    assert mapa["contagens"]["no_mapa"] == 1
+
+    # Um grupo por vez: nenhum e os dois são erro, não um default silencioso.
+    assert client.get("/api/mapa").status_code == 422
+    assert client.get(
+        "/api/mapa", params={"trip_id": viagem_id, "event_id": 1}
+    ).status_code == 422
+    assert client.get(
+        "/api/mapa", params={"event_id": 99999}
+    ).status_code == 404

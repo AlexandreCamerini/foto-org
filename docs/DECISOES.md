@@ -620,3 +620,30 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   refaz a medição contra o catálogo atual. Nada persistido depende do raio —
   ele é calculado na leitura, nunca gravado.
 - Status: decidido por medição.
+
+---
+
+## D-033 — Foto fora de alcance continua no mapa, com o motivo anexado
+
+- Fase: 9 (endpoint `/api/mapa`)
+- Classe: A
+- Data: 2026-08-01
+- Contexto: o plano original pedia que foto fora de alcance (arquivo
+  inalcançável — volume desmontado, biblioteca só no iCloud) ficasse fora da
+  lista de pontos do mapa, e fosse só contada. Medido: o evento "Pantanal"
+  tem 80 das 97 fotos em `/Volumes/Externo`, hoje desligado — excluí-las do
+  mapa devolveria uma tela vazia com 80 coordenadas conhecidas no catálogo.
+- Decidido: o ponto é desenhado normalmente (coordenada, raio, doadora), leva
+  `motivo_indisponivel` no payload para a tela explicar por que não há
+  miniatura, e é contado separadamente em `fora_de_alcance` — que é
+  subconjunto de `no_mapa`, não soma com ele.
+- Por quê: o disco desligado tirou o arquivo, não a coordenada. Esconder o
+  ponto apagaria da tela justamente o que o catálogo preservou — é o
+  invariante 8 (nada que possa ser referência real de uma foto é apagado)
+  aplicado ao mapa, não só à Biblioteca e à Revisão.
+- Como reverter: um `continue` em vez de `desenhaveis.append` em
+  `fotoorganizer/server/app.py::mapa`, mais ajuste dos testes `test_mapa_*`
+  em `tests/test_server_api.py`.
+- Status: decidido pelo orquestrador, consistente com o padrão já adotado na
+  Biblioteca e na Revisão (`ac9e7f2`, `1b125f7`) e no card de Viagens/Eventos
+  (`151e381`).

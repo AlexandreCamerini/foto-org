@@ -34,7 +34,14 @@ from datetime import datetime, timedelta, timezone
 from fotoorganizer import __version__
 from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
-from fotoorganizer.grouping.correlacao import campos_confiaveis
+from fotoorganizer.geolocation.escala import metros_por_grau
+from fotoorganizer.grouping.correlacao import (
+    NOTA_DO_RAIO,
+    RAIO_TETO_M,
+    campos_confiaveis,
+    frase_do_raio,
+    raio_incerteza,
+)
 from fotoorganizer.models import (
     Event,
     Source,
@@ -223,6 +230,101 @@ def _media_json(m: MediaFile, fontes_off: frozenset[int] = frozenset()) -> dict:
         # tenho como abrir isto" — sem esta marca ela desenha o ícone de
         # imagem quebrada e o usuário conclui que o app está quebrado.
         "motivo_indisponivel": _motivo_indisponivel(m, fontes_off),
+    }
+
+
+def _ponto_do_mapa(
+    m: MediaFile,
+    coordenada: tuple[float, float],
+    doadoras: dict[int, MediaFile],
+    motivo_indisponivel: str | None = None,
+) -> dict:
+    """Uma foto como o mapa a desenha: ponto cheio ou círculo.
+
+    `estimado=False` é ponto — coordenada lida do arquivo, e `raio_m` é
+    None porque não há dúvida a desenhar. `estimado=True` é círculo, e aí
+    `raio_m` é o tamanho da dúvida e `porque` a frase que a explica. As duas
+    saem de `grouping/correlacao.py`; a UI recebe metros e texto prontos.
+    """
+    lat, lon = coordenada
+    ponto = {
+        "media_id": m.id,
+        "nome": m.nome,
+        "lat": lat,
+        "lon": lon,
+        "data_capturada": (
+            m.data_capturada.isoformat() if m.data_capturada else None
+        ),
+        "camera": " ".join(filter(None, [m.make, m.model])) or None,
+        # A coordenada é do catálogo; a miniatura é do disco. Um disco
+        # desligado tira a segunda, não a primeira — o ponto é desenhado e
+        # a tela diz por que não tem imagem.
+        "motivo_indisponivel": motivo_indisponivel,
+        "estimado": m.coordenada_estimada,
+        "raio_m": None,
+        "delta_s": None,
+        "doadora_id": None,
+        "doadora_nome": None,
+        "porque": None,
+    }
+    if not m.coordenada_estimada:
+        return ponto
+
+    doadora = doadoras.get(m.gps_estimado_de_id or -1)
+    # Δt ausente não é Δt zero: sem ele não dá para afirmar tamanho nenhum,
+    # e o raio vai ao teto — a dúvida máxima é a resposta honesta para
+    # "não sei há quanto tempo".
+    delta = timedelta(seconds=m.gps_estimado_delta_s or 0) \
+        if m.gps_estimado_delta_s is not None else None
+    ponto["delta_s"] = m.gps_estimado_delta_s
+    ponto["doadora_id"] = m.gps_estimado_de_id
+    ponto["doadora_nome"] = doadora.nome if doadora else None
+    if delta is None:
+        ponto["raio_m"] = RAIO_TETO_M
+        ponto["porque"] = (
+            "Lugar herdado de outra foto, sem registro de quanto tempo as "
+            f"separa — o círculo é o maior que o acervo justifica "
+            f"({RAIO_TETO_M / 1000:.0f} km)."
+        )
+    else:
+        ponto["raio_m"] = raio_incerteza(delta)
+        ponto["porque"] = frase_do_raio(
+            delta, doadora.nome if doadora else None
+        )
+    return ponto
+
+
+def _enquadramento(pontos: list[dict]) -> dict:
+    """O retângulo que o mapa precisa mostrar, e a escala para desenhá-lo.
+
+    Os limites já vêm ESTICADOS pelo raio de cada círculo: num grupo em que
+    todas as fotos herdaram da mesma doadora — o caso comum neste acervo — a
+    caixa dos pontos tem lado zero e os círculos, 50 km. Enquadrar só os
+    pontos cortaria fora tudo o que o mapa existe para mostrar.
+
+    `escala` traduz metros em graus na latitude do grupo, para que o desenho
+    do raio não precise da constante geodésica do outro lado da API.
+    """
+    if not pontos:
+        return {"limites": None, "escala": None}
+    lat_min = lon_min = float("inf")
+    lat_max = lon_max = float("-inf")
+    for p in pontos:
+        raio = p["raio_m"] or 0.0
+        por_lat, por_lon = metros_por_grau(p["lat"])
+        d_lat, d_lon = raio / por_lat, raio / por_lon
+        lat_min = min(lat_min, p["lat"] - d_lat)
+        lat_max = max(lat_max, p["lat"] + d_lat)
+        lon_min = min(lon_min, p["lon"] - d_lon)
+        lon_max = max(lon_max, p["lon"] + d_lon)
+    por_lat, por_lon = metros_por_grau((lat_min + lat_max) / 2)
+    return {
+        "limites": {
+            "lat_min": lat_min, "lat_max": lat_max,
+            "lon_min": lon_min, "lon_max": lon_max,
+        },
+        "escala": {"metros_por_grau_lat": por_lat,
+                   "metros_por_grau_lon": por_lon},
     }
 
 
@@ -575,6 +677,119 @@ def create_app(
     def eventos(source_id: int | None = None) -> list[dict]:
         with session_factory() as session:
             return _agrupamentos(session, Event, MediaFile.event_id, source_id)
+
+    # -- mapa do lugar (lido × estimado) -------------------------------------
+    @app.get("/api/mapa")
+    def mapa(trip_id: int | None = None, event_id: int | None = None) -> dict:
+        """A geometria do lugar de UM grupo: pontos, círculos e doadoras.
+
+        Um grupo por vez, e não o acervo inteiro, por duas razões: sem
+        cartografia real (D-031) 5.191 pontos numa tela só não têm escala em
+        que informem nada, e o grupo (viagem ou evento) já é a unidade da
+        navegação — é o card que o usuário abriu.
+
+        Só lê. Não recalcula herança (ela está no banco desde a geração de
+        sugestões), não escreve nada, não toca em arquivo. O raio e a frase
+        que o explica vêm de `grouping/correlacao.py`, a mesma função pura
+        que a calibração mediu — a UI não remonta nenhum dos dois.
+        """
+        if (trip_id is None) == (event_id is None):
+            raise HTTPException(422, "informe trip_id OU event_id")
+
+        fontes_off = _fontes_fora_de_alcance()
+        with session_factory() as session:
+            if trip_id is not None:
+                grupo, tipo = session.get(Trip, trip_id), "viagem"
+                coluna, valor = MediaFile.trip_id, trip_id
+            else:
+                grupo, tipo = session.get(Event, event_id), "evento"
+                coluna, valor = MediaFile.event_id, event_id
+            if grupo is None:
+                raise HTTPException(404, "grupo não encontrado")
+
+            fotos = list(session.scalars(
+                select(MediaFile).where(coluna == valor)
+                .order_by(MediaFile.data_capturada, MediaFile.id)
+            ))
+
+            # Passo 1: quem tem coordenada é desenhado; quem não tem é
+            # contado. Estar fora de alcance NÃO tira a foto do mapa: o
+            # arquivo é que sumiu, a coordenada continua no catálogo, e
+            # esconder o ponto por causa de um disco desligado apagaria da
+            # tela justamente a informação que o catálogo guardou (invariante
+            # 8). Medido: o evento "Pantanal" tem 80 das 97 fotos em
+            # /Volumes/Externo — excluí-las deixaria o mapa VAZIO com todas
+            # as coordenadas conhecidas. O ponto vai com `motivo_indisponivel`
+            # para a tela dizer por que não há miniatura, como a grade já faz.
+            desenhaveis: list[tuple[MediaFile, tuple[float, float]]] = []
+            sem_coordenada = fora_de_alcance = 0
+            for media in fotos:
+                coordenada = media.coordenada
+                if coordenada is None:
+                    sem_coordenada += 1
+                    continue
+                if _motivo_indisponivel(media, fontes_off) is not None:
+                    fora_de_alcance += 1
+                desenhaveis.append((media, coordenada))
+
+            # Passo 2: as doadoras, numa consulta só. Uma por ponto herdado
+            # seria N+1 numa viagem de 2.406 fotos.
+            ids_doadoras = {
+                media.gps_estimado_de_id for media, _ in desenhaveis
+                if media.coordenada_estimada
+                and media.gps_estimado_de_id is not None
+            }
+            doadoras = {
+                d.id: d for d in session.scalars(
+                    select(MediaFile).where(MediaFile.id.in_(ids_doadoras))
+                )
+            } if ids_doadoras else {}
+
+            pontos = [
+                _ponto_do_mapa(media, coordenada, doadoras,
+                               _motivo_indisponivel(media, fontes_off))
+                for media, coordenada in desenhaveis
+            ]
+
+        return {
+            "grupo": {
+                "tipo": tipo,
+                "id": grupo.id,
+                "nome": grupo.nome,
+                "inicio": grupo.inicio.isoformat() if grupo.inicio else None,
+                "fim": grupo.fim.isoformat() if grupo.fim else None,
+            },
+            "contagens": {
+                "total": len(fotos),
+                # `no_mapa + sem_coordenada == total`. `fora_de_alcance` é um
+                # SUBCONJUNTO de `no_mapa`: desenhadas, mas sem miniatura para
+                # mostrar. Duas perguntas diferentes, dois números — o que não
+                # cabe é qualquer uma delas sumir em silêncio (aceite 6).
+                "no_mapa": len(pontos),
+                "sem_coordenada": sem_coordenada,
+                "fora_de_alcance": fora_de_alcance,
+            },
+            "pontos": pontos,
+            # A doadora costuma estar FORA do grupo (no acervo real ela é uma
+            # referência do Apple Fotos, sem viagem nem evento). Sem esta
+            # lista o traço do protótipo não teria a outra ponta.
+            "doadoras": [
+                {
+                    "id": d.id,
+                    "nome": d.nome,
+                    "lat": d.gps_lat,
+                    "lon": d.gps_lon,
+                    "camera": " ".join(filter(None, [d.make, d.model])) or None,
+                    # Ela também é um dos pontos desenhados, ou vem de fora?
+                    "no_grupo": (
+                        d.trip_id if trip_id is not None else d.event_id
+                    ) == valor,
+                }
+                for d in doadoras.values()
+            ],
+            **_enquadramento(pontos),
+            "nota_do_raio": NOTA_DO_RAIO,
+        }
 
     # -- sugestões e duplicatas (leitura; ações nas fatias seguintes) --------
     @app.get("/api/sugestoes")

@@ -8,6 +8,7 @@ from fotoorganizer.grouping import (
     VELOCIDADE_PLAUSIVEL_MS,
     FotoRef,
     estimar_offsets,
+    frase_do_raio,
     herdar_gps,
     raio_incerteza,
 )
@@ -286,3 +287,57 @@ def test_heranca_carrega_o_proprio_raio():
     assert h.raio_m == raio_incerteza(timedelta(minutes=5))
     # 5 min de câmera para telefone: raio de 1,8 km, escala de bairro.
     assert h.raio_m == 1_800
+
+
+# -- a frase que explica o círculo -------------------------------------------
+def test_frase_do_raio_cita_a_doadora_o_tempo_e_o_tamanho():
+    """A resposta ao clique no círculo, pronta no Python.
+
+    Se a UI tivesse de montá-la, precisaria da velocidade, do piso e do teto
+    em TypeScript — e no dia da recalibração as constantes divergiriam sem
+    ninguém perceber (docs/LOCAL_ESTIMADO.md).
+    """
+    frase = frase_do_raio(timedelta(minutes=12), "IMG_9100.jpg")
+    assert "IMG_9100.jpg" in frase
+    assert "12 min" in frase
+    assert "4,3 km" in frase
+    assert "22 km/h" in frase   # a velocidade, derivada da constante em m/s
+
+
+def test_frase_no_piso_fala_do_receptor_e_nao_de_deslocamento():
+    """A Δt zero o círculo não é 'até onde ela andou' — é o erro do GPS de
+    quem emprestou. Dizer 'a 0 s de distância, isso dá 15 m de dúvida' seria
+    explicar o tamanho pelo motivo errado."""
+    frase = frase_do_raio(timedelta(0), "IMG_9100.jpg")
+    assert "15 m" in frase
+    assert "receptor" in frase
+    assert "km/h" not in frase
+
+
+def test_frase_no_teto_diz_que_o_raio_parou_de_crescer():
+    """No teto a velocidade deixa de explicar o tamanho — o platô medido
+    explica (D-032). A frase precisa mudar junto com o regime da fórmula."""
+    frase = frase_do_raio(timedelta(hours=11), "IMG_9100.jpg")
+    assert "50 km" in frase
+    assert "para de crescer" in frase
+    assert "11 h" in frase
+
+
+def test_frase_sem_nome_da_doadora_nao_deixa_buraco():
+    """Doadora fora de alcance ou apagada do catálogo não pode virar
+    'herdado de None' na tela."""
+    frase = frase_do_raio(timedelta(minutes=12))
+    assert "None" not in frase
+    assert "de outra foto" in frase
+
+
+def test_frase_acompanha_o_raio_quando_a_constante_mudar():
+    """Amarra a frase à função, não a um número escrito à mão: mudar
+    VELOCIDADE_PLAUSIVEL_MS tem de mudar as duas juntas."""
+    for minutos in (3, 12, 45, 200):
+        delta = timedelta(minutes=minutos)
+        raio = raio_incerteza(delta)
+        alvo = (f"{round(raio)} m" if raio < 1000
+                else f"{raio / 1000:.1f}".rstrip("0").rstrip(".")
+                .replace(".", ",") + " km")
+        assert alvo in frase_do_raio(delta, "x.jpg"), (minutos, raio)
