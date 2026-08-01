@@ -7,9 +7,32 @@ devolve o que conseguiu ler — o scanner cataloga o arquivo mesmo assim.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
+
+
+# Tolerância para relógio adiantado: a câmera do dono pode estar algumas
+# horas à frente sem que a foto seja impossível.
+_FOLGA_DE_RELOGIO = timedelta(days=1)
+
+
+def data_plausivel(quando: datetime | None) -> bool:
+    """Uma foto não pode ter sido tirada depois de agora.
+
+    Só o limite superior. Não há piso: filme digitalizado com data manual
+    pode ser legitimamente de 1950, e um piso arbitrário transformaria acervo
+    antigo em erro. Num acervo real isto encontrou exatamente um registro,
+    datado de 2100 — e ele bastava para dominar o topo da grade ordenada por
+    data e fazer a tela parecer quebrada.
+
+    A data original não se perde: o extrator continua gravando o que o
+    arquivo disse na base bruta. O que não entra é a COLUNA, que alimenta
+    agrupamento e correlação.
+    """
+    if quando is None:
+        return False
+    return quando <= datetime.now() + _FOLGA_DE_RELOGIO
 
 
 @dataclass(slots=True)

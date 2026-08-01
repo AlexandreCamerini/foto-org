@@ -1,7 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef, useState } from "react";
 
-import { api } from "../api";
+import { Miniatura } from "./Miniatura";
 import type { MidiaQuery } from "../hooks/useMidia";
 
 const GAP = 8;
@@ -112,12 +112,7 @@ export default function PhotoGrid({
                   }`}
                   style={{ width: zoom, height: zoom }}
                 >
-                  <img
-                    src={api.thumbUrl(media.id)}
-                    alt={media.nome}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
+                  <Miniatura media={media} className="h-full w-full" />
                 </button>
               );
             })}

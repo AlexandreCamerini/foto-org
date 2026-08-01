@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import ScannerSettings
 from fotoorganizer.metadata import MetadataExtractor
+from fotoorganizer.metadata.base import data_plausivel
 from fotoorganizer.models import MediaFile, MediaRole, MetadataEntry, Source
 from fotoorganizer.security.hashing import quick_signature
 from fotoorganizer.sources.base import ExternalAsset, ExternalCatalogProvider
@@ -270,7 +271,12 @@ class ExternalCatalogImporter:
             media.extensao = asset.nome.rsplit(".", 1)[-1].lower()
         if asset.tamanho is not None:
             media.tamanho = asset.tamanho
-        media.data_capturada = asset.data_capturada
+        # Catálogo externo também erra: o .lrcat do dono trazia um registro
+        # datado de 2100.
+        media.data_capturada = (
+            asset.data_capturada
+            if data_plausivel(asset.data_capturada) else None
+        )
         if asset.gps_lat is not None:
             media.gps_lat, media.gps_lon = asset.gps_lat, asset.gps_lon
         media.indexado_em = datetime.now(timezone.utc).replace(tzinfo=None)

@@ -28,6 +28,10 @@ export interface Media {
   trip_id: number | null;
   event_id: number | null;
   erro_leitura: string | null;
+  /** Por que esta foto não pode ser aberta agora; `null` quando pode. A
+   *  grade precisa separar "miniatura ainda vindo" de "não tenho o arquivo" —
+   *  sem isso desenha imagem quebrada e o usuário conclui que o app quebrou. */
+  motivo_indisponivel: string | null;
   /** foto | captura | recebida | baixada. null = não avaliado. */
   tipo_imagem: string | null;
   /** true = o detector opinou e você ainda não respondeu. */
@@ -105,6 +109,16 @@ export interface FiltrosMidia {
   event_id?: number;
   lacuna?: string;
   ordenacao?: string;
+  /** "tudo" | "organizaveis" | "faltantes". Uma foto sem arquivo continua
+   *  fora da revisão e do plano — aqui se decide se ela é VISÍVEL. */
+  alcance?: string;
+  /** "2026-05" — a âncora temporal salta filtrando, não rolando. */
+  mes?: string;
+}
+
+export interface MesDaLinha {
+  mes: string;
+  quantidade: number;
 }
 
 export interface Faceta {
@@ -261,11 +275,22 @@ export const api = {
   opcoesFiltros: () =>
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),
-  viagens: () => json<Agrupamento[]>("/api/viagens"),
-  eventos: () => json<Agrupamento[]>("/api/eventos"),
-  sugestoes: (status: string, offset = 0, limit = 200) =>
+  inventario: () => json<Inventario>("/api/inventario"),
+  linhaDoTempo: (filtros: FiltrosMidia) => {
+    const params = new URLSearchParams();
+    for (const [chave, valor] of Object.entries(filtros)) {
+      if (valor !== undefined && valor !== "") params.set(chave, String(valor));
+    }
+    return json<MesDaLinha[]>(`/api/midia/linha-do-tempo?${params}`);
+  },
+  viagens: (sourceId?: number) =>
+    json<Agrupamento[]>(`/api/viagens${sourceId ? `?source_id=${sourceId}` : ""}`),
+  eventos: (sourceId?: number) =>
+    json<Agrupamento[]>(`/api/eventos${sourceId ? `?source_id=${sourceId}` : ""}`),
+  sugestoes: (status: string, offset = 0, limit = 200, sourceId?: number) =>
     json<PaginaSugestoes>(
-      `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}`,
+      `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}` +
+        (sourceId ? `&source_id=${sourceId}` : ""),
     ),
   acaoSugestoes: (ids: number[], acao: string) =>
     post<{ afetadas: number }>("/api/sugestoes/acao", { ids, acao }),
@@ -302,4 +327,20 @@ export interface GrupoDuplicatas {
   bytes_recuperaveis: number;
   n_fontes: number;
   membros: MembroDuplicata[];
+}
+
+/** O acervo inteiro — alcançável ou não. A grade responde "o que dá para
+ *  abrir agora"; num acervo em NAS e discos externos isso é a minoria. */
+export interface Inventario {
+  fotos: number;
+  alcancaveis: number;
+  registros: number;
+  sem_caminho: number;
+  lugares: {
+    raiz: string;
+    fotos: number;
+    alcancaveis: number;
+    so_no_catalogo: number;
+    fontes: string[];
+  }[];
 }

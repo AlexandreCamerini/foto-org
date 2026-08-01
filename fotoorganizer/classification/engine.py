@@ -45,6 +45,7 @@ from fotoorganizer.grouping import (
     estimar_offsets,
     herdar_gps,
 )
+from fotoorganizer.grouping.eventos_temporais import Momento, dividir_sessao
 from fotoorganizer.grouping.classifier import (
     ConfigClassificacao,
     DadosSessao,
@@ -301,9 +302,55 @@ class SuggestionEngine:
                 # continua catalogada e cai no ramo de não classificadas.
                 sessao = _Sessao(draft=draft)
             sessoes.append(sessao)
-            for media_id in draft.media_ids:
+
+        # Uma sessão não-viagem pode conter mais de um acontecimento: o
+        # agrupamento corta onde passam 3 dias, então aniversário de manhã e
+        # show à noite chegam aqui juntos. Subdividir precisa da classificação
+        # — viagem é uma pasta só (commit 9670765) — por isso vem depois dela,
+        # e os pedaços são reclassificados: cada um tem duração e lugar
+        # próprios, e um deles pode nomear onde o conjunto não nomeava.
+        sessoes = [
+            final
+            for sessao in sessoes
+            for final in self._subdividir(session, sessao, por_id, casa, herancas)
+        ]
+
+        for sessao in sessoes:
+            for media_id in sessao.draft.media_ids:
                 sessao_da_media[media_id] = sessao
         return sessoes, sessao_da_media
+
+    def _subdividir(self, session: Session, sessao: _Sessao, por_id, casa,
+                    herancas: dict[int, Heranca]) -> list[_Sessao]:
+        """A sessão, ou os acontecimentos dentro dela."""
+        membros = [por_id[i] for i in sessao.draft.media_ids]
+        momentos = [
+            Momento(
+                m.id, m.data_capturada or m.mtime,
+                *(self._coords(m, herancas) or (None, None)),
+            )
+            for m in membros
+            if (m.data_capturada or m.mtime) is not None
+        ]
+        blocos = dividir_sessao(momentos, e_viagem=sessao.tipo == "viagem")
+        if len(blocos) <= 1:
+            return [sessao]
+
+        novas: list[_Sessao] = []
+        for bloco in blocos:
+            membros_do_bloco = [por_id[i] for i in bloco]
+            quando = [
+                m.data_capturada or m.mtime for m in membros_do_bloco
+                if (m.data_capturada or m.mtime) is not None
+            ]
+            draft = ViagemDraft(inicio=min(quando), fim=max(quando))
+            draft.media_ids.extend(bloco)
+            novas.append(self._classificar(
+                session, _Sessao(draft=draft), membros_do_bloco, casa, herancas
+            ))
+        log.info("sessão de %d fotos virou %d acontecimentos",
+                 len(membros), len(novas))
+        return novas
 
     def _dividir_draft(self, draft: ViagemDraft, por_id, casa,
                        herancas: dict[int, Heranca]) -> list[ViagemDraft]:

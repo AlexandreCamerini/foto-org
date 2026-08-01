@@ -136,7 +136,7 @@ def test_arquivo_inacessivel_conta_erro_e_segue(importer, tmp_path):
 
 
 # -- referências sem arquivo local (biblioteca em iCloud) --------------------
-def test_referencia_entra_no_catalogo_e_fica_fora_da_biblioteca(
+def test_referencia_aparece_na_biblioteca_e_fica_fora_do_organizavel(
     importer, tmp_path
 ):
     """Foto só na nuvem não tem arquivo, mas tem horário e GPS. Ela entra
@@ -161,7 +161,14 @@ def test_referencia_entra_no_catalogo_e_fica_fora_da_biblioteca(
         assert media.caminho == "google://UUID-1"
 
     repo = MediaRepository(factory)
-    assert repo.contar(MediaFilters()) == 0          # fora da grade
+    # Visível, e não organizável — são coisas diferentes. Antes a referência
+    # sumia da grade, e o dono, que mandou o app ler a biblioteca do Apple
+    # Fotos e viu 44.661 fotos virarem "(0)", descreveu isso como "o sistema
+    # esquece". Ela aparece marcada pelo que é; a revisão e o plano de cópia
+    # continuam vendo só o que tem arquivo.
+    assert repo.contar(MediaFilters(alcance="tudo")) == 1
+    assert repo.contar(MediaFilters(alcance="faltantes")) == 1
+    assert repo.contar(MediaFilters(alcance="organizaveis")) == 0
     assert repo.estatisticas()["total"] == 0
     assert repo.estatisticas()["referencias"] == 1
     assert repo.estatisticas()["referencias_com_gps"] == 1

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api";
-import type { Faceta } from "../api";
+import type { Faceta, Inventario } from "../api";
 
 export interface Recorte {
   trip_id?: number;
@@ -59,6 +59,69 @@ function ListaFacetas({
   );
 }
 
+/** O acervo inteiro, antes das lacunas.
+ *
+ * Um acervo espalhado por NAS e discos externos passa a maior parte do tempo
+ * parcialmente offline: num caso real, 100.164 fotos conhecidas e 4.932
+ * alcançáveis. Abrir o Panorama com "5.191 no catálogo" respondia a pergunta
+ * errada — o que dá para abrir agora — para quem está tentando descobrir o
+ * que tem. */
+function OAcervo({ inv }: { inv: Inventario }) {
+  const fora = inv.fotos - inv.alcancaveis;
+  return (
+    <section className="mb-5">
+      <h3 className="titulo-painel mb-1.5">O acervo</h3>
+      <p className="mb-2">
+        <span className="text-lg">{inv.fotos.toLocaleString("pt-BR")}</span>{" "}
+        <span className="text-texto-2">fotos conhecidas</span>
+        {fora > 0 && (
+          <span className="text-texto-2">
+            {" · "}
+            {inv.alcancaveis.toLocaleString("pt-BR")} alcançáveis agora
+          </span>
+        )}
+      </p>
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        {inv.lugares.map((lugar) => (
+          <div
+            key={lugar.raiz}
+            className="rounded-md border border-borda bg-cartao px-2.5 py-2"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate">{lugar.raiz}</span>
+              <span className="text-lg">
+                {lugar.fotos.toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <div className="text-texto-3">
+              {lugar.so_no_catalogo === 0
+                ? "tudo alcançável"
+                : lugar.alcancaveis === 0
+                  ? "fora de alcance — volume não montado"
+                  : `${lugar.so_no_catalogo.toLocaleString("pt-BR")} fora de alcance`}
+              {" · "}
+              {lugar.fontes.join(", ")}
+            </div>
+          </div>
+        ))}
+        {inv.sem_caminho > 0 && (
+          <div className="rounded-md border border-borda bg-cartao px-2.5 py-2">
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate text-texto-2">
+                sem arquivo local
+              </span>
+              <span className="text-lg">
+                {inv.sem_caminho.toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <div className="text-texto-3">referências de catálogo na nuvem</div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** Panorama: o que a base sabe, e — mais útil — onde ela não sabe.
  * Cada lacuna é clicável porque contar sem poder agir não resolve nada. */
 export default function Panorama({
@@ -71,6 +134,10 @@ export default function Panorama({
   const { data: fontes } = useQuery({
     queryKey: ["fontes"],
     queryFn: api.fontes,
+  });
+  const { data: inventario } = useQuery({
+    queryKey: ["inventario"],
+    queryFn: api.inventario,
   });
 
   if (!data) {
@@ -97,11 +164,14 @@ export default function Panorama({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-3">
+      {inventario && <OAcervo inv={inventario} />}
+
       <p className="mb-3 text-texto-2">
-        {data.total} fotos no catálogo.{" "}
+        As lacunas abaixo são das {data.total} fotos que dá para organizar
+        agora.{" "}
         {comLacuna.length === 0
           ? "Nenhuma lacuna — tudo que o motor precisa está preenchido."
-          : "Clique numa lacuna para trabalhar só naquele conjunto."}
+          : "Clique numa para trabalhar só naquele conjunto."}
       </p>
 
       <section className="mb-5">

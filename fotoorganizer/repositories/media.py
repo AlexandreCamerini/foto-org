@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from fotoorganizer.models import (
     ConfidenceLevel,
@@ -36,6 +36,14 @@ _TIPO_EFETIVO = func.coalesce(MediaFile.tipo_confirmado, MediaFile.tipo_imagem)
 # doam data, GPS e correlação — ver MediaRole e o invariante 8.
 _ACERVO = MediaFile.organizavel
 _TESTEMUNHA = ~_ACERVO
+
+# O que a grade mostra. Uma foto sem arquivo continua fora da revisão e do
+# plano de cópia — aqui se decide se ela é VISÍVEL, não se é organizável.
+ALCANCES: dict[str, str] = {
+    "tudo": "tudo que o app conhece",
+    "organizaveis": "só o que dá para organizar agora",
+    "faltantes": "só o que está fora de alcance",
+}
 
 # O que impede uma foto de ser organizada sozinha. A chave é o filtro; o
 # rótulo é o que o usuário lê. Ordem = ordem de exibição no panorama.
@@ -108,6 +116,15 @@ class MediaFilters:
     event_id: int | None = None
     lacuna: str | None = None
     ordenacao: str = "data_desc"
+    # O que a grade mostra. "tudo" é o padrão porque a pergunta do dono ao
+    # importar uma biblioteca é "cadê minhas fotos?": 44.661 do Apple Fotos
+    # e 45.397 do Lightroom entravam no catálogo e a Biblioteca respondia
+    # (0), sem dizer por quê. Ver ALCANCES.
+    alcance: str = "tudo"
+    # "2026-05". A âncora temporal salta filtrando, não rolando: com 103.938
+    # registros paginados de 200 em 200, chegar em 2015 rolando exigiria
+    # carregar tudo que veio antes.
+    mes: str | None = None
 
 
 class MediaRepository:
@@ -117,7 +134,12 @@ class MediaRepository:
     def _query(self, filters: MediaFilters):
         # Testemunhas ficam fora da biblioteca visível, das contagens e de
         # qualquer filtro. Existem só para doar GPS e horário à correlação.
-        stmt = select(MediaFile).where(_ACERVO)
+        if filters.alcance == "organizaveis":
+            stmt = select(MediaFile).where(_ACERVO)
+        elif filters.alcance == "faltantes":
+            stmt = select(MediaFile).where(_TESTEMUNHA)
+        else:
+            stmt = select(MediaFile)
         if filters.busca:
             like = f"%{filters.busca}%"
             stmt = stmt.where(
@@ -125,6 +147,10 @@ class MediaRepository:
             )
         if filters.extensao:
             stmt = stmt.where(MediaFile.extensao == filters.extensao)
+        if filters.mes:
+            stmt = stmt.where(
+                func.strftime("%Y-%m", MediaFile.data_capturada) == filters.mes
+            )
         if filters.source_id is not None:
             stmt = stmt.where(MediaFile.source_id == filters.source_id)
         if filters.ano is not None:
@@ -174,16 +200,40 @@ class MediaRepository:
             )
             return [int(ano) for ano in session.scalars(stmt)]
 
+    def linha_do_tempo(self, filters: MediaFilters) -> list[dict]:
+        """Quantas fotos por mês, no recorte atual e na ordem da grade.
+
+        É o que torna 100 mil fotos alcançáveis: sem isto, rolar é a única
+        forma de chegar em 2015. Uma consulta agregada, não uma varredura —
+        o banco conta por mês em milissegundos e a grade não precisa ter
+        carregado a página onde aquele mês começa.
+        """
+        mes = func.strftime("%Y-%m", MediaFile.data_capturada)
+        base = self._query(filters).subquery()
+        alias = aliased(MediaFile, base)
+        mes_alias = func.strftime("%Y-%m", alias.data_capturada)
+        with self._factory() as session:
+            linhas = session.execute(
+                select(mes_alias, func.count(alias.id))
+                .group_by(mes_alias)
+                .order_by(mes_alias.desc())
+            ).all()
+        return [
+            {"mes": m, "quantidade": n}
+            for m, n in linhas if m is not None
+        ]
+
     def fontes_com_contagem(self) -> list[tuple[Source, int]]:
         with self._factory() as session:
             stmt = (
                 select(Source, func.count(MediaFile.id))
                 .outerjoin(
                     MediaFile,
-                    (MediaFile.source_id == Source.id)
-                    # A contagem da barra lateral é do acervo, não do
-                    # que a fonte doou de sinal.
-                    & _ACERVO,
+                    # A contagem é do que a fonte CONHECE, não do que ela
+                    # entrega para organizar: contar só o organizável fazia o
+                    # Apple Fotos aparecer como (0) depois de importar 44.661
+                    # fotos, que foi o que o dono descreveu como "esquece".
+                    MediaFile.source_id == Source.id,
                 )
                 .group_by(Source.id)
                 .order_by(Source.caminho)

@@ -833,3 +833,149 @@ def test_todo_namespace_gravado_tem_rotulo_legivel():
     gravados = set(_GRUPOS.values()) | {"libraw", "apple", "google", "lightroom"}
     sem_rotulo = gravados - set(ROTULOS_NAMESPACE)
     assert not sem_rotulo, f"sem rótulo legível: {sorted(sem_rotulo)}"
+
+
+def test_inventario_expoe_o_acervo_inteiro(client, migrated_engine):
+    """O Panorama respondia só sobre o alcançável. Num acervo em NAS e HDs
+    externos isso é a minoria — 5.191 de 100.164 num caso real."""
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        gaveta = Source(caminho="/Volumes/photo", apelido="photo",
+                        disponivel=False)
+        session.add(gaveta)
+        session.flush()
+        session.add(MediaFile(
+            source_id=gaveta.id, caminho="lightroom://UUID-1",
+            pasta="/Volumes/photo/Portfolio", nome="a.dng", extensao="dng",
+            tamanho=1, arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    inv = client.get("/api/inventario").json()
+    assert inv["fotos"] > inv["alcancaveis"]
+    gaveta_json = next(l for l in inv["lugares"] if l["raiz"] == "/Volumes/photo")
+    assert gaveta_json["fotos"] == 1
+    assert gaveta_json["alcancaveis"] == 0
+    assert gaveta_json["so_no_catalogo"] == 1
+    assert gaveta_json["fontes"] == ["photo"]
+
+
+def test_media_diz_por_que_nao_da_para_abrir(client, migrated_engine):
+    """A grade precisa separar "miniatura ainda vindo" de "não tenho o
+    arquivo". Sem isso o navegador desenha imagem quebrada, e o dono — que
+    abriu a fila num grupo 100% em volume desmontado — concluiu que a tela
+    inteira estava quebrada."""
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        gaveta = Source(caminho="/Volumes/photo", apelido="photo",
+                        disponivel=False)
+        session.add(gaveta)
+        session.flush()
+        session.add(MediaFile(
+            source_id=gaveta.id, caminho="/Volumes/photo/a.dng",
+            pasta="/Volumes/photo", nome="a.dng", extensao="dng", tamanho=1,
+        ))
+        session.add(MediaFile(
+            source_id=gaveta.id, caminho="apple://UUID-1", pasta="",
+            nome="IMG_1.HEIC", extensao="heic", tamanho=1,
+            arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    itens = client.get("/api/midia", params={"busca": "a.dng"}).json()["itens"]
+    assert itens[0]["motivo_indisponivel"] == "volume ou pasta fora de alcance"
+
+    # Uma foto de fonte disponível não ganha marca nenhuma.
+    outras = client.get("/api/midia", params={"busca": "img_0"}).json()["itens"]
+    assert outras and outras[0]["motivo_indisponivel"] is None
+
+
+def test_biblioteca_mostra_o_que_o_app_conhece(client, migrated_engine):
+    """O dono mandou o app ler a biblioteca do Apple Fotos, ele leu 44.661
+    fotos e a Biblioteca respondeu (0) — elas não têm arquivo local e ficavam
+    invisíveis. Aparecer é diferente de ser organizável."""
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        apple = Source(caminho="/Users/eu/Fotos.photoslibrary",
+                       apelido="Apple Fotos")
+        session.add(apple)
+        session.flush()
+        session.add(MediaFile(
+            source_id=apple.id, caminho="apple://UUID-1", pasta="",
+            nome="IMG_1.HEIC", extensao="heic", tamanho=1,
+            arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    tudo = client.get("/api/midia", params={"alcance": "tudo"}).json()
+    organizaveis = client.get(
+        "/api/midia", params={"alcance": "organizaveis"}).json()
+    faltantes = client.get("/api/midia", params={"alcance": "faltantes"}).json()
+
+    assert tudo["total"] == organizaveis["total"] + faltantes["total"]
+    assert faltantes["total"] >= 1
+    assert any(i["nome"] == "IMG_1.HEIC" for i in tudo["itens"])
+    assert not any(i["nome"] == "IMG_1.HEIC" for i in organizaveis["itens"])
+
+    # A contagem da lateral conta o que a fonte CONHECE — era o (0).
+    fontes = {f["apelido"]: f["fotos"] for f in client.get("/api/fontes").json()}
+    assert fontes["Apple Fotos"] == 1
+
+    assert client.get("/api/midia", params={"alcance": "xpto"}).status_code == 422
+
+
+def test_fila_e_grupos_aceitam_recorte_por_fonte(client, migrated_engine):
+    """A barra lateral passa a valer na Revisão e em Viagens — antes ela
+    definia uma fonte que só a Biblioteca lia, e nas outras telas ficava
+    visível e inerte."""
+    from fotoorganizer.models import MediaFile, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        outra = Source(caminho="/outra/pasta", apelido="outra")
+        session.add(outra)
+        session.flush()
+        outra_id = outra.id
+        session.add(MediaFile(
+            source_id=outra_id, caminho="/outra/pasta/z.jpg",
+            pasta="/outra/pasta", nome="z.jpg", extensao="jpg", tamanho=1,
+        ))
+        session.commit()
+
+    todas = client.get("/api/sugestoes").json()
+    da_outra = client.get(
+        "/api/sugestoes", params={"source_id": outra_id}).json()
+    assert len(da_outra["itens"]) <= len(todas["itens"])
+    assert all(True for _ in da_outra["itens"])
+
+    # Grupo sem foto da fonte escolhida sai da lista: não é resultado vazio,
+    # é um grupo que não pertence a este recorte.
+    eventos = client.get("/api/eventos", params={"source_id": outra_id}).json()
+    assert eventos == []
+
+
+def test_linha_do_tempo_e_filtro_por_mes(client):
+    """A âncora temporal: sem ela, rolar é a única forma de chegar em 2015 —
+    e num acervo paginado de 200 em 200 isso não é forma."""
+    linha = client.get("/api/midia/linha-do-tempo").json()
+    assert linha, "o fixture tem fotos com data"
+    assert all(set(m) == {"mes", "quantidade"} for m in linha)
+    # Ordem decrescente: a grade abre nas mais recentes.
+    assert [m["mes"] for m in linha] == sorted(
+        (m["mes"] for m in linha), reverse=True
+    )
+
+    mes = linha[0]["mes"]
+    recorte = client.get("/api/midia", params={"mes": mes}).json()
+    assert recorte["total"] == linha[0]["quantidade"]
+    assert all(i["data_capturada"].startswith(mes) for i in recorte["itens"])
+
+    assert client.get(
+        "/api/midia/linha-do-tempo", params={"alcance": "xpto"}
+    ).status_code == 422

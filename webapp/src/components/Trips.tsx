@@ -4,14 +4,23 @@ import { useState } from "react";
 import { api, type Agrupamento } from "../api";
 
 interface Props {
+  /** Fonte escolhida na barra lateral. O controle vale nesta tela também:
+   *  antes ele ficava visível aqui e não fazia nada. */
+  fonte?: number;
   onAbrir: (filtro: { trip_id?: number; event_id?: number }, nome: string) => void;
 }
 
 /** Galeria de viagens e eventos como cards com capa — o agrupamento
  * explicável do motor apresentado do jeito que se mostra pra alguém. */
-export default function Trips({ onAbrir }: Props) {
-  const { data: viagens } = useQuery({ queryKey: ["viagens"], queryFn: api.viagens });
-  const { data: eventos } = useQuery({ queryKey: ["eventos"], queryFn: api.eventos });
+export default function Trips({ onAbrir, fonte }: Props) {
+  const { data: viagens } = useQuery({
+    queryKey: ["viagens", fonte],
+    queryFn: () => api.viagens(fonte),
+  });
+  const { data: eventos } = useQuery({
+    queryKey: ["eventos", fonte],
+    queryFn: () => api.eventos(fonte),
+  });
 
   const vazio = (viagens ?? []).length === 0 && (eventos ?? []).length === 0;
 

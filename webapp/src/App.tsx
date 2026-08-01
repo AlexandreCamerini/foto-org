@@ -1,7 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { FiltrosMidia } from "./api";
+import { api, type FiltrosMidia } from "./api";
 import Inspector from "./components/Inspector";
+import { LinhaDoTempo } from "./components/LinhaDoTempo";
 import Loupe from "./components/Loupe";
 import Duplicates from "./components/Duplicates";
 import Operations from "./components/Operations";
@@ -25,14 +27,28 @@ const ABAS = [
 ] as const;
 type Aba = (typeof ABAS)[number];
 
+// A dica só cita "[ fontes" onde a barra lateral existe — anunciar um atalho
+// que não faz nada naquela tela é o mesmo defeito que a lateral inerte tinha.
 const DICAS: Record<Aba, string> = {
-  Panorama: "clique numa lacuna para recortar a biblioteca · [ fontes",
+  Panorama: "clique numa lacuna para recortar a biblioteca",
   Biblioteca: "←↑↓→ seleciona · espaço amplia · [ fontes · ] inspetor",
   Viagens: "clique num card para ver as fotos do grupo · [ fontes",
-  Revisão: "aprove ou rejeite; o destino só sai do papel em Operações",
-  Duplicatas: "escolha a principal de cada grupo · [ fontes",
+  Revisão: "aprove ou rejeite; o destino só sai do papel em Operações · [ fontes",
+  Duplicatas: "escolha a principal de cada grupo",
   Operações: "plano → dry-run → cópia verificada; o original nunca é tocado",
 };
+
+/** Onde a barra lateral tem efeito.
+ *
+ * Ela definia `fonte`, que só a Biblioteca lia — nas outras cinco telas ficava
+ * visível, clicável e inerte, e foi o que o dono descreveu como "os dois menus
+ * não funcionam bem juntos". Um controle visível age sobre a tela em que está;
+ * onde não age, não aparece.
+ *
+ * Duplicatas fica de fora por natureza: um grupo de duplicatas cruza fontes,
+ * e filtrar por uma delas esconderia metade de cada par. Operações é sobre
+ * planos, não sobre fotos. Panorama é a visão do acervo inteiro. */
+const ABAS_COM_FONTE = ["Biblioteca", "Revisão", "Viagens"];
 
 export default function App() {
   // Abre no Panorama: a primeira pergunta de quem tem 30 mil fotos é "em
@@ -50,6 +66,13 @@ export default function App() {
   // Viagens, lacuna ou faceta no Panorama. Um só, e sempre visível como
   // chip removível — filtro escondido é filtro que confunde.
   const [recorte, setRecorte] = useState<Recorte | null>(null);
+  // O dono importou 44.661 fotos do Apple Fotos e a Biblioteca respondia (0):
+  // elas não têm arquivo local e ficavam invisíveis. Agora aparecem por
+  // padrão, marcadas, e este controle isola o que é acionável.
+  const [alcance, setAlcance] = useState("tudo");
+  const [mes, setMes] = useState<string | undefined>(undefined);
+  // Mesma queryKey da Sidebar: o cache do react-query serve as duas.
+  const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const colunasRef = useRef(1);
 
   const filtros: FiltrosMidia = {
@@ -58,6 +81,8 @@ export default function App() {
     trip_id: recorte?.trip_id,
     event_id: recorte?.event_id,
     lacuna: recorte?.lacuna,
+    alcance,
+    mes,
     ano: recorte?.ano,
     extensao: recorte?.extensao,
     ordenacao,
@@ -70,7 +95,7 @@ export default function App() {
   useEffect(() => {
     setSelIndex(null);
     setLoupeAberto(false);
-  }, [busca, fonte, ordenacao, recorte]);
+  }, [busca, fonte, ordenacao, recorte, alcance, mes]);
 
   const navegar = useCallback(
     (destino: number) => {
@@ -152,11 +177,27 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {sidebarVisivel && (
+        {sidebarVisivel && ABAS_COM_FONTE.includes(aba) && (
           <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
         )}
 
         <main className="flex min-w-0 flex-1 flex-col">
+          {/* O filtro ativo aparece igual nas três telas em que vale. Antes a
+              fonte só se via destacada na lateral e o recorte virava chip:
+              dois estados de filtro com aparências diferentes, e nenhum jeito
+              de saber, olhando o conteúdo, por que ele estava reduzido. */}
+          {fonte !== null && ABAS_COM_FONTE.includes(aba) && (
+            <div className="flex items-center gap-2 border-b border-borda px-3 py-1.5">
+              <span className="text-texto-3">Filtrando por</span>
+              <button
+                onClick={() => setFonte(null)}
+                className="flex items-center gap-1 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
+                title="Mostrar todas as fontes"
+              >
+                {fontes?.find((f) => f.id === fonte)?.apelido ?? "fonte"} ✕
+              </button>
+            </div>
+          )}
           {aba === "Panorama" && (
             <Panorama
               aoRecortar={(novo) => {
@@ -167,13 +208,14 @@ export default function App() {
           )}
           {aba === "Viagens" && (
             <Trips
+              fonte={fonte ?? undefined}
               onAbrir={(filtro, nome) => {
                 setRecorte({ ...filtro, nome });
                 setAba("Biblioteca");
               }}
             />
           )}
-          {aba === "Revisão" && <Review job={job} />}
+          {aba === "Revisão" && <Review job={job} fonte={fonte ?? undefined} />}
           {aba === "Duplicatas" && <Duplicates job={job} />}
           {aba === "Operações" && <Operations job={job} />}
           {aba === "Biblioteca" && (
@@ -188,6 +230,32 @@ export default function App() {
                     {recorte.nome} ✕
                   </button>
                 )}
+                <div className="flex shrink-0 overflow-hidden rounded-md border border-borda">
+                  {[
+                    ["tudo", "Tudo"],
+                    ["organizaveis", "Organizáveis"],
+                    ["faltantes", "Fora de alcance"],
+                  ].map(([chave, rotulo]) => (
+                    <button
+                      key={chave}
+                      onClick={() => setAlcance(chave)}
+                      title={
+                        chave === "tudo"
+                          ? "tudo que o app conhece, inclusive sem arquivo local"
+                          : chave === "organizaveis"
+                            ? "só o que dá para revisar e copiar agora"
+                            : "só o que está no iCloud ou em volume desmontado"
+                      }
+                      className={`px-2.5 py-1 ${
+                        alcance === chave
+                          ? "bg-cartao text-acento"
+                          : "text-texto-2 hover:text-texto"
+                      }`}
+                    >
+                      {rotulo}
+                    </button>
+                  ))}
+                </div>
                 <input
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
@@ -217,14 +285,21 @@ export default function App() {
                 />
               </div>
 
-              <div className="min-h-0 flex-1">
-                <PhotoGrid
-                  midia={midia}
-                  zoom={zoom}
-                  selecionadoIndex={selIndex}
-                  onSelecionar={setSelIndex}
-                  onAbrirLoupe={() => setLoupeAberto(true)}
-                  onColunas={onColunas}
+              <div className="flex min-h-0 flex-1">
+                <div className="min-h-0 min-w-0 flex-1">
+                  <PhotoGrid
+                    midia={midia}
+                    zoom={zoom}
+                    selecionadoIndex={selIndex}
+                    onSelecionar={setSelIndex}
+                    onAbrirLoupe={() => setLoupeAberto(true)}
+                    onColunas={onColunas}
+                  />
+                </div>
+                <LinhaDoTempo
+                  filtros={filtros}
+                  mesAtivo={mes}
+                  onEscolher={setMes}
                 />
               </div>
             </>

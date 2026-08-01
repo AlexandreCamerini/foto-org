@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import ExifTags, Image, IptcImagePlugin
 
-from fotoorganizer.metadata.base import MediaMetadata
+from fotoorganizer.metadata.base import MediaMetadata, data_plausivel
 
 log = logging.getLogger(__name__)
 
@@ -189,6 +189,11 @@ def _coletar_iptc(destino: list, img) -> None:
     _coletar(destino, "iptc", itens)
 
 
+def _plausivel(quando: datetime | None) -> datetime | None:
+    """Filtra data impossível, mantendo o bruto nos extras (base.py)."""
+    return quando if data_plausivel(quando) else None
+
+
 def _parse_exif_date(raw: object) -> datetime | None:
     try:
         return datetime.strptime(str(raw), _EXIF_DATE_FORMAT)
@@ -244,7 +249,7 @@ class PurePythonExtractor:
                     ExifTags.Base.DateTime
                 )
                 if raw_date:
-                    meta.data_capturada = _parse_exif_date(raw_date)
+                    meta.data_capturada = _plausivel(_parse_exif_date(raw_date))
                     if meta.data_capturada is None:
                         meta.extras.append(("exif", "data_invalida", str(raw_date)))
                 lente = sub.get(ExifTags.Base.LensModel)
@@ -288,7 +293,7 @@ class PurePythonExtractor:
         try:
             with rawpy.imread(str(path)) as raw:
                 if raw.other.timestamp:
-                    meta.data_capturada = raw.other.timestamp
+                    meta.data_capturada = _plausivel(raw.other.timestamp)
                 sizes = raw.sizes
                 meta.largura, meta.altura = sizes.width, sizes.height
                 # libraw lê lente e rotação de qualquer RAW, inclusive CR3,

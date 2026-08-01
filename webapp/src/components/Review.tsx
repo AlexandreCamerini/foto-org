@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { api, type Sugestao } from "../api";
+import { Miniatura } from "./Miniatura";
+import { api, type Media, type Sugestao } from "../api";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
 
@@ -22,6 +23,7 @@ type Item = {
   data_capturada?: string | null;
   camera?: string | null;
   gps_estimado?: boolean;
+  motivo_indisponivel?: string | null;
 };
 
 /** Revisão origem→destino: o usuário decide, o motor explica.
@@ -30,7 +32,13 @@ type Item = {
  * "aprovar as 22 de Viagens/2024 - França" é uma decisão que dá para tomar
  * com a informação que se tem; "aprovar a linha 37 de 63" não é.
  */
-export default function Review({ job }: { job: Job }) {
+export default function Review({
+  job,
+  fonte,
+}: {
+  job: Job;
+  fonte?: number;
+}) {
   const [status, setStatus] = useState<string>("pendente");
   const [fechados, setFechados] = useState<Set<string>>(new Set());
   const [porque, setPorque] = useState<number | null>(null);
@@ -40,8 +48,8 @@ export default function Review({ job }: { job: Job }) {
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
-    queryKey: ["sugestoes", status],
-    queryFn: () => api.sugestoes(status),
+    queryKey: ["sugestoes", status, fonte],
+    queryFn: () => api.sugestoes(status, 0, 200, fonte),
   });
 
   const acao = useMutation({
@@ -226,12 +234,15 @@ export default function Review({ job }: { job: Job }) {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3 px-3 py-2 hover:bg-painel">
-                          <img
-                            src={api.thumbUrl(s.media_id)}
-                            alt={s.nome}
-                            loading="lazy"
-                            className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
+                        <div className="flex items-center gap-3 px-3 py-1.5 hover:bg-painel">
+                          <Miniatura
+                            media={{
+                              id: s.media_id,
+                              nome: s.nome,
+                              data_capturada: s.data_capturada ?? null,
+                              motivo_indisponivel: s.motivo_indisponivel ?? null,
+                            } as Media}
+                            className="h-9 w-12 shrink-0 rounded bg-cartao"
                           />
                           <div className="min-w-0 flex-1">
                             {/* Nome primeiro. Antes a pasta vinha antes e o

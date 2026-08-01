@@ -30,7 +30,11 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from fotoorganizer.metadata.base import MediaMetadata, MetadataExtractor
+from fotoorganizer.metadata.base import (
+    MediaMetadata,
+    MetadataExtractor,
+    data_plausivel,
+)
 from fotoorganizer.metadata.purepython import PurePythonExtractor
 
 log = logging.getLogger(__name__)
@@ -241,11 +245,13 @@ class ExifToolExtractor:
             return None
 
         meta = MediaMetadata()
-        meta.data_capturada = _data(
+        quando = _data(
             valor("EXIF:DateTimeOriginal", "EXIF:CreateDate",
                   "QuickTime:CreateDate", "XMP:DateCreated",
                   "EXIF:ModifyDate")
         )
+        # Data impossível não entra na coluna; o valor bruto segue nos extras.
+        meta.data_capturada = quando if data_plausivel(quando) else None
         meta.make = valor("EXIF:Make", "XMP:Make")
         meta.model = valor("EXIF:Model", "XMP:Model")
         meta.lente = valor("EXIF:LensModel", "MakerNotes:LensType",

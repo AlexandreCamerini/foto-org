@@ -105,6 +105,32 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_inventario(args: argparse.Namespace) -> int:
+    """O que existe e onde — inclusive o que não está alcançável agora."""
+    from fotoorganizer.repositories.inventario import levantar
+
+    _settings, factory = _abrir_catalogo(args)
+    inv = levantar(factory)
+    if not inv.fotos:
+        print("Catálogo vazio. Use `scan` ou `importar` primeiro.")
+        return 0
+
+    print(f"{inv.fotos} fotos conhecidas, de {inv.total_registros} registros")
+    print(f"({inv.alcancaveis} alcançáveis agora)\n")
+
+    largura = max((len(l.raiz) for l in inv.lugares), default=10)
+    for lugar in inv.lugares:
+        estado = (f"{lugar.alcancaveis} alcançáveis"
+                  if lugar.alcancaveis == lugar.fotos
+                  else f"{lugar.so_no_catalogo} só no catálogo")
+        print(f"  {lugar.raiz:<{largura}}  {lugar.fotos:>7}  {estado}")
+        print(f"  {'':<{largura}}  {'':>7}  via {', '.join(lugar.fontes)}")
+    if inv.sem_caminho:
+        print(f"\n  {'(sem arquivo local)':<{largura}}  {inv.sem_caminho:>7}  "
+              "referências de nuvem")
+    return 0
+
+
 def cmd_volumes(args: argparse.Namespace) -> int:
     """Onde cada fonte está — e o que está fora de alcance agora."""
     from fotoorganizer.sources.disponibilidade import verificar
@@ -421,6 +447,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "volumes", help="onde cada fonte está e o que está fora de alcance"
     ).set_defaults(func=cmd_volumes)
+
+    sub.add_parser(
+        "inventario", help="o que existe e onde, inclusive fora de alcance"
+    ).set_defaults(func=cmd_inventario)
 
     p_imp.add_argument("fonte", choices=["apple", "takeout", "lightroom"])
     p_imp.add_argument(

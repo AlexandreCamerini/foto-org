@@ -21,6 +21,9 @@ from fotoorganizer.models import (
 class SuggestionFilters:
     status: SuggestionStatus | None = SuggestionStatus.PENDENTE
     nivel: ConfidenceLevel | None = None
+    # A barra lateral vale aqui também: com 5.048 pendentes, decidir uma
+    # fonte de cada vez é o que torna a fila abordável.
+    source_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +40,11 @@ class SuggestionRow:
     data_capturada: datetime | None = None
     camera: str | None = None
     gps_estimado: bool = False
+    # A revisão precisa saber se dá para MOSTRAR a foto: o primeiro grupo da
+    # fila de um acervo real estava inteiro num volume desmontado, e a tela
+    # desenhou 18 ícones de imagem quebrada sem dizer por quê.
+    source_id: int = 0
+    arquivo_ausente: bool = False
 
 
 def _agora() -> datetime:
@@ -55,6 +63,8 @@ class SuggestionRepository:
             stmt = stmt.where(Suggestion.status == filters.status)
         if filters.nivel is not None:
             stmt = stmt.where(Suggestion.nivel == filters.nivel)
+        if filters.source_id is not None:
+            stmt = stmt.where(MediaFile.source_id == filters.source_id)
         return stmt
 
     def listar(self, filters: SuggestionFilters, limit: int,
@@ -75,6 +85,8 @@ class SuggestionRepository:
                         filter(None, [media.make, media.model])
                     ) or None,
                     gps_estimado=media.coordenada_estimada,
+                    source_id=media.source_id,
+                    arquivo_ausente=media.arquivo_ausente,
                 )
                 for sugestao, media in session.execute(stmt)
             ]

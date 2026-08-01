@@ -37,6 +37,7 @@ from fotoorganizer.config.settings import Settings
 from fotoorganizer.grouping.correlacao import campos_confiaveis
 from fotoorganizer.models import (
     Event,
+    Source,
     Location,
     MediaFile,
     MetadataEntry,
@@ -51,10 +52,12 @@ from fotoorganizer.repositories import (
     OperationRepository,
     SuggestionRepository,
 )
-from fotoorganizer.repositories.media import LACUNAS, MediaFilters
+from fotoorganizer.repositories.inventario import levantar
+from fotoorganizer.repositories.media import ALCANCES, LACUNAS, MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters, SuggestionRow
 from fotoorganizer.security.paths import CaminhoInvalido, caminho_relativo_seguro
 from fotoorganizer.server.jobs import JobManager
+from fotoorganizer.sources.disponibilidade import verificar
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.thumbnails.generator import generate_thumbnail
 
@@ -134,7 +137,7 @@ _PREVIEW_SIZE = 2048
 _WEBAPP_DIST = Path(__file__).resolve().parents[2] / "webapp" / "dist"
 
 
-def _sugestao_json(linha: SuggestionRow) -> dict:
+def _sugestao_json(linha: SuggestionRow, fora: frozenset[int] = frozenset()) -> dict:
     return {
         "id": linha.id,
         "media_id": linha.media_id,
@@ -148,6 +151,13 @@ def _sugestao_json(linha: SuggestionRow) -> dict:
         ),
         "camera": linha.camera,
         "gps_estimado": linha.gps_estimado,
+        # Por que a foto não pode ser aberta agora (a tela diz em vez de
+        # desenhar imagem quebrada). None quando está alcançável.
+        "motivo_indisponivel": (
+            "sem arquivo neste Mac" if linha.arquivo_ausente
+            else "volume ou pasta fora de alcance"
+            if linha.source_id in fora else None
+        ),
     }
 
 
@@ -166,7 +176,21 @@ def _campos_do_lugar(m: MediaFile) -> tuple[str, ...]:
     return tuple(campo for campo, _ in campos)
 
 
-def _media_json(m: MediaFile) -> dict:
+# Por que esta foto não pode ser aberta agora. `None` quando pode.
+#
+# A resposta vem da FONTE, não de um `stat` por foto: a grade pede centenas de
+# miniaturas de uma vez, e tocar o disco (ou pior, um NAS) uma vez por
+# miniatura transformaria rolagem em espera. `Source.disponivel` é mantido por
+# `sources/disponibilidade.verificar`.
+def _motivo_indisponivel(m: MediaFile, fontes_off: frozenset[int]) -> str | None:
+    if m.arquivo_ausente:
+        return "sem arquivo neste Mac"
+    if m.source_id in fontes_off:
+        return "volume ou pasta fora de alcance"
+    return None
+
+
+def _media_json(m: MediaFile, fontes_off: frozenset[int] = frozenset()) -> dict:
     return {
         "id": m.id,
         "nome": m.nome,
@@ -195,6 +219,10 @@ def _media_json(m: MediaFile) -> dict:
         "trip_id": m.trip_id,
         "event_id": m.event_id,
         "erro_leitura": m.erro_leitura,
+        # A interface precisa separar "miniatura ainda não pronta" de "não
+        # tenho como abrir isto" — sem esta marca ela desenha o ícone de
+        # imagem quebrada e o usuário conclui que o app está quebrado.
+        "motivo_indisponivel": _motivo_indisponivel(m, fontes_off),
     }
 
 
@@ -224,6 +252,14 @@ def create_app(
                 {"detail": "origem não permitida"}, status_code=403
             )
         return await call_next(request)
+
+    def _fontes_fora_de_alcance() -> frozenset[int]:
+        """Ids das fontes que não respondem agora. Uma consulta por
+        requisição, em vez de um `stat` por miniatura."""
+        with session_factory() as session:
+            return frozenset(session.scalars(
+                select(Source.id).where(Source.disponivel.is_(False))
+            ))
 
     media_repo = MediaRepository(session_factory)
     suggestion_repo = SuggestionRepository(session_factory)
@@ -266,38 +302,93 @@ def create_app(
         event_id: int | None = None,
         lacuna: str | None = None,
         ordenacao: str = "data_desc",
+        alcance: str = "tudo",
+        mes: str | None = None,
         offset: int = 0,
         limit: int = 200,
     ) -> dict:
         if lacuna is not None and lacuna not in LACUNAS:
             raise HTTPException(422, f"lacuna desconhecida: {lacuna}")
+        if alcance not in ALCANCES:
+            raise HTTPException(422, f"alcance desconhecido: {alcance}")
         filters = MediaFilters(
             busca=busca, extensao=extensao, source_id=source_id,
             ano=ano, trip_id=trip_id, event_id=event_id, lacuna=lacuna,
-            ordenacao=ordenacao,
+            ordenacao=ordenacao, alcance=alcance, mes=mes,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
+        fora = _fontes_fora_de_alcance()
         return {
             "total": media_repo.contar(filters),
             "offset": offset,
-            "itens": [_media_json(m) for m in itens],
+            "itens": [_media_json(m, fora) for m in itens],
         }
+
+    @app.get("/api/midia/alcances")
+    def alcances() -> list[dict]:
+        return [{"chave": k, "rotulo": v} for k, v in ALCANCES.items()]
 
     @app.get("/api/midia/filtros")
     def filtros_midia() -> dict:
         return {"extensoes": media_repo.extensoes(), "anos": media_repo.anos()}
 
+    @app.get("/api/midia/linha-do-tempo")
+    def linha_do_tempo(
+        busca: str | None = None,
+        extensao: str | None = None,
+        source_id: int | None = None,
+        ano: int | None = None,
+        trip_id: int | None = None,
+        event_id: int | None = None,
+        lacuna: str | None = None,
+        alcance: str = "tudo",
+    ) -> list[dict]:
+        """Meses do recorte atual, com contagem. A grade usa para saltar."""
+        if alcance not in ALCANCES:
+            raise HTTPException(422, f"alcance desconhecido: {alcance}")
+        return media_repo.linha_do_tempo(MediaFilters(
+            busca=busca, extensao=extensao, source_id=source_id, ano=ano,
+            trip_id=trip_id, event_id=event_id, lacuna=lacuna, alcance=alcance,
+        ))
+
     @app.get("/api/panorama")
     def panorama() -> dict:
         return media_repo.panorama()
+
+    @app.get("/api/inventario")
+    def inventario() -> dict:
+        """O acervo inteiro, alcançável ou não.
+
+        O Panorama respondia só sobre o que dá para abrir agora. Num acervo
+        em NAS e discos externos isso é a minoria — 5.191 de 100.164 num caso
+        real —, e a pergunta de quem está descobrindo é outra: o que existe,
+        e onde.
+        """
+        inv = levantar(session_factory)
+        return {
+            "fotos": inv.fotos,
+            "alcancaveis": inv.alcancaveis,
+            "registros": inv.total_registros,
+            "sem_caminho": inv.sem_caminho,
+            "lugares": [
+                {
+                    "raiz": lugar.raiz,
+                    "fotos": lugar.fotos,
+                    "alcancaveis": lugar.alcancaveis,
+                    "so_no_catalogo": lugar.so_no_catalogo,
+                    "fontes": list(lugar.fontes),
+                }
+                for lugar in inv.lugares
+            ],
+        }
 
     @app.get("/api/midia/{media_id}")
     def detalhe_midia(media_id: int) -> dict:
         media = media_repo.por_id(media_id)
         if media is None:
             raise HTTPException(404, "foto não encontrada")
-        detalhe = _media_json(media)
+        detalhe = _media_json(media, _fontes_fora_de_alcance())
         with session_factory() as session:
             # Só no detalhe: na grade isto seria uma consulta por miniatura.
             # O lugar pode ter vindo de GPS próprio ou herdado de outra
@@ -450,12 +541,20 @@ def create_app(
                 return media.id
         return candidatos[0].id if candidatos else None
 
-    def _agrupamentos(session, modelo, coluna) -> list[dict]:
+    def _agrupamentos(session, modelo, coluna,
+                      source_id: int | None = None) -> list[dict]:
         resultado = []
         for grupo in session.scalars(select(modelo).order_by(modelo.inicio)):
+            filtro = [coluna == grupo.id]
+            if source_id is not None:
+                filtro.append(MediaFile.source_id == source_id)
             contagem = session.scalar(
-                select(func.count(MediaFile.id)).where(coluna == grupo.id)
+                select(func.count(MediaFile.id)).where(*filtro)
             ) or 0
+            # Grupo sem nenhuma foto da fonte escolhida não é resultado vazio,
+            # é um grupo que não pertence a este recorte.
+            if source_id is not None and contagem == 0:
+                continue
             resultado.append({
                 "id": grupo.id,
                 "nome": grupo.nome,
@@ -468,31 +567,33 @@ def create_app(
         return resultado
 
     @app.get("/api/viagens")
-    def viagens() -> list[dict]:
+    def viagens(source_id: int | None = None) -> list[dict]:
         with session_factory() as session:
-            return _agrupamentos(session, Trip, MediaFile.trip_id)
+            return _agrupamentos(session, Trip, MediaFile.trip_id, source_id)
 
     @app.get("/api/eventos")
-    def eventos() -> list[dict]:
+    def eventos(source_id: int | None = None) -> list[dict]:
         with session_factory() as session:
-            return _agrupamentos(session, Event, MediaFile.event_id)
+            return _agrupamentos(session, Event, MediaFile.event_id, source_id)
 
     # -- sugestões e duplicatas (leitura; ações nas fatias seguintes) --------
     @app.get("/api/sugestoes")
-    def sugestoes(status: str = "pendente", offset: int = 0,
+    def sugestoes(status: str = "pendente", source_id: int | None = None,
+                  offset: int = 0,
                   limit: int = 200) -> dict:
         try:
             status_enum = SuggestionStatus(status)
         except ValueError:
             raise HTTPException(422, f"status inválido: {status}")
-        filters = SuggestionFilters(status=status_enum)
+        filters = SuggestionFilters(status=status_enum, source_id=source_id)
         linhas = suggestion_repo.listar(
             filters, limit=max(1, min(limit, 500)), offset=offset
         )
         contagens = suggestion_repo.contagens_por_status()
+        fora = _fontes_fora_de_alcance()
         return {
             "contagens": {s.value: n for s, n in contagens.items()},
-            "itens": [_sugestao_json(linha) for linha in linhas],
+            "itens": [_sugestao_json(linha, fora) for linha in linhas],
         }
 
     @app.get("/api/duplicatas")
@@ -550,7 +651,7 @@ def create_app(
         atualizada = suggestion_repo.editar_destino(suggestion_id, destino)
         if atualizada is None:
             raise HTTPException(404, "sugestão não encontrada")
-        return _sugestao_json(atualizada)
+        return _sugestao_json(atualizada, _fontes_fora_de_alcance())
 
     @app.post("/api/duplicatas/detectar")
     def detectar_duplicatas() -> dict:
@@ -737,5 +838,23 @@ def create_app(
         app.mount(
             "/", StaticFiles(directory=_WEBAPP_DIST, html=True), name="webapp"
         )
+
+    @app.on_event("startup")
+    def _conferir_fontes() -> None:
+        """Quem está ao alcance agora, uma vez ao abrir.
+
+        Sem isto, `Source.disponivel` guarda o estado da última verificação —
+        e o usuário que plugou o disco antes de abrir o app veria tudo como
+        fora de alcance. Custa um `diskutil` por fonte, no boot."""
+        try:
+            estados = verificar(session_factory)
+        except Exception:
+            log.warning("não consegui conferir as fontes ao abrir",
+                        exc_info=True)
+            return
+        fora = [e for e in estados if not e.disponivel]
+        if fora:
+            log.info("fontes fora de alcance: %s",
+                     ", ".join(f"{e.apelido} ({e.resumo()})" for e in fora))
 
     return app

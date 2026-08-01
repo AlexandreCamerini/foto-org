@@ -10,8 +10,12 @@ describe("App", () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
 
-    expect(await screen.findByText("8 fotos no catálogo.", { exact: false }))
-      .toBeInTheDocument();
+    // "8 fotos no catálogo" virou "das 8 fotos que dá para organizar agora":
+    // o total da tela passou a ser o acervo conhecido, e as lacunas dizem
+    // explicitamente sobre que subconjunto falam.
+    expect(
+      await screen.findByText(/das 8 fotos que dá para organizar agora/),
+    ).toBeInTheDocument();
     expect(screen.getByText("sem data de captura")).toBeInTheDocument();
     expect(screen.getByText("sem coordenada")).toBeInTheDocument();
   });
@@ -48,6 +52,9 @@ describe("App", () => {
     const usuario = userEvent.setup();
     montar(<App />);
 
+    // A lateral não existe mais no Panorama, que é a visão do acervo
+    // inteiro: o atalho se testa onde ela age.
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
     expect(await screen.findByText("Fontes")).toBeInTheDocument();
     // "[[" é como o user-event escreve um "[" literal — sozinho ele abre
     // um descritor de tecla.
@@ -94,6 +101,73 @@ describe("App", () => {
   it("a barra de status mostra os totais em qualquer aba", async () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
-    expect(await screen.findByText("8 fotos · 1 fontes")).toBeInTheDocument();
+    expect(await screen.findByText("8 organizáveis · 1 fontes")).toBeInTheDocument();
+  });
+});
+
+
+describe("o acervo, antes das lacunas", () => {
+  it("abre com o que existe, não com o que dá para abrir agora", async () => {
+    // Num acervo real eram 100.164 fotos conhecidas e 4.932 alcançáveis. A
+    // tela abria com "5.191 no catálogo" e escondia o resto — respondendo a
+    // pergunta errada para quem está tentando descobrir o que tem.
+    servirApi(ROTAS_BASE);
+    montar(<App />);
+
+    expect(await screen.findByText("O acervo")).toBeInTheDocument();
+    expect(screen.getByText("30")).toBeInTheDocument();
+    expect(screen.getByText(/8 alcançáveis agora/)).toBeInTheDocument();
+
+    // O disco na gaveta aparece, com o motivo.
+    expect(screen.getByText("/Volumes/photo")).toBeInTheDocument();
+    expect(
+      screen.getByText(/fora de alcance — volume não montado/),
+    ).toBeInTheDocument();
+
+    // E as lacunas ficam explicitamente escopadas ao organizável.
+    expect(
+      await screen.findByText(/das 8 fotos que dá para organizar agora/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("os dois menus", () => {
+  it("a barra lateral só aparece onde ela age", async () => {
+    // Ela definia `fonte`, que só a Biblioteca lia. Nas outras cinco telas
+    // ficava visível, clicável e inerte — o que o dono descreveu como "os
+    // dois menus não funcionam bem juntos".
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    // Panorama: é a visão do acervo inteiro, sem filtro de fonte.
+    await screen.findByText("O acervo");
+    expect(screen.queryByText("Fontes")).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Biblioteca" }));
+    expect(await screen.findByText("Fontes")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Revisão" }));
+    expect(screen.getByText("Fontes")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Operações" }));
+    expect(screen.queryByText("Fontes")).not.toBeInTheDocument();
+  });
+});
+
+describe("âncora temporal", () => {
+  it("a régua de tempo salta filtrando, e dá para voltar", async () => {
+    // Com 103.938 registros paginados de 200 em 200, chegar em 2015 rolando
+    // exigiria carregar tudo que veio antes. O salto é por filtro.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
+    // O ano aparece como cabeçalho e o mês como botão clicável.
+    expect(await screen.findByText("2024")).toBeInTheDocument();
+    await usuario.click(screen.getByTitle("jun/2024 · 5 fotos"));
+
+    expect(await screen.findByText(/todo o período/)).toBeInTheDocument();
   });
 });
