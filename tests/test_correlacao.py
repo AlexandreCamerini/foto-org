@@ -3,9 +3,13 @@
 from datetime import datetime, timedelta
 
 from fotoorganizer.grouping import (
+    RAIO_PISO_M,
+    RAIO_TETO_M,
+    VELOCIDADE_PLAUSIVEL_MS,
     FotoRef,
     estimar_offsets,
     herdar_gps,
+    raio_incerteza,
 )
 
 CANON = ("Canon", "EOS R6")
@@ -220,3 +224,65 @@ def test_hora_vinda_do_arquivo_vale_menos():
         [_canon(1, 0), _iphone(2, 30, hora_do_arquivo=True)]
     ), 1)
     assert pelo_doador.hora_incerta is True
+
+
+# -- raio de incerteza (docs/LOCAL_ESTIMADO.md) -------------------------------
+def test_raio_nunca_vira_ponto():
+    """Δt zero não é certeza: a coordenada da doadora tem o erro do receptor.
+
+    Um raio zero desenharia a estimativa igual a uma medição — exatamente a
+    mentira que o círculo existe para desfazer.
+    """
+    assert raio_incerteza(timedelta(0)) == RAIO_PISO_M
+    assert raio_incerteza(timedelta(seconds=1)) == RAIO_PISO_M
+
+
+def test_raio_cresce_com_a_velocidade_plausivel():
+    v = VELOCIDADE_PLAUSIVEL_MS
+    assert raio_incerteza(timedelta(minutes=10)) == 600 * v
+    assert raio_incerteza(timedelta(hours=1)) == 3600 * v
+
+
+def test_raio_para_de_crescer_no_teto():
+    """A distância à doadora satura no acervo medido; o raio satura junto.
+
+    Sem teto, as 12 h da janela de país virariam 259 km — um círculo que
+    cobre tudo e não informa nada.
+    """
+    assert raio_incerteza(timedelta(hours=12)) == RAIO_TETO_M
+    assert raio_incerteza(timedelta(hours=20)) == RAIO_TETO_M
+    assert RAIO_TETO_M < 12 * 3600 * VELOCIDADE_PLAUSIVEL_MS
+
+
+def test_raio_ignora_o_sinal_do_delta():
+    """Doadora antes ou depois erra igual — `herdar_gps` já entrega |Δt|,
+    mas a função pura não pode devolver raio negativo se receber."""
+    assert raio_incerteza(timedelta(minutes=-7)) == raio_incerteza(
+        timedelta(minutes=7)
+    )
+
+
+def test_raio_nunca_encolhe_com_o_tempo():
+    minutos = [0, 1, 2, 5, 10, 30, 60, 120, 360, 720]
+    raios = [raio_incerteza(timedelta(minutes=m)) for m in minutos]
+    assert raios == sorted(raios)
+    assert raios[0] == RAIO_PISO_M and raios[-1] == RAIO_TETO_M
+
+
+def test_raio_por_granularidade_bate_com_a_escala_do_campo():
+    """D-025 em metros: a cidade cabe em quilômetros, a região em dezenas.
+
+    Se estes números saírem da escala do nome do campo, o círculo passou a
+    dizer uma coisa e a justificativa outra.
+    """
+    assert raio_incerteza(timedelta(minutes=10)) == 3_600      # cidade
+    assert raio_incerteza(timedelta(hours=2)) == 43_200        # região
+    assert raio_incerteza(timedelta(hours=12)) == 50_000       # país (teto)
+
+
+def test_heranca_carrega_o_proprio_raio():
+    h = _de(herdar_gps([_canon(1, 0), _iphone(2, 5 * 60)]), 1)
+    assert h.delta == timedelta(minutes=5)
+    assert h.raio_m == raio_incerteza(timedelta(minutes=5))
+    # 5 min de câmera para telefone: raio de 1,8 km, escala de bairro.
+    assert h.raio_m == 1_800

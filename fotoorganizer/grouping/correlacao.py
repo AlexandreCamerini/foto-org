@@ -47,6 +47,27 @@ _MIN_ANCORAS = 2
 # aparecer na badge, não só na justificativa.
 _PENALIDADE_HORA_DE_ARQUIVO = 0.6
 
+# — raio de incerteza do lugar herdado (docs/LOCAL_ESTIMADO.md) —
+# A coordenada herdada é a da DOADORA, não a da foto. Desenhá-la como ponto
+# afirma uma precisão que o dado não tem; o raio é o tamanho honesto dessa
+# afirmação. Os três números abaixo foram CALIBRADOS contra 2.083 pares reais
+# do acervo em que as duas fotos têm GPS próprio e origens diferentes —
+# `scripts/calibrar_raio_incerteza.py` refaz a medição.
+#
+# Velocidade plausível de deslocamento: ~22 km/h, a média de quem se move numa
+# cidade contando as paradas. Não é a velocidade de um carro: é a taxa com que
+# a distância até a doadora cresce no acervo medido.
+VELOCIDADE_PLAUSIVEL_MS = 6.0
+# Piso: nem com Δt zero o círculo vira ponto — a própria coordenada da doadora
+# tem a imprecisão do receptor de GPS (5–15 m em céu aberto).
+RAIO_PISO_M = 15.0
+# Teto: a distância à doadora para de crescer. Medido, não suposto — o p90 da
+# banda de 6–12 h (25 km) é MENOR que o da banda de 30 min–2 h (39 km): quem
+# fotografa o dia inteiro passa o dia na mesma região. 50 km cobre o p90 de
+# todas as bandas de deslocamento real; continuar linear até as 12 h da janela
+# de país daria 259 km de raio e não informaria nada.
+RAIO_TETO_M = 50_000.0
+
 
 @dataclass(frozen=True, slots=True)
 class FotoRef:
@@ -102,6 +123,14 @@ class Heranca:
         """O campo mais fino que este Δt sustenta — o que a justificativa
         precisa dizer para não prometer precisão que não existe."""
         return self.campos[-1][0]
+
+    @property
+    def raio_m(self) -> float:
+        """Raio, em metros, da região onde esta foto plausivelmente está.
+
+        O mapa desenha isto como círculo; o ponto no centro é da doadora.
+        """
+        return raio_incerteza(self.delta)
 
 
 def estimar_offsets(
@@ -255,3 +284,25 @@ def campos_confiaveis(
             fator *= _PENALIDADE_HORA_DE_ARQUIVO
         resultado.append((campo, round(fator, 3)))
     return tuple(resultado)
+
+
+def raio_incerteza(delta: timedelta) -> float:
+    """Até onde, em metros, a foto pode estar da doadora com este Δt.
+
+    `raio = velocidade plausível × Δt`, preso entre um piso (a imprecisão do
+    próprio receptor de GPS) e um teto (a distância em que, no acervo medido,
+    o crescimento para). É a mesma frase de D-025 dita em metros: em dez
+    minutos não se troca de cidade, em doze horas não se troca de país.
+
+    Cobre 93,6% dos pares medidos do acervo real — a calibração inteira está
+    em `docs/LOCAL_ESTIMADO.md`, e `scripts/calibrar_raio_incerteza.py` a
+    refaz. Vale para um Δt confiável: quando a hora de um dos lados veio do
+    mtime do arquivo (`Heranca.hora_incerta`), o Δt pode estar errado por
+    muito mais do que qualquer raio — quem avisa disso é a confiança, não o
+    círculo.
+
+    O sinal do Δt não importa: doadora antes ou depois erra igual.
+    """
+    segundos = abs(delta.total_seconds())
+    return min(RAIO_TETO_M,
+               max(RAIO_PISO_M, VELOCIDADE_PLAUSIVEL_MS * segundos))

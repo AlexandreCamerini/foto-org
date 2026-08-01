@@ -536,3 +536,87 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   divisor de acontecimento.
 - Como reverter: não se aplica; a alternativa produziria eventos sobrepostos.
 - Status: decidido por medição
+
+---
+
+## D-031 — O mapa do lugar estimado nasce sem tiles
+
+- Fase: 9 (docs/prompts/fase-9-mapa-e-prioridades.md, Problema 2)
+- Classe: B
+- Data: 2026-08-01
+- Contexto: o protótipo `docs/prototipos/03-mapa-local-estimado.html` fechou
+  decidindo a linguagem visual do lugar estimado (ponto cheio × vazado, traço
+  até a doadora) e deixou em aberto de onde vem o mapa de verdade — decisão
+  que ele mesmo apontou não ser de direção de arte. Pedir um tile a um
+  servidor externo por coordenada revela a esse servidor onde cada foto foi
+  tirada, foto a foto — é o invariante 4 do `CLAUDE.md` (nada sai da máquina
+  sem opt-in) se aplicando a um caminho que ainda não tinha sido nomeado.
+- Opções: (a) tiles de um serviço externo (Mapbox/OSM tile server), com cache
+  local e consentimento explícito antes da primeira requisição; (b) tiles
+  vetoriais embarcados offline (ex.: recorte de OpenStreetMap por região,
+  dezenas a poucas centenas de MB conforme a área coberta pelo acervo); (c)
+  nenhuma cartografia real — pontos, círculos de incerteza e o traço até a
+  doadora desenhados sobre uma malha esquemática, como o próprio protótipo já
+  fez de propósito.
+- Escolhida: (c) agora; (b) fica candidata em `docs/ROADMAP.md` v2+ para
+  quando houver pedido concreto de "ver no mapa de verdade".
+- Por quê: (c) tem custo zero — sem dependência nova, sem MB de tile
+  embarcado, sem requisição de rede nenhuma ao abrir a tela — e entrega a
+  maior parte do valor do problema, que é mostrar a incerteza do lugar
+  estimado, não desenhar ruas. (a) está fora por violar o invariante 4 sem
+  necessidade: a informação nova desta fase é o raio de incerteza, não a
+  cartografia. (b) resolveria sem vazar nada, mas o custo em disco (a
+  estimar por região coberta) só se justifica se a interface esquemática se
+  mostrar insuficiente na prática.
+- Como reverter: trocar o componente de desenho por um que carregue tiles de
+  (b) ou (a); nenhum dado persistido depende desta escolha, ela é só de
+  apresentação.
+- Status: decidido pelo orquestrador, sem objeção do dono no momento da
+  execução (sessão interativa, decisão comunicada no plano antes do
+  despacho).
+
+---
+
+## D-032 — O raio de incerteza é medido, não suposto pela janela de D-025
+
+- Fase: 9 (docs/prompts/fase-9-mapa-e-prioridades.md, Problema 1)
+- Classe: A
+- Data: 2026-08-01
+- Contexto: D-025 fixou janelas de granularidade por campo (cidade 10 min,
+  região 2 h, país 12 h) como texto — "em duas horas se troca de cidade, não
+  de país". Esta fase precisava da mesma ideia como número: um raio em
+  metros que o mapa desenha como círculo ao redor do ponto herdado. A
+  hipótese de partida era ancorar o teto do raio na janela de país (12 h),
+  o que daria ~259 km.
+- Medido: 2.083 pares reais do acervo em que as duas fotos têm GPS próprio e
+  vieram de fontes diferentes — a mesma regra de escolha de doadora que
+  `herdar_gps` usa. Para cada par, a distância real entre as duas fotos foi
+  comparada ao raio que a fórmula proporia para aquele Δt. Achado central: a
+  distância real **satura** antes do teto suposto — o p90 da banda 6–12 h
+  (25 km) é *menor* que o p90 da banda 30 min–2 h (39 km). Quem fotografa o
+  dia inteiro passa o dia na mesma região; a janela de país nunca é
+  alcançada na prática.
+- Escolhida: `raio(Δt) = min(50 km, max(15 m, 6 m/s × Δt))` — piso na
+  precisão do receptor GPS, teto no platô medido (50 km), não na janela de
+  12 h. Cobertura: 93,6% ponderada por Δt (96,2% por dia; bootstrap p5:
+  92,4%) — acima do piso de 90% fixado no prompt da fase.
+- Por quê: um teto derivado da janela de país (259 km) teria a mesma
+  cobertura medida (93,6%) e um círculo grande demais para informar
+  qualquer coisa — a mesma armadilha que D-025 já havia nomeado ("sugestão
+  errada com aparência de fundamentada é pior que nenhuma"), aqui aplicada
+  ao raio em vez de ao texto da evidência.
+- Não modelado: quando a hora de um dos lados vem do mtime do arquivo
+  (`Heranca.hora_incerta`), o Δt pode estar errado por anos — nenhum
+  multiplicador foi inventado para esse caso sem dado que o sustente; quem
+  avisa é a confiança da evidência, não o tamanho do círculo.
+- Achado à parte, não resolvido aqui: dos ~6,4% de pares fora do raio, um
+  grupo específico (2019-04-19) tem a doadora com coordenada **errada** — o
+  Apple Fotos marca a foto em casa, no Rio, no mesmo segundo em que a
+  câmera está a 163 km, em Penedo. Nenhum raio conserta doadora errada;
+  ficou registrado como tarefa separada (qualidade da doadora), não como
+  ajuste de fórmula.
+- Como reverter: `VELOCIDADE_PLAUSIVEL_MS`, `RAIO_PISO_M`, `RAIO_TETO_M` em
+  `fotoorganizer/grouping/correlacao.py`; `scripts/calibrar_raio_incerteza.py`
+  refaz a medição contra o catálogo atual. Nada persistido depende do raio —
+  ele é calculado na leitura, nunca gravado.
+- Status: decidido por medição.
