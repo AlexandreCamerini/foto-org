@@ -11,6 +11,7 @@ import pytest
 from fotoorganizer.grouping.eventos_temporais import (
     Momento,
     dividir_em_eventos,
+    dividir_sessao,
 )
 
 BASE = datetime(2026, 5, 9, 8, 0)
@@ -124,3 +125,46 @@ def test_ordem_de_entrada_nao_importa():
 def test_nenhum_bloco_sai_vazio():
     for blocos in (dividir_em_eventos(_fotos([0, 700, 1400, 2100]))):
         assert blocos
+
+
+# -- viagem não se divide ----------------------------------------------------
+def test_viagem_continua_sendo_uma_pasta_so():
+    """O Pantanal, três dias, virou quatro blocos na primeira versão — uma
+    saída por manhã e outra por tarde. Isso desfaz o commit 9670765: a viagem
+    Tailândia–Vietnã já esteve partida em três destinos porque só 106 das
+    2.405 fotos tinham GPS, e a forma da pasta acabava dependendo de qual
+    foto por acaso gravou coordenada."""
+    # Três dias de saídas, com noites entre elas.
+    dia1 = list(range(0, 240, 10))
+    dia2 = list(range(1440, 1680, 10))
+    dia3 = list(range(2880, 3120, 10))
+    fotos = _fotos(dia1 + dia2 + dia3)
+
+    assert len(dividir_em_eventos(fotos)) == 3      # navegar: três saídas
+    assert len(dividir_sessao(fotos, e_viagem=True)) == 1   # destino: uma pasta
+    # E mesmo sem o rótulo de viagem: três dias atravessam noites, então é
+    # estadia. O destino não depende de o classificador ter acertado o rótulo.
+    assert len(dividir_sessao(fotos, e_viagem=False)) == 1
+
+
+def test_viagem_sem_fotos_nao_inventa_bloco():
+    assert dividir_sessao([], e_viagem=True) == []
+
+
+def test_sessao_que_atravessa_noites_e_um_destino_so():
+    """O Pantanal: 97 fotos de 18 a 20 de julho, rotuladas "evento" porque a
+    duração de 1 dia e 23 h não alcança o limiar de viagem de 3 dias. A régua
+    de ritmo partia em quatro saídas — e a forma da pasta não pode depender
+    de uma fresta do classificador."""
+    dia1 = list(range(0, 240, 10))
+    dia2 = list(range(1440, 1680, 10))
+    dia3 = list(range(2880, 3120, 10))
+    fotos = _fotos(dia1 + dia2 + dia3)
+    assert len(dividir_sessao(fotos, e_viagem=False)) == 1
+
+
+def test_festa_que_vira_a_noite_ainda_e_uma_festa():
+    """22h às 2h atravessa a meia-noite e cabe em 20 h corridas: continua
+    sendo um acontecimento, e a régua de ritmo ainda vale dentro dele."""
+    fotos = _fotos(list(range(0, 240, 5)), inicio=datetime(2026, 5, 9, 22, 0))
+    assert len(dividir_sessao(fotos, e_viagem=False)) == 1

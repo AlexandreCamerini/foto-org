@@ -24,6 +24,18 @@ Deslocamento corta independente do tempo: mudar de lugar encerra o que estava
 acontecendo, e é o sinal mais forte quando existe. Neste acervo ele existe
 para poucas fotos (só a 5D Mark IV grava GPS, ver D-029), então a régua não
 pode depender dele.
+
+**Viagem não se divide.** Um evento acontece dentro de um dia; uma viagem
+contém dias. Aplicar esta régua a uma viagem produz uma saída por manhã e
+outra por tarde — foi o que aconteceu com o Pantanal, três dias que viraram
+quatro blocos —, e isso desfaz a decisão do commit 9670765: a viagem
+Tailândia–Vietnã já esteve partida em três destinos porque só 106 das 2.405
+fotos tinham GPS, e a forma da pasta acabava dependendo de qual foto por
+acaso gravou coordenada.
+
+Dentro de uma viagem os blocos servem para navegar — ver o dia 2 separado do
+dia 3 na tela — nunca para virar pasta. Por isso `dividir_sessao` recebe o
+tipo: quem chama precisa dizer o que está dividindo.
 """
 
 from __future__ import annotations
@@ -49,6 +61,16 @@ FATOR = 6.0
 # Deslocamento que encerra um acontecimento mesmo com as fotos coladas no
 # tempo. 3 km separa bairros sem separar salões do mesmo casamento.
 DESLOCAMENTO_KM = 3.0
+# Além disto, a sessão não é um acontecimento: é uma estadia com noites no
+# meio, e vira um destino só. Medido em horas corridas, não em dias de
+# calendário — uma festa das 22h às 02h atravessa a meia-noite e continua
+# sendo uma festa.
+#
+# É o que segura o caso do Pantanal: 97 fotos ao longo de 18 a 20 de julho,
+# que a régua de ritmo partia em quatro saídas. O motor o classificou como
+# "evento" porque a duração — 1 dia e 23 h — não alcança o limiar de viagem
+# de 3 dias, e essa fresta não pode determinar a forma da pasta.
+DURACAO_MAX_ACONTECIMENTO = timedelta(hours=20)
 # Quantos intervalos ANTERIORES definem "o ritmo local". A janela olha só para
 # trás de propósito: a fronteira é o intervalo que destoa do que aquelas fotos
 # vinham fazendo, e uma janela simétrica enxerga o bloco seguinte e se
@@ -89,8 +111,34 @@ def _ritmo_local(intervalos: list[timedelta], i: int) -> timedelta | None:
     return median(anteriores) if anteriores else None
 
 
+def dividir_sessao(
+    momentos: list[Momento], e_viagem: bool
+) -> list[list[int]]:
+    """A divisão que vale para destino.
+
+    Um bloco só quando a sessão é viagem, ou quando ela atravessa noites —
+    aí é estadia, não acontecimento, mesmo que o classificador a tenha
+    rotulado de evento por não alcançar o limiar de duração.
+
+    `dividir_em_eventos` continua disponível para navegação: ver o dia 2
+    separado do dia 3 na tela é útil e não vira pasta.
+    """
+    if not momentos:
+        return []
+    ordenados = sorted(momentos, key=lambda m: m.quando)
+    atravessa_noites = (
+        ordenados[-1].quando - ordenados[0].quando
+    ) > DURACAO_MAX_ACONTECIMENTO
+    if e_viagem or atravessa_noites:
+        return [[m.media_id for m in ordenados]]
+    return dividir_em_eventos(ordenados)
+
+
 def dividir_em_eventos(momentos: list[Momento]) -> list[list[int]]:
-    """Blocos de `media_id`, na ordem do tempo. Nunca devolve bloco vazio."""
+    """Blocos de `media_id`, na ordem do tempo. Nunca devolve bloco vazio.
+
+    Não aplique a uma viagem — use `dividir_sessao`.
+    """
     if not momentos:
         return []
     ordenados = sorted(momentos, key=lambda m: m.quando)
