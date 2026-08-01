@@ -491,12 +491,20 @@ def create_app(
                 return media.id
         return candidatos[0].id if candidatos else None
 
-    def _agrupamentos(session, modelo, coluna) -> list[dict]:
+    def _agrupamentos(session, modelo, coluna,
+                      source_id: int | None = None) -> list[dict]:
         resultado = []
         for grupo in session.scalars(select(modelo).order_by(modelo.inicio)):
+            filtro = [coluna == grupo.id]
+            if source_id is not None:
+                filtro.append(MediaFile.source_id == source_id)
             contagem = session.scalar(
-                select(func.count(MediaFile.id)).where(coluna == grupo.id)
+                select(func.count(MediaFile.id)).where(*filtro)
             ) or 0
+            # Grupo sem nenhuma foto da fonte escolhida não é resultado vazio,
+            # é um grupo que não pertence a este recorte.
+            if source_id is not None and contagem == 0:
+                continue
             resultado.append({
                 "id": grupo.id,
                 "nome": grupo.nome,
@@ -509,24 +517,25 @@ def create_app(
         return resultado
 
     @app.get("/api/viagens")
-    def viagens() -> list[dict]:
+    def viagens(source_id: int | None = None) -> list[dict]:
         with session_factory() as session:
-            return _agrupamentos(session, Trip, MediaFile.trip_id)
+            return _agrupamentos(session, Trip, MediaFile.trip_id, source_id)
 
     @app.get("/api/eventos")
-    def eventos() -> list[dict]:
+    def eventos(source_id: int | None = None) -> list[dict]:
         with session_factory() as session:
-            return _agrupamentos(session, Event, MediaFile.event_id)
+            return _agrupamentos(session, Event, MediaFile.event_id, source_id)
 
     # -- sugestões e duplicatas (leitura; ações nas fatias seguintes) --------
     @app.get("/api/sugestoes")
-    def sugestoes(status: str = "pendente", offset: int = 0,
+    def sugestoes(status: str = "pendente", source_id: int | None = None,
+                  offset: int = 0,
                   limit: int = 200) -> dict:
         try:
             status_enum = SuggestionStatus(status)
         except ValueError:
             raise HTTPException(422, f"status inválido: {status}")
-        filters = SuggestionFilters(status=status_enum)
+        filters = SuggestionFilters(status=status_enum, source_id=source_id)
         linhas = suggestion_repo.listar(
             filters, limit=max(1, min(limit, 500)), offset=offset
         )

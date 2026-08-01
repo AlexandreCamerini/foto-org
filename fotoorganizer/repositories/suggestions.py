@@ -21,6 +21,9 @@ from fotoorganizer.models import (
 class SuggestionFilters:
     status: SuggestionStatus | None = SuggestionStatus.PENDENTE
     nivel: ConfidenceLevel | None = None
+    # A barra lateral vale aqui também: com 5.048 pendentes, decidir uma
+    # fonte de cada vez é o que torna a fila abordável.
+    source_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +63,8 @@ class SuggestionRepository:
             stmt = stmt.where(Suggestion.status == filters.status)
         if filters.nivel is not None:
             stmt = stmt.where(Suggestion.nivel == filters.nivel)
+        if filters.source_id is not None:
+            stmt = stmt.where(MediaFile.source_id == filters.source_id)
         return stmt
 
     def listar(self, filters: SuggestionFilters, limit: int,

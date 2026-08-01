@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { FiltrosMidia } from "./api";
+import { api, type FiltrosMidia } from "./api";
 import Inspector from "./components/Inspector";
 import Loupe from "./components/Loupe";
 import Duplicates from "./components/Duplicates";
@@ -34,6 +35,18 @@ const DICAS: Record<Aba, string> = {
   Operações: "plano → dry-run → cópia verificada; o original nunca é tocado",
 };
 
+/** Onde a barra lateral tem efeito.
+ *
+ * Ela definia `fonte`, que só a Biblioteca lia — nas outras cinco telas ficava
+ * visível, clicável e inerte, e foi o que o dono descreveu como "os dois menus
+ * não funcionam bem juntos". Um controle visível age sobre a tela em que está;
+ * onde não age, não aparece.
+ *
+ * Duplicatas fica de fora por natureza: um grupo de duplicatas cruza fontes,
+ * e filtrar por uma delas esconderia metade de cada par. Operações é sobre
+ * planos, não sobre fotos. Panorama é a visão do acervo inteiro. */
+const ABAS_COM_FONTE = ["Biblioteca", "Revisão", "Viagens"];
+
 export default function App() {
   // Abre no Panorama: a primeira pergunta de quem tem 30 mil fotos é "em
   // que estado isso está?", não "me mostre a grade".
@@ -54,6 +67,8 @@ export default function App() {
   // elas não têm arquivo local e ficavam invisíveis. Agora aparecem por
   // padrão, marcadas, e este controle isola o que é acionável.
   const [alcance, setAlcance] = useState("tudo");
+  // Mesma queryKey da Sidebar: o cache do react-query serve as duas.
+  const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const colunasRef = useRef(1);
 
   const filtros: FiltrosMidia = {
@@ -157,11 +172,27 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {sidebarVisivel && (
+        {sidebarVisivel && ABAS_COM_FONTE.includes(aba) && (
           <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
         )}
 
         <main className="flex min-w-0 flex-1 flex-col">
+          {/* O filtro ativo aparece igual nas três telas em que vale. Antes a
+              fonte só se via destacada na lateral e o recorte virava chip:
+              dois estados de filtro com aparências diferentes, e nenhum jeito
+              de saber, olhando o conteúdo, por que ele estava reduzido. */}
+          {fonte !== null && ABAS_COM_FONTE.includes(aba) && (
+            <div className="flex items-center gap-2 border-b border-borda px-3 py-1.5">
+              <span className="text-texto-3">Filtrando por</span>
+              <button
+                onClick={() => setFonte(null)}
+                className="flex items-center gap-1 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
+                title="Mostrar todas as fontes"
+              >
+                {fontes?.find((f) => f.id === fonte)?.apelido ?? "fonte"} ✕
+              </button>
+            </div>
+          )}
           {aba === "Panorama" && (
             <Panorama
               aoRecortar={(novo) => {
@@ -172,13 +203,14 @@ export default function App() {
           )}
           {aba === "Viagens" && (
             <Trips
+              fonte={fonte ?? undefined}
               onAbrir={(filtro, nome) => {
                 setRecorte({ ...filtro, nome });
                 setAba("Biblioteca");
               }}
             />
           )}
-          {aba === "Revisão" && <Review job={job} />}
+          {aba === "Revisão" && <Review job={job} fonte={fonte ?? undefined} />}
           {aba === "Duplicatas" && <Duplicates job={job} />}
           {aba === "Operações" && <Operations job={job} />}
           {aba === "Biblioteca" && (

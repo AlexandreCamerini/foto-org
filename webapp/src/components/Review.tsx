@@ -32,15 +32,21 @@ type Item = {
  * "aprovar as 22 de Viagens/2024 - França" é uma decisão que dá para tomar
  * com a informação que se tem; "aprovar a linha 37 de 63" não é.
  */
-export default function Review({ job }: { job: Job }) {
+export default function Review({
+  job,
+  fonte,
+}: {
+  job: Job;
+  fonte?: number;
+}) {
   const [status, setStatus] = useState<string>("pendente");
   const [fechados, setFechados] = useState<Set<string>>(new Set());
   const [porque, setPorque] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
-    queryKey: ["sugestoes", status],
-    queryFn: () => api.sugestoes(status),
+    queryKey: ["sugestoes", status, fonte],
+    queryFn: () => api.sugestoes(status, 0, 200, fonte),
   });
 
   const acao = useMutation({

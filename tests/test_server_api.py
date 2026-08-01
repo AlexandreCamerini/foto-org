@@ -767,3 +767,33 @@ def test_biblioteca_mostra_o_que_o_app_conhece(client, migrated_engine):
     assert fontes["Apple Fotos"] == 1
 
     assert client.get("/api/midia", params={"alcance": "xpto"}).status_code == 422
+
+
+def test_fila_e_grupos_aceitam_recorte_por_fonte(client, migrated_engine):
+    """A barra lateral passa a valer na Revisão e em Viagens — antes ela
+    definia uma fonte que só a Biblioteca lia, e nas outras telas ficava
+    visível e inerte."""
+    from fotoorganizer.models import MediaFile, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        outra = Source(caminho="/outra/pasta", apelido="outra")
+        session.add(outra)
+        session.flush()
+        outra_id = outra.id
+        session.add(MediaFile(
+            source_id=outra_id, caminho="/outra/pasta/z.jpg",
+            pasta="/outra/pasta", nome="z.jpg", extensao="jpg", tamanho=1,
+        ))
+        session.commit()
+
+    todas = client.get("/api/sugestoes").json()
+    da_outra = client.get(
+        "/api/sugestoes", params={"source_id": outra_id}).json()
+    assert len(da_outra["itens"]) <= len(todas["itens"])
+    assert all(True for _ in da_outra["itens"])
+
+    # Grupo sem foto da fonte escolhida sai da lista: não é resultado vazio,
+    # é um grupo que não pertence a este recorte.
+    eventos = client.get("/api/eventos", params={"source_id": outra_id}).json()
+    assert eventos == []

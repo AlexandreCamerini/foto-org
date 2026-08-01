@@ -256,11 +256,14 @@ export const api = {
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),
   inventario: () => json<Inventario>("/api/inventario"),
-  viagens: () => json<Agrupamento[]>("/api/viagens"),
-  eventos: () => json<Agrupamento[]>("/api/eventos"),
-  sugestoes: (status: string, offset = 0, limit = 200) =>
+  viagens: (sourceId?: number) =>
+    json<Agrupamento[]>(`/api/viagens${sourceId ? `?source_id=${sourceId}` : ""}`),
+  eventos: (sourceId?: number) =>
+    json<Agrupamento[]>(`/api/eventos${sourceId ? `?source_id=${sourceId}` : ""}`),
+  sugestoes: (status: string, offset = 0, limit = 200, sourceId?: number) =>
     json<PaginaSugestoes>(
-      `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}`,
+      `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}` +
+        (sourceId ? `&source_id=${sourceId}` : ""),
     ),
   acaoSugestoes: (ids: number[], acao: string) =>
     post<{ afetadas: number }>("/api/sugestoes/acao", { ids, acao }),

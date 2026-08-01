@@ -52,6 +52,9 @@ describe("App", () => {
     const usuario = userEvent.setup();
     montar(<App />);
 
+    // A lateral não existe mais no Panorama, que é a visão do acervo
+    // inteiro: o atalho se testa onde ela age.
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
     expect(await screen.findByText("Fontes")).toBeInTheDocument();
     // "[[" é como o user-event escreve um "[" literal — sozinho ele abre
     // um descritor de tecla.
@@ -125,5 +128,29 @@ describe("o acervo, antes das lacunas", () => {
     expect(
       await screen.findByText(/das 8 fotos que dá para organizar agora/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("os dois menus", () => {
+  it("a barra lateral só aparece onde ela age", async () => {
+    // Ela definia `fonte`, que só a Biblioteca lia. Nas outras cinco telas
+    // ficava visível, clicável e inerte — o que o dono descreveu como "os
+    // dois menus não funcionam bem juntos".
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    // Panorama: é a visão do acervo inteiro, sem filtro de fonte.
+    await screen.findByText("O acervo");
+    expect(screen.queryByText("Fontes")).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Biblioteca" }));
+    expect(await screen.findByText("Fontes")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Revisão" }));
+    expect(screen.getByText("Fontes")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Operações" }));
+    expect(screen.queryByText("Fontes")).not.toBeInTheDocument();
   });
 });
