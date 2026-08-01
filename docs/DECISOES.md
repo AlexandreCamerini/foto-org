@@ -498,3 +498,41 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   pergunta do discovery.
 - Como reverter: remover a fonte do catálogo; nada mais depende dela.
 - Status: decidido pelo dono
+
+---
+
+## D-029 — Câmera com receptor de GPS é sinal diferente de coordenada de celular
+
+- Data: 2026-07-31
+- Contexto: o dono informou que algumas Canon têm GPS embutido. Confirmado no
+  catálogo do Lightroom: das 58 câmeras do acervo (2001–2026), só a **EOS 5D
+  Mark IV** grava coordenada de receptor próprio — 2.878 de 3.633 fotos, 79%.
+  A R6m2 tem 248 de 8.366 (3%), que vêm de pareamento com o celular. As
+  demais, incluindo Rebel XSi (17.132) e 5D Mark III (11.235), têm zero.
+- Decidido: registrar agora que essas duas origens têm confiabilidade
+  diferente e que o motor hoje trata as duas como "GPS lido do arquivo",
+  confiança alta.
+- Por quê: coordenada de celular pareado tem deriva que um receptor embutido
+  não tem, e o modelo de evento vai usar deslocamento entre blocos de fotos
+  para separar acontecimentos. Uma deriva de centenas de metros lida como
+  deslocamento real produz corte onde não houve.
+- Consequência maior, e não prevista: **25 anos de acervo e só 4 com GPS**.
+  Para 2001–2018 não há coordenada própria nem doador para herdar. Nesse
+  período, nome de pasta e álbum não são sinal auxiliar — são o único sinal
+  de lugar que existe.
+- Como reverter: nada foi implementado; é contexto para o modelo de evento.
+- Status: registrado, aguardando o modelo de evento
+
+---
+
+## D-030 — Álbum nomeia, não divide
+
+- Data: 2026-07-31
+- Contexto: eu ia usar as 25.304 nomeações de álbum como fronteira de evento.
+- Medido: os álbuns se aninham. No mesmo dia, "Férias" (431), "Portugal e
+  Italia com as Meninas" (235) e "Family" (177) são a MESMA foto contada três
+  vezes, em 29 dias do acervo.
+- Decidido: álbum entra como nome e como evidência de intenção; nunca como
+  divisor de acontecimento.
+- Como reverter: não se aplica; a alternativa produziria eventos sobrepostos.
+- Status: decidido por medição
