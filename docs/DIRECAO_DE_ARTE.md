@@ -91,6 +91,44 @@ não em pedaços — ver CLAUDE.md. Não portar os tokens novos para lá: seria
 esforço em código que vai ser removido, e as duas UIs divergindo já é o
 estado esperado até a remoção.
 
+## O mapa do lugar (webapp, `components/Mapa.tsx`)
+
+A tela não tem cartografia (D-031): é geometria sobre uma malha, e a cor vem
+da UI, não da foto. Por isso a régua aqui é contraste e hierarquia, e a
+linguagem — decidida em `docs/prototipos/03-mapa-local-estimado.html` — é
+"cheio × vazado". Ela só funciona se as duas formas forem distinguíveis num
+relance:
+
+- **Ponto cheio**, raio 5, `--color-texto`: coordenada lida do arquivo.
+- **Anel tracejado**, `--color-herdado`, preenchimento a 7%: lugar herdado,
+  e o raio é a dúvida. **Piso de 10** no raio, não 7: o anel precisa passar
+  longe do ponto de 5, senão vira franja e a distinção morre. Medido em
+  "Dubai, Thai & Viet", onde os 30 lugares caem todos no piso.
+- **Seleção**: anel de `--color-acento`, 2px, afastado 8 do desenho — colado
+  ele lê como traço duplo e some qual dos dois é a dúvida.
+- **"×N" é um número por ponto visível**, 11px/500 em `--color-texto-2`
+  (`--color-texto` quando selecionado), ancorado no PONTO (não na borda do
+  círculo da dúvida) e nunca sobre outro ponto. Rótulo que fica mais perto do
+  ponto do vizinho do que do seu é omitido: número no ponto errado é
+  informação falsa, e o painel diz tudo a um clique. Quando um grupo tem
+  lugares calados por isso, o painel diz quantos — silêncio explicado não é
+  silêncio.
+- **O quadro ocupa o painel inteiro** (`h-full` + `meet`, malha maior que o
+  viewBox), canto 6px como todo o resto. Um mapa de altura fixa deixava faixa
+  preta entre ele e o rodapé, que lê como tela inacabada.
+- **Miniatura de 40×30 usa a variante densa** da `Miniatura` (só o glifo ⊘): a
+  frase do motivo não cabe em 30px de altura e vazava para fora da caixa. O
+  motivo continua no `title` e para leitor de tela; a linha ao lado já traz
+  nome e hora.
+- **O número não soma lugares vizinhos na tela.** Em "Dubai, Thai & Viet",
+  vários lugares — coordenadas distintas, cada uma com sua própria doadora —
+  caem perto o bastante na projeção para se tocarem visualmente; o "×N" mostra
+  a contagem do lugar dono do ponto, não a soma de quem está perto. Somar
+  misturaria a identidade de coordenadas diferentes num número só — é o
+  mesmo problema que D-031 já rejeitou (agregação por proximidade de tela não
+  é uma correlação real), agora do lado do desenho, não do dado. Quem quer o
+  total de uma vizinhança clica cada ponto; o painel não esconde nada.
+
 ## Comportamentos que definem a classe
 
 - Grade sempre fluida: placeholders cinza enquanto thumbs carregam; nunca

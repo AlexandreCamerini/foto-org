@@ -22,12 +22,32 @@ export interface AlvoMiniatura {
 export function Miniatura({
   media,
   className = "",
+  denso = false,
 }: {
   media: AlvoMiniatura;
   className?: string;
+  /** Miniatura pequena demais para caber a frase (a lista do mapa desenha
+   *  40×30). Medido: a data sozinha ocupa 50 px a 9px, vazava 5 px para fora
+   *  da caixa dos dois lados e o motivo saía com altura zero — texto que não
+   *  cabe não é honestidade, é sujeira. No denso fica só o glifo; o motivo
+   *  continua no `title` e para leitor de tela, e a linha ao lado já traz
+   *  nome e data. */
+  denso?: boolean;
 }) {
   const [falhou, setFalhou] = useState(false);
   const motivo = media.motivo_indisponivel;
+
+  if ((motivo || falhou) && denso) {
+    return (
+      <div
+        className={`flex items-center justify-center overflow-hidden bg-cartao text-texto-3 ${className}`}
+        title={`${media.nome} — ${motivo ?? "não consegui gerar a miniatura"}`}
+      >
+        <span aria-hidden>⊘</span>
+        <span className="sr-only">{motivo ?? "sem miniatura"}</span>
+      </div>
+    );
+  }
 
   if (motivo || falhou) {
     // Sem imagem, o que o catálogo sabe é tudo que resta — e ele sabe a data

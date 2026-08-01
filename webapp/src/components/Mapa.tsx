@@ -36,7 +36,16 @@ const MARGEM = 56;
 // Abaixo disto o círculo da dúvida some sob o ponto: um raio de 30 m num
 // mapa continental vale 0,006 px. Ele continua existindo, então continua
 // visível — o piso é de legibilidade, e a frase diz o tamanho real.
-const RAIO_MIN_PX = 7;
+//
+// O piso é 10 e não 7 porque o ponto cheio tem raio 5: um anel de 7 encosta
+// no ponto e o tracejado vira uma franja. Medido na viagem "Dubai, Thai &
+// Viet", onde os 30 lugares caem TODOS neste piso — com 7 a tela inteira
+// virava bolinha branca borrada e a distinção lido × herdado, que é a
+// linguagem central desta tela, simplesmente não existia.
+const RAIO_MIN_PX = 10;
+/** Raio do ponto cheio (coordenada lida). O anel mínimo tem que passar longe
+ *  dele para os dois se lerem como duas coisas. */
+const RAIO_PONTO = 5;
 const LIMITE_LISTA = 40;
 
 export interface Lugar {
@@ -236,7 +245,9 @@ export default function Mapa({
         <span aria-hidden className="text-2xl text-texto-3">
           ⊘
         </span>
-        <div className="text-[15px]">Nenhuma foto deste grupo tem lugar.</div>
+        <div className="text-[15px] font-medium">
+          Nenhuma foto deste grupo tem lugar.
+        </div>
         <div className="max-w-[52ch] text-texto-2">
           {contagens.sem_coordenada} de {contagens.total} fotos estão sem
           coordenada: nenhuma gravou GPS e nenhuma ficou perto o bastante, no
@@ -260,6 +271,7 @@ export default function Mapa({
     metros_por_grau_lon: 111_320,
   };
   const projecao = projetar(limites, escala);
+  const rotulos = rotulosSemColisao(lugares, projecao, selecionado);
   const lugarSelecionado =
     lugares.find((l) => l.chave === selecionado) ?? null;
 
@@ -286,13 +298,18 @@ export default function Mapa({
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-auto p-4">
+        {/* O quadro ocupa o painel inteiro. Com `h-auto` a proporção fixa do
+            viewBox deixava ~150 px de janela preta entre a borda de baixo do
+            mapa e o rodapé — buraco que lê como tela inacabada. `meet` mantém
+            a projeção proporcional (círculo continua círculo); o que sobra em
+            volta é quadriculado, não vazio. */}
+        <div className="min-h-0 flex-1 p-4">
           <svg
             viewBox={`0 0 ${LARGURA} ${ALTURA}`}
             preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label={`Mapa esquemático de ${data.grupo.nome}: ${lugares.length} lugares, ${contagens.no_mapa} fotos`}
-            className="block h-auto w-full rounded-lg border border-borda bg-painel"
+            className="block h-full w-full rounded-md border border-borda bg-painel"
           >
             <defs>
               <pattern
@@ -309,7 +326,16 @@ export default function Mapa({
                 />
               </pattern>
             </defs>
-            <rect width={LARGURA} height={ALTURA} fill="url(#malha-mapa)" />
+            {/* Maior que o viewBox de propósito: com `meet` sobra área do lado
+                de fora dele, e sem malha ali o quadro ganharia duas faixas
+                lisas coladas na borda. */}
+            <rect
+              x={-LARGURA}
+              y={-ALTURA}
+              width={LARGURA * 3}
+              height={ALTURA * 3}
+              fill="url(#malha-mapa)"
+            />
 
             {tracos.map(({ de, para }) => (
               <line
@@ -335,15 +361,17 @@ export default function Mapa({
               />
             ))}
 
-            {rotulosSemColisao(lugares, projecao, selecionado).map((r) => (
+            {rotulos.map((r) => (
               <text
                 key={r.chave}
                 x={r.x}
                 y={r.y}
+                textAnchor={r.ancora}
                 fill={
                   r.selecionado ? "var(--color-texto)" : "var(--color-texto-2)"
                 }
-                fontSize={12}
+                fontSize={11}
+                fontWeight={500}
                 className="pointer-events-none"
               >
                 {r.texto}
@@ -358,6 +386,7 @@ export default function Mapa({
       <PainelDoLugar
         lugar={lugarSelecionado}
         lugares={lugares.length}
+        semRotulo={lugares.filter((l) => totalDoLugar(l) > 1).length - rotulos.length}
         onFechar={() => setSelecionado(null)}
       />
     </div>
@@ -374,16 +403,76 @@ export default function Mapa({
  *  rótulo é sempre o lugar de menos fotos; ele continua dizendo o número no
  *  tooltip e no painel, ao clicar.
  *
+ *  O rótulo é ancorado no PONTO, não na borda do círculo da dúvida. Medido no
+ *  evento "Pantanal": o lugar de 59 fotos tem raio de 83 px, e o "×59" saía a
+ *  89 px do ponto — flutuando no quadriculado vazio, sem dono visível,
+ *  enquanto o "×2" do lugar vizinho (a 0,3 px do mesmo ponto) ficava colado
+ *  no ponto e parecia responder por ele. O número é do lugar, e o lugar é o
+ *  ponto; o círculo é outra informação.
+ *
+ *  A colisão também é testada contra os PONTOS, não só contra os outros
+ *  rótulos: em "Dubai, Thai & Viet" o "×124" e o "×178" saíam atravessados
+ *  por marcadores vizinhos, porque só rótulo-contra-rótulo era verificado.
+ *
+ *  E por isso cada rótulo tem quatro lugares possíveis em volta do ponto, não
+ *  um: com uma posição só, o lugar de 190 fotos — o maior da viagem — perdia
+ *  o número para um vizinho a 4 px, e a tela mostrava "×68" e escondia
+ *  "×190". Tentar à direita, à esquerda, acima e abaixo devolve o número
+ *  para quem tem mais foto sem sobrepor nada.
+ *
  *  O lugar selecionado nunca perde o rótulo: ele é o que o usuário está
  *  olhando. */
+export interface RotuloMapa {
+  chave: string;
+  x: number;
+  y: number;
+  texto: string;
+  ancora: "start" | "middle" | "end";
+  selecionado: boolean;
+}
+
 export function rotulosSemColisao(
   lugares: Lugar[],
   projecao: Projecao,
   selecionado: string | null,
-): { chave: string; x: number; y: number; texto: string; selecionado: boolean }[] {
-  const ALTURA_ROTULO = 14;
-  const caixas: [number, number, number, number][] = [];
-  const saida = [];
+): RotuloMapa[] {
+  const ALTURA = 12;
+  const LARGURA_CARACTERE = 6.5;
+  const AFASTAMENTO = RAIO_PONTO + 6;
+  // O selecionado ganha um anel de acento em volta; o número tem que sair de
+  // fora dele, senão o texto cruza o traço. O teto existe para o lugar de
+  // dúvida enorme não jogar o número a 90 px do ponto — de novo o rótulo
+  // órfão que esta função acabou de resolver.
+  const afastamentoSelecionado = (raioPx: number) =>
+    Math.min(Math.max(raioPx, 12) + 14, 34);
+  // Ar obrigatório entre um rótulo e o próximo. Sem isto, quatro posições por
+  // ponto fazem caber 17 números no punhado de pixels do sudeste asiático:
+  // nenhum se sobrepõe e mesmo assim o conjunto é um borrão de texto. Encostar
+  // não é caber.
+  const AR = 7;
+  const colide = (
+    a: [number, number, number, number],
+    b: [number, number, number, number],
+  ) => !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
+  const centros = lugares.map((l) => ({
+    x: projecao.x(l.lon),
+    y: projecao.y(l.lat),
+  }));
+  // O rótulo nunca nasce em cima de um ponto — nem do seu, nem do vizinho.
+  const caixasPontos: [number, number, number, number][] = centros.map((c) => [
+    c.x - RAIO_PONTO - 1,
+    c.y - RAIO_PONTO - 1,
+    c.x + RAIO_PONTO + 1,
+    c.y + RAIO_PONTO + 1,
+  ]);
+  const caixasRotulos: [number, number, number, number][] = [];
+  /** Pontos que já ganharam número. Um ponto visível recebe UM rótulo: em
+   *  "Dubai, Thai & Viet" os lugares empilhados no mesmo pixel saíam com um
+   *  número de cada lado do mesmo ponto ("×124 ● ×68"), o que não é o dobro
+   *  de informação, é a metade. Quem fala pelo ponto é o maior — que já vem
+   *  primeiro —, e os outros estão a um clique. */
+  const pontosRotulados: { x: number; y: number }[] = [];
+  const saida: RotuloMapa[] = [];
   const ordenados = [
     ...lugares.filter((l) => l.chave === selecionado),
     ...lugares.filter((l) => l.chave !== selecionado),
@@ -391,29 +480,82 @@ export function rotulosSemColisao(
   for (const lugar of ordenados) {
     const total = totalDoLugar(lugar);
     if (total <= 1) continue;
+    // O selecionado está cercado pelo anel de acento: o número ao lado dele
+    // não tem a quem mais pertencer, então a regra de ambiguidade não se
+    // aplica. É assim que os lugares do aglomerado dizem seu número — um de
+    // cada vez, no clique.
+    const ehSelecionado = lugar.chave === selecionado;
     const texto = `×${total}`;
-    const raioPx = Math.max(RAIO_MIN_PX, lugar.raio_m * projecao.pxPorMetro);
-    const x = projecao.x(lugar.lon) + Math.max(raioPx, 10) + 6;
-    const y = projecao.y(lugar.lat) + 4;
-    const caixa: [number, number, number, number] = [
-      x,
-      y - ALTURA_ROTULO,
-      x + texto.length * 7,
-      y,
+    const largura = texto.length * LARGURA_CARACTERE;
+    const cx = projecao.x(lugar.lon);
+    const cy = projecao.y(lugar.lat);
+    if (
+      !ehSelecionado &&
+      pontosRotulados.some((p) => Math.hypot(p.x - cx, p.y - cy) < 2 * RAIO_PONTO)
+    )
+      continue;
+    const afastamento = ehSelecionado
+      ? afastamentoSelecionado(
+          Math.max(RAIO_MIN_PX, lugar.raio_m * projecao.pxPorMetro),
+        )
+      : AFASTAMENTO;
+    const candidatos: { x: number; y: number; ancora: RotuloMapa["ancora"] }[] = [
+      { x: cx + afastamento, y: cy + 4, ancora: "start" },
+      { x: cx - afastamento, y: cy + 4, ancora: "end" },
+      { x: cx, y: cy - afastamento, ancora: "middle" },
+      { x: cx, y: cy + afastamento + ALTURA - 2, ancora: "middle" },
     ];
-    const colide = caixas.some(
-      ([x1, y1, x2, y2]) =>
-        !(caixa[2] < x1 || caixa[0] > x2 || caixa[3] < y1 || caixa[1] > y2),
-    );
-    if (colide) continue;
-    caixas.push(caixa);
-    saida.push({
-      chave: lugar.chave,
-      x,
-      y,
-      texto,
-      selecionado: lugar.chave === selecionado,
-    });
+    for (const { x, y, ancora } of candidatos) {
+      const esquerda =
+        ancora === "start" ? x : ancora === "end" ? x - largura : x - largura / 2;
+      const caixa: [number, number, number, number] = [
+        esquerda,
+        y - ALTURA,
+        esquerda + largura,
+        y,
+      ];
+      const comAr: [number, number, number, number] = [
+        caixa[0] - AR,
+        caixa[1] - AR,
+        caixa[2] + AR,
+        caixa[3] + AR,
+      ];
+      if (caixasPontos.some((p) => colide(caixa, p))) continue;
+      if (caixasRotulos.some((r) => colide(comAr, r))) continue;
+      // E só sai se apontar para UM ponto DISTINGUÍVEL. Medido em "Dubai,
+      // Thai & Viet": sem esta regra, os dez rótulos que cabiam no aglomerado
+      // do sudeste asiático estavam TODOS mais perto do ponto de outro lugar
+      // do que do seu (o "×146" a 8,4 px do ponto de 126 fotos e a 11 px do
+      // próprio) — número colado no ponto errado não é informação parcial, é
+      // informação falsa.
+      //
+      // Vizinho a menos de dois raios de ponto não conta: ele não é outro
+      // alvo, é o mesmo pixel. É o caso do "Pantanal", onde o lugar de 59 e o
+      // de 2 fotos estão a 0,3 px um do outro; tratá-los como concorrentes
+      // calava os dois e deixava o círculo de 59 fotos sem número enquanto um
+      // lugar de 3 mostrava o dele. Quem está no mesmo ponto disputa pelo
+      // tamanho — e o maior já vem primeiro.
+      const meu = Math.hypot(cx - x, cy - y);
+      const vizinho = Math.min(
+        ...centros.map((c) =>
+          Math.hypot(c.x - cx, c.y - cy) < 2 * RAIO_PONTO
+            ? Infinity
+            : Math.hypot(c.x - x, c.y - y),
+        ),
+      );
+      if (!ehSelecionado && vizinho <= meu + AR) continue;
+      caixasRotulos.push(caixa);
+      pontosRotulados.push({ x: cx, y: cy });
+      saida.push({
+        chave: lugar.chave,
+        x,
+        y,
+        texto,
+        ancora,
+        selecionado: lugar.chave === selecionado,
+      });
+      break;
+    }
   }
   return saida;
 }
@@ -475,7 +617,7 @@ function Marcador({
       )}
 
       {temLido ? (
-        <circle cx={x} cy={y} r={5} fill="var(--color-texto)" />
+        <circle cx={x} cy={y} r={RAIO_PONTO} fill="var(--color-texto)" />
       ) : (
         <circle
           cx={x}
@@ -486,14 +628,18 @@ function Marcador({
         />
       )}
 
+      {/* Seleção é contorno de 2px no acento (direção de arte), afastado o
+          bastante do tracejado para não virar um segundo círculo colado nele
+          — a 4 px de distância os dois liam como um traço duplo, e o usuário
+          não sabia qual dos dois era o tamanho da dúvida. */}
       {selecionado && (
         <circle
           cx={x}
           cy={y}
-          r={Math.max(raioPx, 12) + 4}
+          r={Math.max(raioPx, 12) + 8}
           fill="none"
           stroke="var(--color-acento)"
-          strokeWidth={1.5}
+          strokeWidth={2}
         />
       )}
 
@@ -551,10 +697,13 @@ function Rodape({ dados, lugares }: { dados: DadosMapa; lugares: number }) {
 function PainelDoLugar({
   lugar,
   lugares,
+  semRotulo,
   onFechar,
 }: {
   lugar: Lugar | null;
   lugares: number;
+  /** Quantos lugares de mais de uma foto ficaram sem o "×N" na tela. */
+  semRotulo: number;
   onFechar: () => void;
 }) {
   if (!lugar) {
@@ -570,6 +719,18 @@ function PainelDoLugar({
           herdaram o lugar ficam exatamente sobre a foto que doou — por isso um
           ponto costuma valer por muitas.
         </p>
+        {/* Sem esta frase, um grupo grande fica com 30 pontos e nenhum número,
+            e o silêncio parece defeito. Ele é escolha: um "×178" a 9 px do
+            ponto do vizinho aponta para os dois. */}
+        {semRotulo > 0 && (
+          <p className="mt-2 text-texto-3">
+            {semRotulo === 1
+              ? "Um lugar está perto demais do vizinho"
+              : `${semRotulo} lugares estão perto demais dos vizinhos`}{" "}
+            para caber o número na tela sem apontar para o ponto errado. Clique
+            e o número aparece.
+          </p>
+        )}
       </aside>
     );
   }
@@ -607,7 +768,10 @@ function PainelDoLugar({
         </button>
       </div>
 
-      <div className="mb-1 font-medium">
+      {/* A contagem é a resposta do painel: entra no tamanho de título de
+          cartão (15px), não no corpo, para o olho não ter que procurá-la
+          entre a coordenada e os blocos de explicação. */}
+      <div className="mb-1 text-[15px] font-medium leading-tight">
         {total} {total === 1 ? "foto" : "fotos"}
       </div>
       <div className="mb-3 text-texto-3">
@@ -677,13 +841,14 @@ function PainelDoLugar({
           title={p.porque ?? "Coordenada lida do próprio arquivo."}
         >
           <Miniatura
+            denso
             media={{
               id: p.media_id,
               nome: p.nome,
               data_capturada: p.data_capturada,
               motivo_indisponivel: p.motivo_indisponivel,
             }}
-            className="h-[30px] w-[40px] shrink-0 rounded text-[9px]"
+            className="h-[30px] w-[40px] shrink-0 rounded text-[11px]"
           />
           <div className="min-w-0">
             <div className="truncate">{p.nome}</div>
