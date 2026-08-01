@@ -26,12 +26,14 @@ const ABAS = [
 ] as const;
 type Aba = (typeof ABAS)[number];
 
+// A dica só cita "[ fontes" onde a barra lateral existe — anunciar um atalho
+// que não faz nada naquela tela é o mesmo defeito que a lateral inerte tinha.
 const DICAS: Record<Aba, string> = {
-  Panorama: "clique numa lacuna para recortar a biblioteca · [ fontes",
+  Panorama: "clique numa lacuna para recortar a biblioteca",
   Biblioteca: "←↑↓→ seleciona · espaço amplia · [ fontes · ] inspetor",
   Viagens: "clique num card para ver as fotos do grupo · [ fontes",
-  Revisão: "aprove ou rejeite; o destino só sai do papel em Operações",
-  Duplicatas: "escolha a principal de cada grupo · [ fontes",
+  Revisão: "aprove ou rejeite; o destino só sai do papel em Operações · [ fontes",
+  Duplicatas: "escolha a principal de cada grupo",
   Operações: "plano → dry-run → cópia verificada; o original nunca é tocado",
 };
 
