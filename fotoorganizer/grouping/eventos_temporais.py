@@ -77,6 +77,15 @@ DURACAO_MAX_ACONTECIMENTO = timedelta(hours=20)
 # contamina com ele — num cenário de fotos esparsas seguidas de uma rajada,
 # ela concluía que 2 h entre fotos era anomalia e cortava quatro vezes.
 JANELA = 12
+# Bloco menor que isto não é acontecimento: são fotos de teste, um ajuste de
+# luz, uma câmera ligada cedo. Absorve no vizinho mais próximo no tempo.
+#
+# A Serena 15 Anos tinha cinco fotos às 17:25 e a festa das 19:28 às 22:47.
+# A régua separava — tecnicamente certo, duas horas de intervalo — e o dono
+# não reconhece cinco fotos como um evento da vida dele. O custo é engolir um
+# acontecimento pequeno de verdade; o erro é barato porque ele fica visível
+# junto do grande, e não numa pasta que ninguém procura.
+MIN_FOTOS_EVENTO = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,4 +177,25 @@ def dividir_em_eventos(momentos: list[Momento]) -> list[list[int]]:
         if corta:
             blocos.append([])
         blocos[-1].append(atual.media_id)
-    return blocos
+    return _absorver_pequenos(blocos)
+
+
+def _absorver_pequenos(blocos: list[list[int]]) -> list[list[int]]:
+    """Junta blocos abaixo do mínimo ao vizinho, preservando a ordem.
+
+    Um bloco só, por menor que seja, fica: se a sessão inteira tem três
+    fotos, elas são o acontecimento.
+    """
+    if len(blocos) <= 1:
+        return blocos
+    resultado: list[list[int]] = []
+    for bloco in blocos:
+        if resultado and len(bloco) < MIN_FOTOS_EVENTO:
+            resultado[-1].extend(bloco)
+        else:
+            resultado.append(bloco)
+    # O primeiro bloco pode ter ficado pequeno sem ninguém antes dele.
+    if len(resultado) > 1 and len(resultado[0]) < MIN_FOTOS_EVENTO:
+        resultado[1][:0] = resultado[0]
+        resultado.pop(0)
+    return resultado

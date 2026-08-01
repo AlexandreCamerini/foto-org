@@ -72,8 +72,10 @@ def test_respiro_de_rajada_nao_vira_evento():
 def test_ritmo_lento_ainda_tem_fronteira_pelo_teto():
     """Um dia de fotos esparsas — uma a cada 2 h — não pode esconder a
     fronteira seguinte. É o que o TETO protege."""
-    esparsas = list(range(0, 480, 120))          # a cada 2 h
-    depois = [480 + 600 + i for i in range(0, 30, 5)]   # 10 h de intervalo
+    # Blocos acima do mínimo dos dois lados: aqui se testa o TETO, não a
+    # absorção de bloco pequeno.
+    esparsas = list(range(0, 1440, 120))                 # 12 fotos, a cada 2 h
+    depois = [1440 + 600 + i for i in range(0, 60, 5)]   # 12 fotos, 10 h depois
     assert len(dividir_em_eventos(_fotos(esparsas + depois))) == 2
 
 
@@ -82,9 +84,9 @@ def test_mudar_de_lugar_corta_mesmo_com_as_fotos_coladas():
     """Deslocamento encerra o que estava acontecendo. Duas fotos a 5 min de
     distância e 20 km não são o mesmo acontecimento."""
     aqui = [Momento(i, BASE + timedelta(minutes=i), -22.95, -43.18)
-            for i in range(5)]
-    la = [Momento(10 + i, BASE + timedelta(minutes=5 + i), -22.80, -43.35)
-          for i in range(5)]
+            for i in range(12)]
+    la = [Momento(100 + i, BASE + timedelta(minutes=13 + i), -22.80, -43.35)
+          for i in range(12)]
     assert len(dividir_em_eventos(aqui + la)) == 2
 
 
@@ -168,3 +170,36 @@ def test_festa_que_vira_a_noite_ainda_e_uma_festa():
     sendo um acontecimento, e a régua de ritmo ainda vale dentro dele."""
     fotos = _fotos(list(range(0, 240, 5)), inicio=datetime(2026, 5, 9, 22, 0))
     assert len(dividir_sessao(fotos, e_viagem=False)) == 1
+
+
+# -- blocos pequenos ---------------------------------------------------------
+def test_fotos_de_teste_nao_viram_evento_proprio():
+    """A Serena 15 Anos: cinco fotos às 17:25 e a festa das 19:28 às 22:47.
+    A régua separava — duas horas de intervalo, tecnicamente certo — e o dono
+    não reconhece cinco fotos como um evento da vida dele."""
+    teste = list(range(0, 5))                     # 5 fotos em 5 min
+    festa = list(range(123, 123 + 300, 1))        # 2h depois, 300 fotos
+    blocos = dividir_em_eventos(_fotos(teste + festa))
+    assert len(blocos) == 1
+    assert len(blocos[0]) == 305
+
+
+def test_bloco_pequeno_no_fim_tambem_e_absorvido():
+    festa = list(range(0, 300))
+    sobra = list(range(420, 424))
+    blocos = dividir_em_eventos(_fotos(festa + sobra))
+    assert len(blocos) == 1
+
+
+def test_sessao_inteira_pequena_continua_existindo():
+    """Se a sessão toda tem três fotos, elas são o acontecimento — absorver
+    não pode significar apagar."""
+    assert len(dividir_em_eventos(_fotos([0, 1, 2]))) == 1
+    assert len(dividir_em_eventos(_fotos([0, 1, 2]))[0]) == 3
+
+
+def test_dois_eventos_grandes_continuam_dois():
+    """A absorção não pode desfazer o caso que motivou a régua."""
+    manha = list(range(0, 90, 3))
+    noite = list(range(780, 870, 3))
+    assert len(dividir_em_eventos(_fotos(manha + noite))) == 2
