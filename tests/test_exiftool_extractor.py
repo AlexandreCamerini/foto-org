@@ -168,3 +168,30 @@ def test_makernotes_fica_fora_da_base_bruta():
     # A lente vem do bloco do fabricante e não se perde: ela é lida do JSON
     # inteiro, não da base bruta.
     assert meta.lente == "EF24-70mm f/2.8L II USM"
+
+
+def test_data_impossivel_nao_entra_na_coluna():
+    """Uma foto não pode ter sido tirada depois de agora. Um registro datado
+    de 2100 bastava para dominar o topo da grade ordenada por data e fazer a
+    tela parecer quebrada.
+
+    O valor bruto não se perde: continua na base bruta, que é o que o dono
+    inspeciona. O que não entra é a coluna, que alimenta agrupamento e
+    correlação."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2100:08:07 12:00:00",
+        "EXIF:Make": "Canon",
+    })
+    assert meta.data_capturada is None
+    assert ("exif", "DateTimeOriginal") in {
+        (ns, nome) for ns, nome, _ in meta.extras
+    }
+
+
+def test_data_antiga_continua_valendo():
+    """Não há piso: filme digitalizado com data manual pode ser de 1950, e um
+    piso arbitrário transformaria acervo antigo em erro."""
+    meta = ExifToolExtractor._converter(
+        {"EXIF:DateTimeOriginal": "1962:03:15 10:00:00"}
+    )
+    assert meta.data_capturada == datetime(1962, 3, 15, 10, 0)
