@@ -72,6 +72,11 @@ function Secao({
 
 function Card({ grupo, onAbrir }: { grupo: Agrupamento; onAbrir: () => void }) {
   const [capaFalhou, setCapaFalhou] = useState(false);
+  // A capa é uma miniatura (cacheada, do tamanho do card), não a prévia do
+  // loupe — e quando ela não carrega o card diz por quê em vez de ficar em
+  // branco. Um evento inteiro num volume desmontado desenhava um cartão vazio,
+  // e o dono concluiu que o sistema estava quebrado; ele estava mudo.
+  const semCapa = grupo.capa_id == null || capaFalhou;
   return (
     <button
       onClick={onAbrir}
@@ -79,12 +84,20 @@ function Card({ grupo, onAbrir }: { grupo: Agrupamento; onAbrir: () => void }) {
     >
       {grupo.capa_id != null && !capaFalhou && (
         <img
-          src={api.previewUrl(grupo.capa_id)}
+          src={api.thumbUrl(grupo.capa_id)}
           alt=""
           loading="lazy"
           onError={() => setCapaFalhou(true)}
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
+      )}
+      {semCapa && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-texto-3">
+          <span aria-hidden className="text-2xl">
+            ⊘
+          </span>
+          <span className="text-texto-2">capa fora de alcance</span>
+        </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 p-3">
