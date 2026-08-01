@@ -1,6 +1,16 @@
 import { useState } from "react";
 
-import { api, type Media } from "../api";
+import { api } from "../api";
+
+/** O que a miniatura precisa saber, e só isso. `Media` satisfaz este
+ *  formato estruturalmente; o ponto do mapa também, sem precisar fingir
+ *  ser uma foto inteira só para desenhar 40×30 pixels. */
+export interface AlvoMiniatura {
+  id: number;
+  nome: string;
+  data_capturada: string | null;
+  motivo_indisponivel: string | null;
+}
 
 /** A miniatura e os três estados que ela precisa separar.
  *
@@ -13,7 +23,7 @@ export function Miniatura({
   media,
   className = "",
 }: {
-  media: Media;
+  media: AlvoMiniatura;
   className?: string;
 }) {
   const [falhou, setFalhou] = useState(false);

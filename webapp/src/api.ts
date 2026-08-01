@@ -157,6 +157,76 @@ export interface Agrupamento {
   capa_id: number | null;
 }
 
+/** Uma foto no mapa. `estimado=false` é ponto cheio (coordenada lida do
+ *  arquivo) e `raio_m` é null; `estimado=true` é círculo, e `raio_m` é o
+ *  tamanho da dúvida. `porque` já vem pronta do servidor — a frase cita o
+ *  raio e a velocidade que a produziram, e remontá-la aqui duplicaria as
+ *  constantes da calibração. */
+export interface PontoMapa {
+  media_id: number;
+  nome: string;
+  lat: number;
+  lon: number;
+  data_capturada: string | null;
+  camera: string | null;
+  /** Arquivo inalcançável (disco desligado, iCloud). A COORDENADA continua
+   *  válida — o ponto é desenhado, só não tem miniatura. */
+  motivo_indisponivel: string | null;
+  estimado: boolean;
+  raio_m: number | null;
+  delta_s: number | null;
+  doadora_id: number | null;
+  doadora_nome: string | null;
+  porque: string | null;
+}
+
+/** A foto que emprestou a coordenada. Costuma estar FORA do grupo — no
+ *  acervo real é uma referência do Apple Fotos, sem viagem nem evento. */
+export interface DoadoraMapa {
+  id: number;
+  nome: string;
+  lat: number;
+  lon: number;
+  camera: string | null;
+  no_grupo: boolean;
+}
+
+export interface LimitesMapa {
+  lat_min: number;
+  lat_max: number;
+  lon_min: number;
+  lon_max: number;
+}
+
+export interface EscalaMapa {
+  metros_por_grau_lat: number;
+  metros_por_grau_lon: number;
+}
+
+export interface DadosMapa {
+  grupo: {
+    tipo: "viagem" | "evento";
+    id: number;
+    nome: string;
+    inicio: string | null;
+    fim: string | null;
+  };
+  /** `no_mapa + sem_coordenada == total`. `fora_de_alcance` é SUBCONJUNTO
+   *  de `no_mapa` — não soma com os outros dois. */
+  contagens: {
+    total: number;
+    no_mapa: number;
+    sem_coordenada: number;
+    fora_de_alcance: number;
+  };
+  pontos: PontoMapa[];
+  doadoras: DoadoraMapa[];
+  /** Já esticado pelo raio de cada círculo. Null quando não há ponto. */
+  limites: LimitesMapa | null;
+  escala: EscalaMapa | null;
+  nota_do_raio: string;
+}
+
 export interface SugestaoRow {
   id: number;
   media_id: number;
@@ -287,6 +357,14 @@ export const api = {
     json<Agrupamento[]>(`/api/viagens${sourceId ? `?source_id=${sourceId}` : ""}`),
   eventos: (sourceId?: number) =>
     json<Agrupamento[]>(`/api/eventos${sourceId ? `?source_id=${sourceId}` : ""}`),
+  /** A geometria do lugar de UM grupo. Exatamente um dos dois ids. */
+  mapa: (filtro: { trip_id?: number; event_id?: number }) => {
+    const params = new URLSearchParams();
+    if (filtro.trip_id !== undefined) params.set("trip_id", String(filtro.trip_id));
+    if (filtro.event_id !== undefined)
+      params.set("event_id", String(filtro.event_id));
+    return json<DadosMapa>(`/api/mapa?${params}`);
+  },
   sugestoes: (status: string, offset = 0, limit = 200, sourceId?: number) =>
     json<PaginaSugestoes>(
       `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}` +
