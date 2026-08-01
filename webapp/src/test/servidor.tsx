@@ -92,6 +92,10 @@ export const ROTAS_BASE: Record<string, unknown> = {
       },
     ],
   },
+  "/api/midia/linha-do-tempo": [
+    { mes: "2024-06", quantidade: 5 },
+    { mes: "2024-05", quantidade: 3 },
+  ],
   "/api/panorama": {
     total: 8,
     lacunas: [

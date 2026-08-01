@@ -797,3 +797,24 @@ def test_fila_e_grupos_aceitam_recorte_por_fonte(client, migrated_engine):
     # é um grupo que não pertence a este recorte.
     eventos = client.get("/api/eventos", params={"source_id": outra_id}).json()
     assert eventos == []
+
+
+def test_linha_do_tempo_e_filtro_por_mes(client):
+    """A âncora temporal: sem ela, rolar é a única forma de chegar em 2015 —
+    e num acervo paginado de 200 em 200 isso não é forma."""
+    linha = client.get("/api/midia/linha-do-tempo").json()
+    assert linha, "o fixture tem fotos com data"
+    assert all(set(m) == {"mes", "quantidade"} for m in linha)
+    # Ordem decrescente: a grade abre nas mais recentes.
+    assert [m["mes"] for m in linha] == sorted(
+        (m["mes"] for m in linha), reverse=True
+    )
+
+    mes = linha[0]["mes"]
+    recorte = client.get("/api/midia", params={"mes": mes}).json()
+    assert recorte["total"] == linha[0]["quantidade"]
+    assert all(i["data_capturada"].startswith(mes) for i in recorte["itens"])
+
+    assert client.get(
+        "/api/midia/linha-do-tempo", params={"alcance": "xpto"}
+    ).status_code == 422

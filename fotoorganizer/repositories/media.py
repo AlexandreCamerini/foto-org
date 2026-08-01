@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from fotoorganizer.models import (
     ConfidenceLevel,
@@ -121,6 +121,10 @@ class MediaFilters:
     # e 45.397 do Lightroom entravam no catálogo e a Biblioteca respondia
     # (0), sem dizer por quê. Ver ALCANCES.
     alcance: str = "tudo"
+    # "2026-05". A âncora temporal salta filtrando, não rolando: com 103.938
+    # registros paginados de 200 em 200, chegar em 2015 rolando exigiria
+    # carregar tudo que veio antes.
+    mes: str | None = None
 
 
 class MediaRepository:
@@ -143,6 +147,10 @@ class MediaRepository:
             )
         if filters.extensao:
             stmt = stmt.where(MediaFile.extensao == filters.extensao)
+        if filters.mes:
+            stmt = stmt.where(
+                func.strftime("%Y-%m", MediaFile.data_capturada) == filters.mes
+            )
         if filters.source_id is not None:
             stmt = stmt.where(MediaFile.source_id == filters.source_id)
         if filters.ano is not None:
@@ -191,6 +199,29 @@ class MediaRepository:
                 .order_by(expr.desc())
             )
             return [int(ano) for ano in session.scalars(stmt)]
+
+    def linha_do_tempo(self, filters: MediaFilters) -> list[dict]:
+        """Quantas fotos por mês, no recorte atual e na ordem da grade.
+
+        É o que torna 100 mil fotos alcançáveis: sem isto, rolar é a única
+        forma de chegar em 2015. Uma consulta agregada, não uma varredura —
+        o banco conta por mês em milissegundos e a grade não precisa ter
+        carregado a página onde aquele mês começa.
+        """
+        mes = func.strftime("%Y-%m", MediaFile.data_capturada)
+        base = self._query(filters).subquery()
+        alias = aliased(MediaFile, base)
+        mes_alias = func.strftime("%Y-%m", alias.data_capturada)
+        with self._factory() as session:
+            linhas = session.execute(
+                select(mes_alias, func.count(alias.id))
+                .group_by(mes_alias)
+                .order_by(mes_alias.desc())
+            ).all()
+        return [
+            {"mes": m, "quantidade": n}
+            for m, n in linhas if m is not None
+        ]
 
     def fontes_com_contagem(self) -> list[tuple[Source, int]]:
         with self._factory() as session:

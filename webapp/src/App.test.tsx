@@ -154,3 +154,20 @@ describe("os dois menus", () => {
     expect(screen.queryByText("Fontes")).not.toBeInTheDocument();
   });
 });
+
+describe("âncora temporal", () => {
+  it("a régua de tempo salta filtrando, e dá para voltar", async () => {
+    // Com 103.938 registros paginados de 200 em 200, chegar em 2015 rolando
+    // exigiria carregar tudo que veio antes. O salto é por filtro.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
+    // O ano aparece como cabeçalho e o mês como botão clicável.
+    expect(await screen.findByText("2024")).toBeInTheDocument();
+    await usuario.click(screen.getByTitle("jun/2024 · 5 fotos"));
+
+    expect(await screen.findByText(/todo o período/)).toBeInTheDocument();
+  });
+});

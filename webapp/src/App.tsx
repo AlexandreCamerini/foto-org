@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, type FiltrosMidia } from "./api";
 import Inspector from "./components/Inspector";
+import { LinhaDoTempo } from "./components/LinhaDoTempo";
 import Loupe from "./components/Loupe";
 import Duplicates from "./components/Duplicates";
 import Operations from "./components/Operations";
@@ -69,6 +70,7 @@ export default function App() {
   // elas não têm arquivo local e ficavam invisíveis. Agora aparecem por
   // padrão, marcadas, e este controle isola o que é acionável.
   const [alcance, setAlcance] = useState("tudo");
+  const [mes, setMes] = useState<string | undefined>(undefined);
   // Mesma queryKey da Sidebar: o cache do react-query serve as duas.
   const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const colunasRef = useRef(1);
@@ -80,6 +82,7 @@ export default function App() {
     event_id: recorte?.event_id,
     lacuna: recorte?.lacuna,
     alcance,
+    mes,
     ano: recorte?.ano,
     extensao: recorte?.extensao,
     ordenacao,
@@ -92,7 +95,7 @@ export default function App() {
   useEffect(() => {
     setSelIndex(null);
     setLoupeAberto(false);
-  }, [busca, fonte, ordenacao, recorte, alcance]);
+  }, [busca, fonte, ordenacao, recorte, alcance, mes]);
 
   const navegar = useCallback(
     (destino: number) => {
@@ -282,14 +285,21 @@ export default function App() {
                 />
               </div>
 
-              <div className="min-h-0 flex-1">
-                <PhotoGrid
-                  midia={midia}
-                  zoom={zoom}
-                  selecionadoIndex={selIndex}
-                  onSelecionar={setSelIndex}
-                  onAbrirLoupe={() => setLoupeAberto(true)}
-                  onColunas={onColunas}
+              <div className="flex min-h-0 flex-1">
+                <div className="min-h-0 min-w-0 flex-1">
+                  <PhotoGrid
+                    midia={midia}
+                    zoom={zoom}
+                    selecionadoIndex={selIndex}
+                    onSelecionar={setSelIndex}
+                    onAbrirLoupe={() => setLoupeAberto(true)}
+                    onColunas={onColunas}
+                  />
+                </div>
+                <LinhaDoTempo
+                  filtros={filtros}
+                  mesAtivo={mes}
+                  onEscolher={setMes}
                 />
               </div>
             </>

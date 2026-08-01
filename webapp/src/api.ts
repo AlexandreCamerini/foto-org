@@ -112,6 +112,13 @@ export interface FiltrosMidia {
   /** "tudo" | "organizaveis" | "faltantes". Uma foto sem arquivo continua
    *  fora da revisão e do plano — aqui se decide se ela é VISÍVEL. */
   alcance?: string;
+  /** "2026-05" — a âncora temporal salta filtrando, não rolando. */
+  mes?: string;
+}
+
+export interface MesDaLinha {
+  mes: string;
+  quantidade: number;
 }
 
 export interface Faceta {
@@ -256,6 +263,13 @@ export const api = {
     json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
   panorama: () => json<PanoramaDados>("/api/panorama"),
   inventario: () => json<Inventario>("/api/inventario"),
+  linhaDoTempo: (filtros: FiltrosMidia) => {
+    const params = new URLSearchParams();
+    for (const [chave, valor] of Object.entries(filtros)) {
+      if (valor !== undefined && valor !== "") params.set(chave, String(valor));
+    }
+    return json<MesDaLinha[]>(`/api/midia/linha-do-tempo?${params}`);
+  },
   viagens: (sourceId?: number) =>
     json<Agrupamento[]>(`/api/viagens${sourceId ? `?source_id=${sourceId}` : ""}`),
   eventos: (sourceId?: number) =>

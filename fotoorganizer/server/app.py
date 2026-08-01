@@ -273,6 +273,7 @@ def create_app(
         lacuna: str | None = None,
         ordenacao: str = "data_desc",
         alcance: str = "tudo",
+        mes: str | None = None,
         offset: int = 0,
         limit: int = 200,
     ) -> dict:
@@ -283,7 +284,7 @@ def create_app(
         filters = MediaFilters(
             busca=busca, extensao=extensao, source_id=source_id,
             ano=ano, trip_id=trip_id, event_id=event_id, lacuna=lacuna,
-            ordenacao=ordenacao, alcance=alcance,
+            ordenacao=ordenacao, alcance=alcance, mes=mes,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
@@ -301,6 +302,25 @@ def create_app(
     @app.get("/api/midia/filtros")
     def filtros_midia() -> dict:
         return {"extensoes": media_repo.extensoes(), "anos": media_repo.anos()}
+
+    @app.get("/api/midia/linha-do-tempo")
+    def linha_do_tempo(
+        busca: str | None = None,
+        extensao: str | None = None,
+        source_id: int | None = None,
+        ano: int | None = None,
+        trip_id: int | None = None,
+        event_id: int | None = None,
+        lacuna: str | None = None,
+        alcance: str = "tudo",
+    ) -> list[dict]:
+        """Meses do recorte atual, com contagem. A grade usa para saltar."""
+        if alcance not in ALCANCES:
+            raise HTTPException(422, f"alcance desconhecido: {alcance}")
+        return media_repo.linha_do_tempo(MediaFilters(
+            busca=busca, extensao=extensao, source_id=source_id, ano=ano,
+            trip_id=trip_id, event_id=event_id, lacuna=lacuna, alcance=alcance,
+        ))
 
     @app.get("/api/panorama")
     def panorama() -> dict:
