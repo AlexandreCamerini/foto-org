@@ -11,6 +11,7 @@ from fotoorganizer.geolocation import GeoResult, LocationResolver
 from fotoorganizer.models import (
     ConfidenceLevel,
     Evidence,
+    Event,
     MediaFile,
     MediaRole,
     Source,
@@ -506,6 +507,49 @@ def test_album_curto_vira_evento_nomeado(migrated_engine):
     sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
     assert sugestao.destino_sugerido == "Eventos/2026/Quizomba"
     assert all(e.campo != "viagem" for e in evidencias)
+
+
+def test_aniversario_de_manha_e_show_a_noite_viram_dois_eventos(migrated_engine):
+    """O caso da fase 8 (docs/prompts/fase-8-eventos-e-decisao.md, Problema 3
+    e critério de aceite 5): mesmo dia, mesma pasta, mesma câmera — só o
+    ritmo de disparo separa. Sem `_subdividir` (antes do commit 6214828), a
+    sessão inteira virava um único Event, de 08:00 a 22:27. Ver
+    docs/EVENTOS.md."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2026, 5, 9, 8, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        manha = list(range(0, 90, 3))         # 30 fotos, uma a cada 3 min
+        noite = list(range(780, 870, 3))      # 13h depois, mesmo ritmo
+        for i, m in enumerate(manha + noite):
+            session.add(_media(
+                fonte.id, f"IMG_{i:04d}.jpg", "/fotos/2026/Aniversário da Ana",
+                data=base + timedelta(minutes=m),
+            ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+
+    with factory() as session:
+        midias = list(session.scalars(
+            select(MediaFile).order_by(MediaFile.nome)
+        ))
+        assert len(midias) == 60
+        ids_manha = {m.event_id for m in midias[:30]}
+        ids_noite = {m.event_id for m in midias[30:]}
+        assert None not in ids_manha | ids_noite
+        assert len(ids_manha) == 1 and len(ids_noite) == 1
+        assert ids_manha != ids_noite  # dois Event distintos, não um do dia inteiro
+
+        eventos = list(session.scalars(select(Event)))
+        assert len(eventos) == 2
+        for evento in eventos:
+            assert evento.nome == "Aniversário da Ana"
+            # Cada Event cobre só o próprio bloco (~87 min), não o dia inteiro
+            # (14h27 de 08:00 a 22:27) — é isso que prova a separação.
+            assert (evento.fim - evento.inicio) < timedelta(hours=2)
 
 
 def test_pastas_tecnicas_sem_sinal_ficam_neutras(migrated_engine):
