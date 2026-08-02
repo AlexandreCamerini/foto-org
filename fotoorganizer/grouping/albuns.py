@@ -24,12 +24,19 @@ Os dois casos ruins têm marca própria:
 - **App e serviço** compartilham vocabulário com o detector de tipo de
   imagem (`grouping/origens.py`), que precisa dos mesmos nomes para saber que
   a foto foi recebida ou baixada.
+
+Sobrando os álbuns que nomeiam, ainda falta escolher UM: os álbuns se
+aninham (D-030) e a mesma foto está em "Férias", em "Portugal e Italia com
+as Meninas" e em "Family" ao mesmo tempo. `escolher_album` é esse desempate
+— documentado em `docs/AGRUPAMENTO.md`, seção 2c.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
+from fotoorganizer.grouping.datas import separar_data
 from fotoorganizer.grouping.origens import (
     PASTAS_BAIXADA,
     PASTAS_CAPTURA,
@@ -96,6 +103,82 @@ def album_nomeia(nome: str, cameras: frozenset[str] = frozenset()) -> bool:
     # Só dígitos e pontuação ("2019", "01") descreve quando, não o quê — e a
     # data já é tratada em outro lugar da cascata.
     return bool(re.search(r"[a-z]", norm))
+
+
+# Prateleiras: nomes de álbum que dizem em que gaveta a foto foi guardada,
+# não o que aconteceu. É o equivalente, no catálogo externo, das pastas
+# contêiner de `grouping/eventos.py` ("Portfolio", "Acervo", "Diversos").
+#
+# Diferença deliberada: pasta contêiner é REJEITADA, prateleira é apenas
+# REBAIXADA. O motivo é medido — no acervo real nenhum período tem só
+# prateleira como candidata ("Férias" e "Family" sempre aparecem ao lado de
+# "Portugal e Italia com as Meninas"), então rejeitar e rebaixar dão o mesmo
+# resultado hoje; rebaixar é a ação menor e preserva o único sinal que
+# sobraria num acervo onde o dono só usou a gaveta.
+_PRATELEIRAS = frozenset({
+    "ferias", "vacation", "vacations", "holiday", "holidays",
+    "familia", "family", "viagens", "viagem", "trips", "trip", "travel",
+    "eventos", "events", "momentos", "moments", "memories", "lembrancas",
+    "melhores", "best of", "selecao", "selection", "geral", "general",
+    "diversos", "misc", "casa", "home", "trabalho", "work", "album",
+    "albuns", "albums", "fotos", "photos", "pictures", "imagens",
+})
+
+# Fotos mínimas para um álbum nomear um período. Mesmo número e mesma razão
+# de `_MIN_FOTOS_PERNA` no motor: um punhado de fotos não nomeia o conjunto
+# (uma escala de aeroporto não nomeia a viagem; duas fotos marcadas
+# "Tiradentes" não renomeiam os seis dias de "Aiuruoca e Tiradentes").
+MIN_FOTOS_ALBUM = 3
+
+
+def _e_prateleira(nome: str) -> bool:
+    return _normalizar(nome) in _PRATELEIRAS
+
+
+def escolher_album(
+    contagens: Mapping[str, int],
+    cameras: frozenset[str] = frozenset(),
+    minimo: int = MIN_FOTOS_ALBUM,
+) -> tuple[str, int] | None:
+    """O álbum que nomeia um período, entre os que o cobrem.
+
+    `contagens` = {nome do álbum: fotos daquele período nele}. Devolve
+    (nome já sem a data, fotos que o sustentam) ou None quando nenhum
+    candidato sobrevive aos filtros.
+
+    A ordem do desempate, e por que cada critério existe:
+
+    1. **Não-prateleira antes de prateleira.** Sem isto o acervo real
+       escolheria "Férias" (4.352 fotos) em vez de "Portugal e Italia com as
+       Meninas" (3.729) — mais frequente e menos informativo, exatamente o
+       aninhamento que D-030 descreve.
+    2. **Mais fotos primeiro.** É o que separa o álbum do acontecimento
+       inteiro do álbum aninhado dentro dele ("Dubai, Thai & Viet" com 2.019
+       contra "Nosso Casamento" com 107 no mesmo período).
+    3. **Nome mais curto, depois ordem alfabética.** Só desempate — dois
+       álbuns com a mesma contagem existem no acervo ("Empolga 2025" e
+       "Empolga as 9 - 2025", 159 cada) e a escolha precisa ser a mesma em
+       toda regeneração, ou o rótulo dança sozinho entre execuções.
+
+    A data sai do nome (`separar_data`), como já acontece com o nome de
+    pasta: "Peru - Julho de 2026" nomeia "Peru", e o ano do destino continua
+    vindo do EXIF.
+    """
+    candidatos: list[tuple[bool, int, int, str]] = []
+    for bruto, fotos in contagens.items():
+        if fotos < minimo or not album_nomeia(bruto, cameras):
+            continue
+        nome, _data = separar_data(bruto)
+        nome = nome.strip()
+        # Sobrou só a data ("2019") — não nomeia nada, e a data já é
+        # evidência à parte.
+        if not nome or not album_nomeia(nome, cameras):
+            continue
+        candidatos.append((_e_prateleira(nome), -fotos, len(nome), nome))
+    if not candidatos:
+        return None
+    _prateleira, negativo, _tam, nome = min(candidatos)
+    return nome, -negativo
 
 
 def cameras_do_catalogo(pares) -> frozenset[str]:

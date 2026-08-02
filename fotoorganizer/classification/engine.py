@@ -11,6 +11,7 @@ Decisões do usuário são preservadas na regeneração.
 from __future__ import annotations
 
 import logging
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -46,6 +47,7 @@ from fotoorganizer.grouping import (
     herdar_gps,
 )
 from fotoorganizer.grouping.eventos_temporais import Momento, dividir_sessao
+from fotoorganizer.grouping.albuns import cameras_do_catalogo
 from fotoorganizer.grouping.classifier import (
     ConfigClassificacao,
     DadosSessao,
@@ -56,6 +58,7 @@ from fotoorganizer.models import (
     Event,
     Evidence,
     MediaFile,
+    MetadataEntry,
     Suggestion,
     SuggestionStatus,
     Trip,
@@ -97,6 +100,77 @@ _GRANULARIDADE = {"pais": "o país", "regiao": "a região", "cidade": "a cidade"
 _MIN_FOTOS_PERNA = 3
 
 
+# Como o catálogo externo se chama numa frase, por namespace do importador.
+_FONTES_DE_ALBUM = {"apple": "Apple Fotos", "lightroom": "Lightroom"}
+
+
+class _IndiceDeAlbuns:
+    """Nomeações de álbum na linha do tempo, consultáveis por período.
+
+    O acervo real tem 27.226 linhas de álbum e nenhuma delas está numa foto
+    organizável: 100% vive em registros SINAL do Apple Fotos e do Lightroom,
+    sem arquivo local (D-028). O vínculo com a sessão é, portanto, o mesmo
+    da herança de GPS — contemporaneidade entre fontes: um álbum nomeia uma
+    sessão quando as fotos dele caem dentro do período dela.
+
+    Carregado uma vez por geração e consultado por bisseção: uma consulta
+    por sessão levaria a um N+1 sobre a maior tabela do catálogo.
+    """
+
+    __slots__ = ("_quando", "_linhas", "_fontes", "cameras")
+
+    def __init__(self, session: Session) -> None:
+        # Câmeras do catálogo inteiro (inclusive as referências): é o que
+        # impede "Canon EOS 5D Mark IV" — o maior álbum deste acervo — de
+        # virar nome de viagem.
+        self.cameras = cameras_do_catalogo(
+            session.execute(
+                select(MediaFile.make, MediaFile.model)
+                .where(MediaFile.model.is_not(None))
+                .distinct()
+            )
+        )
+        stmt = (
+            select(MediaFile.data_capturada, MediaFile.mtime,
+                   MetadataEntry.valor, MetadataEntry.namespace)
+            .join(MetadataEntry, MetadataEntry.media_id == MediaFile.id)
+            .where(MetadataEntry.chave == "album")
+        )
+        linhas = []
+        for data, mtime, album, namespace in session.execute(stmt):
+            quando = data or mtime
+            if quando is None or not album:
+                continue
+            linhas.append((quando, album, namespace))
+        linhas.sort(key=lambda t: t[0])
+        self._quando = [t[0] for t in linhas]
+        self._linhas = linhas
+        self._fontes = {t[2] for t in linhas}
+
+    def __len__(self) -> int:
+        return len(self._linhas)
+
+    @property
+    def fonte_legivel(self) -> str:
+        nomes = sorted(
+            _FONTES_DE_ALBUM.get(ns, ns) for ns in self._fontes
+        )
+        return " / ".join(nomes) if nomes else "catálogo externo"
+
+    def contagens(self, inicio: datetime, fim: datetime) -> tuple[tuple[str, int], ...]:
+        """{álbum: fotos dele dentro de [inicio, fim]} como tupla ordenada.
+
+        Sem folga nas bordas: a régua é o período que o agrupamento
+        temporal já decidiu, não uma janela nova inventada aqui.
+        """
+        i = bisect_left(self._quando, inicio)
+        j = bisect_right(self._quando, fim)
+        contagem: Counter = Counter()
+        for _quando, album, _ns in self._linhas[i:j]:
+            contagem[album] += 1
+        return tuple(sorted(contagem.items()))
+
+
 @dataclass(slots=True)
 class _Draft:
     campo: str
@@ -119,6 +193,9 @@ class _Sessao:
     tipo: str = "neutra"            # viagem | evento | neutra
     rotulo: str | None = None       # nome da viagem ou do evento
     origem: str = "agrupamento"
+    # Origem só do nome — pode divergir de `origem` quando o rótulo veio de
+    # um álbum de catálogo externo e o tipo veio do GPS.
+    origem_do_rotulo: str = "agrupamento"
     justificativa: str = ""
     categoria: str | None = None    # só quando vinda do advisor
     pais_dominante: str | None = None
@@ -284,13 +361,19 @@ class SuggestionEngine:
             ]
         drafts = [d for d in drafts if d.n_fotos >= _MIN_FOTOS_SESSAO]
 
+        albuns = _IndiceDeAlbuns(session)
+        if albuns:
+            log.info("nomeação: %d marcações de álbum disponíveis (%s)",
+                     len(albuns), albuns.fonte_legivel)
+
         sessoes: list[_Sessao] = []
         sessao_da_media: dict[int, _Sessao] = {}
         for draft in drafts:
             membros = [por_id[i] for i in draft.media_ids]
             if any(m.data_capturada for m in membros):
                 sessao = self._classificar(
-                    session, _Sessao(draft=draft), membros, casa, herancas
+                    session, _Sessao(draft=draft), membros, casa, herancas,
+                    albuns,
                 )
                 if sessao.tipo == "neutra" and self._advisor is not None:
                     self._consultar_advisor(sessao, membros)
@@ -312,7 +395,9 @@ class SuggestionEngine:
         sessoes = [
             final
             for sessao in sessoes
-            for final in self._subdividir(session, sessao, por_id, casa, herancas)
+            for final in self._subdividir(
+                session, sessao, por_id, casa, herancas, albuns
+            )
         ]
 
         for sessao in sessoes:
@@ -321,7 +406,8 @@ class SuggestionEngine:
         return sessoes, sessao_da_media
 
     def _subdividir(self, session: Session, sessao: _Sessao, por_id, casa,
-                    herancas: dict[int, Heranca]) -> list[_Sessao]:
+                    herancas: dict[int, Heranca],
+                    albuns: "_IndiceDeAlbuns") -> list[_Sessao]:
         """A sessão, ou os acontecimentos dentro dela."""
         membros = [por_id[i] for i in sessao.draft.media_ids]
         momentos = [
@@ -346,7 +432,8 @@ class SuggestionEngine:
             draft = ViagemDraft(inicio=min(quando), fim=max(quando))
             draft.media_ids.extend(bloco)
             novas.append(self._classificar(
-                session, _Sessao(draft=draft), membros_do_bloco, casa, herancas
+                session, _Sessao(draft=draft), membros_do_bloco, casa,
+                herancas, albuns,
             ))
         log.info("sessão de %d fotos virou %d acontecimentos",
                  len(membros), len(novas))
@@ -377,7 +464,8 @@ class SuggestionEngine:
         ]
 
     def _classificar(self, session: Session, sessao: _Sessao, membros,
-                     casa, herancas: dict[int, Heranca]) -> _Sessao:
+                     casa, herancas: dict[int, Heranca],
+                     albuns: "_IndiceDeAlbuns") -> _Sessao:
         pastas = tuple(sorted({m.pasta for m in membros}))
         sessao.pais_dominante, sessao.lugares, pernas = self._geo_da_sessao(
             session, membros, herancas
@@ -402,12 +490,16 @@ class SuggestionEngine:
                 dist_mediana_casa_km=dist_mediana,
                 periodo_curto=sessao.periodo_curto(),
                 paises_no_tempo=pernas,
+                albuns=albuns.contagens(sessao.draft.inicio, sessao.draft.fim),
+                fonte_dos_albuns=albuns.fonte_legivel,
+                cameras=albuns.cameras,
             ),
             self._config,
         )
         sessao.tipo = decisao.tipo
         sessao.rotulo = decisao.rotulo
         sessao.origem = decisao.origem
+        sessao.origem_do_rotulo = decisao.origem_do_rotulo
         sessao.justificativa = decisao.justificativa
         return sessao
 
@@ -469,7 +561,7 @@ class SuggestionEngine:
         if resultado.evento:
             sessao.tipo = "evento"
             sessao.rotulo = resultado.evento
-            sessao.origem = "llm"
+            sessao.origem = sessao.origem_do_rotulo = "llm"
             sessao.justificativa = (
                 f"LLM (apenas metadados): {resultado.justificativa}"
             )
@@ -582,13 +674,13 @@ class SuggestionEngine:
 
         if sessao is not None and sessao.tipo == "viagem":
             drafts.append(_Draft(
-                "viagem", sessao.origem, sessao.rotulo,
+                "viagem", sessao.origem_do_rotulo, sessao.rotulo,
                 f"{sessao.draft.n_fotos} fotos entre "
                 f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
             ))
         if sessao is not None and sessao.tipo == "evento":
             drafts.append(_Draft(
-                "evento", sessao.origem, sessao.rotulo,
+                "evento", sessao.origem_do_rotulo, sessao.rotulo,
                 f"{sessao.draft.n_fotos} fotos em "
                 f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
             ))

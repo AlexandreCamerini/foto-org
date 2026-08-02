@@ -647,3 +647,80 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
 - Status: decidido pelo orquestrador, consistente com o padrão já adotado na
   Biblioteca e na Revisão (`ac9e7f2`, `1b125f7`) e no card de Viagens/Eventos
   (`151e381`).
+
+---
+
+## D-034 — Álbum nomeia onde a pasta não nomeia, e não passa por cima dela
+
+- Fase: backlog v2+, item 3 de `docs/ROADMAP.md` ("eventos nomeados pelo que
+  já existe")
+- Classe: A
+- Data: 2026-08-01
+- Contexto: D-030 fechou o que álbum **não** pode fazer (dividir
+  acontecimento). Faltava ligar o que ele pode: as 27.226 nomeações de álbum
+  do catálogo (25.304 na medição de D-030, o acervo cresceu desde então)
+  ainda não chegavam a `Trip.nome`/`Event.nome`. O nome de PASTA já chegava,
+  via `grouping/eventos.py::extrair_evento`; o metadado de álbum, não.
+- Medido, e é o achado que decidiu tudo: **nenhuma das 27.226 marcações está
+  numa foto organizável.** 27.216 vivem nas 44.661 referências do Apple
+  Fotos e 10 nas 54.086 do Lightroom — todas com `arquivo_ausente`. Isso tem
+  duas consequências opostas:
+  - As 44.661 referências do Apple Fotos têm `pasta` **vazia**: para elas o
+    álbum não concorre com a pasta, ele é o único nome que existe. As do
+    Lightroom são o espelho — caminho rico ("/Volumes/photo/Portfolio/Chile
+    e Atacama Abr.18") e quase nenhum álbum. Os dois sinais são
+    complementares, não rivais.
+  - Como nenhuma delas é acervo, o álbum só alcança uma sessão por
+    contemporaneidade, do mesmo jeito que a herança de GPS de D-025.
+- Escolhida — a regra de desempate, em três camadas:
+  1. **Sessão neutra continua sem nome.** Nomear o que a cascata não
+     classificou seria detectar acontecimento por álbum, que é exatamente o
+     que D-030 proíbe.
+  2. **Pasta ganha quando o rótulo é um segmento de pasta** (regras 2, 3 e 6
+     de `docs/AGRUPAMENTO.md`). Uma foto está em uma pasta e em vários
+     álbuns ao mesmo tempo; o sinal único vence o múltiplo, e é o que já
+     estava testado nos 17 cenários de `scripts/avaliar_agrupamento.py`.
+  3. **Álbum entra quando o rótulo é derivado** — país geocodificado
+     ("Brasil") ou intervalo de datas ("Viagem de 08-07 a 11-07"), regras 1,
+     4 e 5. Esses dizem onde e quando; o destino já carrega os dois em
+     outros campos.
+  Entre álbuns concorrentes: prateleira por último ("Férias", "Family"),
+  depois mais fotos, depois nome mais curto e ordem alfabética.
+- Por quê a prateleira desce: por frequência pura, o período de 15 a 31 de
+  março de 2019 se chamaria **"Férias"** (4.352 fotos) em vez de **"Portugal
+  e Italia com as Meninas"** (3.729) — o aninhamento de D-030 escolhendo o
+  nome que diz menos. É o único período do acervo em que a regra diverge de
+  "mais frequente", e é justamente o nome que o ROADMAP usava como exemplo
+  do resultado desejado. Prateleira é rebaixada e não rejeitada porque
+  nenhum período do acervo tem *só* prateleira como candidata: as duas
+  opções dão o mesmo resultado hoje, e rebaixar é a ação menor.
+- **Ganho medido hoje: zero.** `scripts/medir_nome_de_album.py` regenerou as
+  sugestões numa cópia do catálogo real: 7 grupos antes, 7 depois, **0 com
+  nome diferente**. As sessões que existem hoje ou já têm nome de pasta
+  (Dubai, Pantanal, TERG, Quizomba, Serena, Visconde de Mauá) ou não têm
+  álbum aproveitável no período (a viagem "Brasil" de 2026-07 só tem
+  "WhatsApp", que `album_nomeia` descarta). No caso do Dubai o álbum existe
+  e **concorda** com a pasta ("Dubai, Thai & Viet" nos dois), o que é a
+  prova de que a ordem pasta-primeiro não custa nada aqui.
+- **Ganho bloqueado, e por quê:** 21 períodos do acervo têm álbum
+  aproveitável, cobrindo 20.515 fotos; em **20 deles (20.482 fotos) nenhuma
+  pasta nomeia coisa alguma**. Esses períodos não viram sessão porque as
+  fotos que os carregam não são acervo alcançável (D-028: original só no
+  iCloud). É o mesmo bloqueio que já derrubou os itens 5, 7, 8 e 9 do
+  ROADMAP — a ligação está pronta e passa a valer no dia em que esses
+  arquivos forem alcançados, sem código novo.
+- Confiança: origem nova `album_externo`, 0.55 — **abaixo** de `pasta`
+  (0.60), embora as duas sejam palavras que o dono escreveu. A foto *está*
+  na pasta e apenas *coincide no tempo* com o álbum; o vínculo é da mesma
+  natureza da vizinhança temporal, e a tabela de `docs/CONFIANCA.md` reflete
+  isso. `Decisao.origem_do_rotulo` guarda essa origem separada de
+  `Decisao.origem`, que continua dizendo de onde veio o tipo: uma viagem
+  pode ser viagem pelo GPS e chamar-se pelo álbum.
+- Como reverter: `_nomear_por_album` em `fotoorganizer/grouping/classifier.py`
+  é o único ponto — devolver `decisao` sem tocar em nada restaura o
+  comportamento anterior. `escolher_album` e `_PRATELEIRAS` vivem em
+  `fotoorganizer/grouping/albuns.py`; `MIN_FOTOS_ALBUM` é o limiar.
+  `scripts/medir_nome_de_album.py` refaz a medição (somente leitura sobre o
+  catálogo; a regeneração roda numa cópia temporária). Nada persistido
+  depende da regra — `trips`/`events` são recriados a cada `gerar()`.
+- Status: decidido por medição

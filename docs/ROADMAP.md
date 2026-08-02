@@ -133,10 +133,20 @@ identificadas em CR3, e mais rápido que o fallback.
      reconstruir o raciocínio duas vezes.
    - *Movimentação:* pendência da fase anterior, sobe por ser quase de graça.
 
-3. **Eventos nomeados pelo que já existe** — usar as 25.304 nomeações de
-   álbum e o nome de pasta para *nomear* os eventos que o agrupamento temporal
-   já detecta. **Não** detectar aniversário/casamento por rosto e visão, que
-   era a formulação antiga.
+3. **Eventos nomeados pelo que já existe** — *implementado em 2026-08-01
+   (D-034); a régua de desempate está em `docs/AGRUPAMENTO.md`, seção 2c.*
+   Usar as 27.226 nomeações de álbum (eram 25.304 quando esta linha foi
+   escrita) e o nome de pasta para *nomear* os eventos que o agrupamento
+   temporal já detecta. **Não** detectar aniversário/casamento por rosto e
+   visão, que era a formulação antiga.
+   - *Entregou o quê:* zero nomes novos **hoje** — 7 grupos antes, 7 depois,
+     nenhum com nome diferente. O motivo é o mesmo bloqueio dos itens 5, 7,
+     8 e 9: nenhuma das 27.226 marcações está numa foto alcançável (D-028).
+     Os 21 períodos com álbum aproveitável (20.515 fotos, 20 deles sem nome
+     de pasta nenhum) ganham nome no dia em que os arquivos aparecerem, sem
+     código novo. Reforça, medido, o "item que a lista ainda não tem" no fim
+     deste arquivo: reencontrar os arquivos multiplica agora cinco itens, não
+     quatro.
    - *Muda o quê:* o acervo ganha nome humano ("Portugal e Itália com as
      Meninas") onde hoje tem intervalo de datas — inclusive em 2001–2018,
      onde nome de pasta e álbum são o único sinal de lugar que existe (D-029).

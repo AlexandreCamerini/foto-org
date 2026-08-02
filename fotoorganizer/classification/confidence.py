@@ -21,6 +21,14 @@ SCORES_REFERENCIA: dict[str, float] = {
     # sessão: o vínculo é foto-a-foto e a janela é de minutos, não dias.
     "vizinhanca_temporal": 0.75,
     "vizinhanca": 0.55,    # inferido de fotos próximas no tempo
+    # Nome de álbum de catálogo externo (Apple Fotos, Lightroom) que cobre o
+    # período da sessão. É intenção declarada pelo dono, como o nome de
+    # pasta — mas fica ABAIXO de `pasta` (0.60) porque o vínculo é de
+    # contemporaneidade, não de pertencimento: a foto está na pasta, e
+    # apenas coincide no tempo com o álbum. Mesma natureza (e mesmo score)
+    # de `vizinhanca`, com a diferença de que o valor aqui é uma palavra que
+    # o dono escreveu, não uma dedução nossa.
+    "album_externo": 0.55,
     "agrupamento": 0.70,   # viagem por lacuna temporal
     "llm": 0.55,           # sugerido por LLM a partir de metadados (opt-in)
     # Tipo da imagem por sinais de arquivo (nome, pasta, resolução de

@@ -57,7 +57,12 @@ O prompt da fase 8 listava também câmera/lente, intenção declarada de
   álbuns se aninham (a mesma foto contada em "Férias", "Portugal e Italia
   com as Meninas" e "Family" ao mesmo tempo, em 29 dias do acervo). Álbum
   entra como nome e evidência de intenção, nunca como divisor — decisão que
-  vale também aqui, não só na cascata de sessão.
+  vale também aqui, não só na cascata de sessão. A metade que **foi**
+  implementada (o álbum como nome, e o desempate contra o nome de pasta)
+  está em `docs/AGRUPAMENTO.md`, seção 2c, e em D-034; nada dela toca a
+  divisão descrita neste documento — `dividir_sessao` não recebe álbum, e
+  os blocos que ela devolve são reclassificados e renomeados um a um, cada
+  um com os álbuns do seu próprio período.
 - **Hora do dia** — não existe uma regra "manhã ≠ noite". O efeito aparece
   só indiretamente: a lacuna entre os dois grupos de um dia real tende a
   estourar o teto ou o fator do ritmo local, não porque o horário em si é

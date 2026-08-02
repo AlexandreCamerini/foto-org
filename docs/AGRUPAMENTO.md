@@ -95,6 +95,64 @@ Resultado original (2026-07-10, 16 cenários):
 Com casa conhecida, quem decide deslocamento é a regra 4 (distância); a
 regra 5 só cobre acervos sem GPS suficiente para saber onde é casa.
 
+## 2c. Nome de álbum de catálogo externo (nomeia, não divide)
+
+A cascata acima decide **o quê** (viagem/evento/neutra) e, de quebra, **como
+se chama**. Nas regras 4 e 5 o nome não é escolha do dono: é o país que o
+geocoder devolveu ("Brasil") ou o intervalo de datas ("Viagem de 08-07 a
+11-07"). O acervo tem 27.226 nomeações de álbum vindas do Apple Fotos e do
+Lightroom que dizem melhor — e é só o nome que elas mudam.
+
+**O limite, herdado de D-030:** álbum nomeia, nunca divide nem cria. Sessão
+neutra continua neutra; nenhum `Trip`/`Event` nasce por causa de um álbum. A
+fronteira segue sendo só a de `grouping/temporal.py` e
+`grouping/eventos_temporais.py`.
+
+### O desempate
+
+| Situação | Quem nomeia | Por quê |
+|---|---|---|
+| A sessão é **neutra** | ninguém (segue sem nome) | nomear seria detectar acontecimento por álbum — proibido por D-030 |
+| O rótulo veio de um **segmento de pasta** (regras 2, 3 e 6) | a pasta | uma foto está em uma pasta e em vários álbuns ao mesmo tempo; a pasta é sinal único, já testado nos 17 cenários de 2b |
+| O rótulo é **derivado** — país geocodificado ou período (regras 1, 4 e 5) | o álbum, se houver candidato | o álbum diz *o quê*; o país e a data dizem *onde* e *quando*, que o destino já carrega em outros campos |
+
+A ordem custa pouco porque os dois sinais quase nunca competem neste acervo:
+as 44.661 referências do Apple Fotos, que carregam 27.216 das 27.226
+nomeações, têm `pasta` vazia; as 54.086 do Lightroom têm caminho rico e só 10
+nomeações de álbum. Medido: dos 21 períodos com álbum aproveitável, **20 não
+têm nome de pasta nenhum** (D-034).
+
+### Qual álbum, quando há mais de um
+
+Os álbuns se aninham — no acervo real, 15 de março a 31 de março de 2019 é
+"Férias" (4.352), "Portugal e Italia com as Meninas" (3.729) e "Family" (607)
+ao mesmo tempo. `grouping/albuns.py::escolher_album` desempata nesta ordem:
+
+1. **Prateleira por último.** "Férias", "Family", "Momentos" e afins são a
+   gaveta em que a foto foi guardada, não o que aconteceu — o equivalente,
+   no catálogo externo, das pastas contêiner ("Portfolio", "Acervo"). São
+   rebaixadas, não rejeitadas.
+2. **Mais fotos primeiro.** Separa o álbum do acontecimento inteiro do álbum
+   aninhado dentro dele ("Dubai, Thai & Viet" 2.019 × "Nosso Casamento" 107).
+3. **Nome mais curto, depois alfabético.** Só determinismo — "Empolga 2025" e
+   "Empolga as 9 - 2025" têm 159 fotos cada, e o rótulo não pode dançar entre
+   regenerações.
+
+Antes do desempate valem os filtros que já existiam: `album_nomeia` descarta
+aparelho ("Canon EOS 5D Mark IV", o maior álbum do acervo) e app/serviço
+("WhatsApp", "Instagram", "Drone"); `MIN_FOTOS_ALBUM` (3, o mesmo número e a
+mesma razão de `_MIN_FOTOS_PERNA`) descarta o punhado de fotos que não nomeia
+o conjunto; e `separar_data` tira a data do nome, como já acontece com pasta
+("Peru - Julho de 2026" nomeia "Peru").
+
+Como o álbum chega até a sessão: `_IndiceDeAlbuns`
+(`classification/engine.py`) carrega todas as marcações uma vez por geração e
+responde por bisseção quais caem dentro de `[início, fim]` da sessão — sem
+folga nas bordas, porque a régua é o período que o agrupamento temporal já
+decidiu. Evidência de origem `album_externo` (0.55, abaixo de `pasta`);
+`Decisao.origem_do_rotulo` guarda essa origem separada de `Decisao.origem`,
+que continua dizendo de onde veio o **tipo**.
+
 ## 3. Advisor LLM (apoio, nunca decisão final)
 
 `ClassificationAdvisor` (Protocol) é consultado APENAS para sessões

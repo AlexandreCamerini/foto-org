@@ -7,9 +7,10 @@ tomada só com os dados da sessão; coleta de GPS/geocoding fica no motor.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
+from fotoorganizer.grouping.albuns import escolher_album
 from fotoorganizer.grouping.eventos import extrair_evento
 from fotoorganizer.geolocation import extrair_hierarquia_da_pasta
 from fotoorganizer.geolocation.folder_names import _normalizar
@@ -45,6 +46,15 @@ class DadosSessao:
     # Países da sessão em ordem cronológica de chegada (só os relevantes) —
     # ≥ 2 entradas indicam viagem multi-país (Dubai → Tailândia → Vietnã).
     paises_no_tempo: tuple[str, ...] = ()
+    # Nomeações de álbum de catálogo externo que cobrem o período da sessão:
+    # {nome do álbum: fotos daquele período nele}. Só NOMEIA (D-030) — o
+    # tipo da sessão é decidido sem olhar para cá.
+    albuns: tuple[tuple[str, int], ...] = ()
+    # De onde vieram esses álbuns, para a justificativa citar ("Apple Fotos").
+    fonte_dos_albuns: str = "catálogo externo"
+    # Câmeras conhecidas do acervo, normalizadas — `album_nomeia` precisa
+    # delas para descartar álbum que é nome de aparelho.
+    cameras: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +63,72 @@ class Decisao:
     rotulo: str | None
     origem: str
     justificativa: str
+    # Origem só do RÓTULO. Separada de `origem` porque as duas podem
+    # divergir: a sessão pode ser viagem pelo GPS (`geocoding_offline`) e o
+    # nome vir do álbum (`album_externo`). A categoria continua citando
+    # `origem`; a evidência de viagem/evento, cujo valor É o rótulo, cita
+    # esta.
+    origem_do_rotulo: str = ""
+    # True quando o rótulo é um segmento de pasta escrito pelo dono. É o
+    # que dá a pasta a prioridade sobre o álbum (docs/AGRUPAMENTO.md, 2c).
+    rotulo_de_pasta: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.origem_do_rotulo:
+            object.__setattr__(self, "origem_do_rotulo", self.origem)
 
 
 NEUTRA = Decisao("neutra", None, "agrupamento", "")
 
+# Origem das evidências cujo valor é um nome de álbum de catálogo externo.
+ORIGEM_ALBUM = "album_externo"
+
 
 def classificar_sessao(
+    dados: DadosSessao,
+    config: ConfigClassificacao = ConfigClassificacao(),
+) -> Decisao:
+    """Tipo e nome da sessão. O tipo sai da cascata determinística; o nome
+    pode ser melhorado por álbum de catálogo externo, nunca o tipo."""
+    return _nomear_por_album(_cascata(dados, config), dados)
+
+
+def _nomear_por_album(decisao: Decisao, dados: DadosSessao) -> Decisao:
+    """Álbum entra como NOME, e só onde não há nome do dono (D-030).
+
+    Três limites, nesta ordem:
+
+    - **Não cria acontecimento.** Sessão neutra continua neutra: nomear o
+      que a cascata não classificou seria detectar evento por álbum, que é
+      exatamente o que D-030 proíbe (os álbuns se aninham — a mesma foto
+      em três deles no mesmo dia).
+    - **Pasta ganha.** Quando o rótulo já é um segmento de pasta, o álbum
+      não entra. A pasta é uma decisão de arrumação única por foto e já
+      testada nos 17 cenários de `scripts/avaliar_agrupamento.py`; o álbum
+      é múltiplo por foto e precisou de um desempate inventado.
+    - **Só substitui nome derivado.** O que o álbum troca é país
+      geocodificado ("Brasil") ou período ("Viagem de 08-07 a 11-07") —
+      rótulos que descrevem quando e onde, não o quê.
+    """
+    if decisao.tipo == "neutra" or decisao.rotulo_de_pasta or not dados.albuns:
+        return decisao
+    escolhido = escolher_album(dict(dados.albuns), dados.cameras)
+    if escolhido is None:
+        return decisao
+    nome, fotos = escolhido
+    if nome == decisao.rotulo:
+        return decisao
+    justificativa = (
+        f"{decisao.justificativa}; nome do álbum '{nome}' "
+        f"({dados.fonte_dos_albuns}), que cobre {fotos} fotos deste período"
+    ).lstrip("; ")
+    return Decisao(
+        tipo=decisao.tipo, rotulo=nome, origem=decisao.origem,
+        justificativa=justificativa, origem_do_rotulo=ORIGEM_ALBUM,
+    )
+
+
+def _cascata(
     dados: DadosSessao,
     config: ConfigClassificacao = ConfigClassificacao(),
 ) -> Decisao:
@@ -70,7 +140,11 @@ def classificar_sessao(
             rotulo = " – ".join(dados.paises_no_tempo)
         else:
             rotulo = dados.pais_dominante or dados.periodo_curto
-        return Decisao("viagem", rotulo, origem, justificativa)
+        # O rótulo aqui é derivado (país geocodificado, pernas ou
+        # período): mesmo quando a REGRA veio da pasta, o NOME não veio —
+        # é justamente onde o álbum pode entrar.
+        return Decisao("viagem", rotulo, origem, justificativa,
+                       rotulo_de_pasta=False)
 
     # 1. Pasta de categoria "Viagens" no caminho.
     for pasta in dados.pastas:
@@ -82,7 +156,8 @@ def classificar_sessao(
     evento, de_keyword = extrair_evento(list(dados.pastas))
     if evento and de_keyword:
         return Decisao("evento", evento, "pasta",
-                       f"pasta '{evento}' indica um evento")
+                       f"pasta '{evento}' indica um evento",
+                       rotulo_de_pasta=True)
 
     # 3. Países reconhecidos no nome das pastas.
     #
@@ -103,15 +178,19 @@ def classificar_sessao(
                     "viagem", segmento.strip(), "pasta",
                     f"pasta '{segmento}' lista {len(paises)} destinos: "
                     f"{', '.join(paises)}",
+                    rotulo_de_pasta=True,
                 )
     for pasta in dados.pastas:
         hierarquia = extrair_hierarquia_da_pasta(pasta)
         if hierarquia.pais:
-            return viagem(
+            # O país foi LIDO da pasta — é palavra do dono, não dedução do
+            # GPS, então o álbum não passa por cima dele.
+            decisao = viagem(
                 "pasta",
                 f"país reconhecido na pasta ('{hierarquia.segmento_pais}')",
                 pais=hierarquia.pais,
             )
+            return replace(decisao, rotulo_de_pasta=True)
 
     # 4. Deslocamento: longe de casa.
     if (dados.dist_mediana_casa_km is not None
@@ -137,6 +216,7 @@ def classificar_sessao(
             "evento", evento, "pasta",
             f"pasta '{evento}' nomeia uma sessão de "
             f"{max(dados.duracao.days, 1)} dia(s)",
+            rotulo_de_pasta=True,
         )
 
     # 7. Sem veredito — um cluster de horas NUNCA vira viagem sozinho.
