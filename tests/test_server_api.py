@@ -277,6 +277,121 @@ def test_gerar_sugestoes_e_aprovar(migrated_engine, tmp_path):
     ).status_code == 422
 
 
+# -- template de destino configurável (fase 10) ------------------------------
+def test_template_sem_preferencia_salva_devolve_o_padrao(client):
+    from fotoorganizer.classification.templates import TEMPLATE_PADRAO
+
+    assert client.get("/api/configuracoes/template").json() == {
+        "template": TEMPLATE_PADRAO
+    }
+
+
+def test_salvar_template_persiste_e_e_devolvido_por_get(client):
+    resposta = client.put(
+        "/api/configuracoes/template", json={"template": "{ano}/{pais}"}
+    )
+    assert resposta.status_code == 200
+    assert resposta.json() == {"template": "{ano}/{pais}"}
+    assert client.get("/api/configuracoes/template").json() == {
+        "template": "{ano}/{pais}"
+    }
+
+
+def test_salvar_template_persiste_entre_clientes_diferentes(migrated_engine, tmp_path):
+    """O aceite fala em "persistir entre reinícios do servidor" — aqui isso
+    é um `create_app` novo sobre o mesmo engine, sem reaproveitar estado em
+    memória do primeiro cliente."""
+    from fotoorganizer.config.settings import Settings
+    from fastapi.testclient import TestClient
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.server import create_app
+
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    primeiro = TestClient(create_app(settings, factory), base_url="http://127.0.0.1:8765")
+    primeiro.put("/api/configuracoes/template", json={"template": "{ano}/{cidade}"})
+
+    segundo = TestClient(create_app(settings, factory), base_url="http://127.0.0.1:8765")
+    assert segundo.get("/api/configuracoes/template").json() == {
+        "template": "{ano}/{cidade}"
+    }
+
+
+def test_salvar_template_vazio_e_recusado(client):
+    resposta = client.put("/api/configuracoes/template", json={"template": ""})
+    assert resposta.status_code == 422
+
+
+def test_salvar_template_com_placeholder_invalido_e_recusado_sem_salvar(client):
+    from fotoorganizer.classification.templates import TEMPLATE_PADRAO
+
+    resposta = client.put(
+        "/api/configuracoes/template",
+        json={"template": "{categoria}/{fantasia}"},
+    )
+    assert resposta.status_code == 422
+    assert "fantasia" in resposta.json()["detail"]
+    # Nada foi salvo: GET continua no padrão.
+    assert client.get("/api/configuracoes/template").json() == {
+        "template": TEMPLATE_PADRAO
+    }
+
+
+def test_preview_do_template_chama_o_render_destino_real(client):
+    from fotoorganizer.classification.templates import render_destino
+
+    resposta = client.post(
+        "/api/configuracoes/template/preview",
+        json={"template": "{categoria}/{ano} - {viagem}/{pais}/{cidade}"},
+    )
+    assert resposta.status_code == 200
+    exemplos = resposta.json()["exemplos"]
+    assert len(exemplos) == 2
+
+    # Bate exatamente com o que a própria função produziria para os mesmos
+    # campos — não uma reimplementação divergente.
+    for exemplo in exemplos:
+        esperado = render_destino(
+            "{categoria}/{ano} - {viagem}/{pais}/{cidade}", exemplo["campos"]
+        )
+        assert exemplo["destino"] == esperado
+
+    # O segundo exemplo mostra o fallback: sem viagem, o país/cidade decidem.
+    assert exemplos[0]["campos"]["viagem"] == "Tailândia"
+    assert exemplos[1]["campos"]["viagem"] is None
+    assert "Tailândia" in exemplos[1]["destino"] or "Chiang Mai" in exemplos[1]["destino"]
+
+
+def test_gerar_sugestoes_usa_o_template_persistido(migrated_engine, tmp_path):
+    import time
+
+    fotos = tmp_path / "fotos"
+    for i in range(2):
+        make_jpeg(fotos / f"t_{i}.jpg", seed=i)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()) \
+        .scan_source(fotos)
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+    novo_template = "{ano}/{categoria}"
+    assert client.put(
+        "/api/configuracoes/template", json={"template": novo_template}
+    ).status_code == 200
+
+    assert client.post("/api/sugestoes/gerar").status_code == 200
+    estado = _aguardar_job(client)
+    assert estado["status"] == "concluido"
+
+    from fotoorganizer.models import Suggestion
+
+    with factory() as session:
+        templates_usados = {s.template for s in session.query(Suggestion).all()}
+    assert templates_usados == {novo_template}
+
+
 def test_editar_destino_da_sugestao(migrated_engine, tmp_path):
     from fotoorganizer.models import ConfidenceLevel, MediaFile, Suggestion
 

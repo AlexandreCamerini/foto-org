@@ -288,6 +288,25 @@ export interface LinhaAuditoria {
   detalhe: Record<string, unknown> | null;
 }
 
+/** Template ativo que decide em que pasta cada foto cai ao criar um plano.
+ *  `GET` nunca falha por ausência de preferência — cai no default do motor. */
+export interface TemplateConfiguravel {
+  template: string;
+}
+
+/** Um dos dois exemplos fixos do backend: `destino` já vem renderizado por
+ *  `render_destino` de verdade — o webapp só mostra o que voltou, nunca
+ *  reimplementa a lógica de colapso/dedupe de segmento. */
+export interface ExemploPreviewTemplate {
+  rotulo: string;
+  campos: Record<string, string | null>;
+  destino: string;
+}
+
+export interface PreviewTemplate {
+  exemplos: ExemploPreviewTemplate[];
+}
+
 async function json<T>(url: string): Promise<T> {
   const resposta = await fetch(url);
   if (!resposta.ok) throw new Error(`${resposta.status} em ${url}`);
@@ -312,6 +331,19 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 async function patch<T>(url: string, body: unknown): Promise<T> {
   const resposta = await fetch(url, {
     method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const dados = await resposta.json();
+  if (!resposta.ok) throw new Error(dados.detail ?? `erro ${resposta.status}`);
+  return dados as T;
+}
+
+/** Mesma ideia do `post`, para substituir um recurso inteiro (PUT) — o 422
+ * de um template com placeholder inválido também vem com mensagem legível. */
+async function put<T>(url: string, body: unknown): Promise<T> {
+  const resposta = await fetch(url, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -385,6 +417,11 @@ export const api = {
     json<LinhaAuditoria[]>(`/api/operacoes/${id}/auditoria`),
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
+  template: () => json<TemplateConfiguravel>("/api/configuracoes/template"),
+  salvarTemplate: (template: string) =>
+    put<TemplateConfiguravel>("/api/configuracoes/template", { template }),
+  previewTemplate: (template: string) =>
+    post<PreviewTemplate>("/api/configuracoes/template/preview", { template }),
 };
 
 export interface MembroDuplicata {

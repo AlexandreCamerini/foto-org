@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Plano, RelatorioDryRun } from "../api";
 import type { Job } from "../hooks/useJob";
+import TemplateEditor from "./TemplateEditor";
 
 const CORES_STATUS: Record<string, string> = {
   concluida: "text-ok",
@@ -128,6 +129,8 @@ export default function Operations({ job }: { job: Job }) {
         </button>
         {erro && <span className="text-erro">{erro}</span>}
       </div>
+
+      <TemplateEditor job={job} />
 
       <div className="flex min-h-0 flex-1">
         <aside className="w-72 shrink-0 overflow-y-auto border-r border-borda">

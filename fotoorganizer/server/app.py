@@ -32,6 +32,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from datetime import datetime, timedelta, timezone
 
 from fotoorganizer import __version__
+from fotoorganizer.classification.templates import (
+    _PLACEHOLDER,
+    TEMPLATE_PADRAO,
+    render_destino,
+)
 from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.geolocation.escala import metros_por_grau
@@ -57,6 +62,7 @@ from fotoorganizer.repositories import (
     DuplicateRepository,
     MediaRepository,
     OperationRepository,
+    SettingsRepository,
     SuggestionRepository,
 )
 from fotoorganizer.repositories.inventario import levantar
@@ -118,6 +124,44 @@ class PlanoBody(BaseModel):
 
 class EditarDestinoBody(BaseModel):
     destino: str
+
+
+class TemplateBody(BaseModel):
+    template: str
+
+
+# Fase 10: nenhum placeholder novo além destes — ver docstring de
+# fotoorganizer/classification/templates.py. Mudar esta lista sem mudar
+# render_destino quebra o contrato entre editor e motor.
+PLACEHOLDERS_TEMPLATE_VALIDOS = frozenset(
+    {"categoria", "ano", "viagem", "evento", "pais", "regiao", "cidade"}
+)
+
+# Dois exemplos fixos: um mostra o regime "viagem/evento nomeiam o lugar",
+# o outro o fallback quando não há — o editor precisa ver os dois regimes
+# do render, não só um deles parecendo bonito.
+_EXEMPLOS_PREVIEW_TEMPLATE = (
+    {
+        "rotulo": "com viagem",
+        "campos": {
+            "categoria": "Viagens", "ano": "2024", "viagem": "Tailândia",
+            "evento": None, "pais": "Tailândia", "regiao": None,
+            "cidade": "Chiang Mai",
+        },
+    },
+    {
+        "rotulo": "sem viagem nem evento — cai para país, região, cidade",
+        "campos": {
+            "categoria": "Viagens", "ano": "2024", "viagem": None,
+            "evento": None, "pais": "Tailândia", "regiao": None,
+            "cidade": "Chiang Mai",
+        },
+    },
+)
+
+
+def _placeholders_invalidos(template: str) -> set[str]:
+    return set(_PLACEHOLDER.findall(template)) - PLACEHOLDERS_TEMPLATE_VALIDOS
 
 
 # O usuário não precisa saber o que é "libraw" — precisa saber de onde o
@@ -367,6 +411,7 @@ def create_app(
     suggestion_repo = SuggestionRepository(session_factory)
     duplicate_repo = DuplicateRepository(session_factory)
     operation_repo = OperationRepository(session_factory)
+    settings_repo = SettingsRepository(session_factory)
     planner = OperationPlanner(session_factory)
     executor = OperationExecutor(session_factory)
     thumb_cache = ThumbnailCache(settings.cache_dir)
@@ -789,6 +834,39 @@ def create_app(
             ],
             **_enquadramento(pontos),
             "nota_do_raio": NOTA_DO_RAIO,
+        }
+
+    # -- configurações: template de destino (fase 10) ------------------------
+    @app.get("/api/configuracoes/template")
+    def obter_template() -> dict:
+        return {"template": settings_repo.obter_template(TEMPLATE_PADRAO)}
+
+    @app.put("/api/configuracoes/template")
+    def salvar_template(body: TemplateBody) -> dict:
+        template = body.template.strip()
+        if not template:
+            raise HTTPException(422, "template não pode ser vazio")
+        invalidos = _placeholders_invalidos(template)
+        if invalidos:
+            nomes = ", ".join(
+                "{" + p + "}" for p in sorted(invalidos)
+            )
+            raise HTTPException(
+                422, f"placeholder inválido: {nomes}"
+            )
+        # Intencional: não regenera sugestões aqui — trocar o texto no
+        # editor não pode disparar um job pesado a cada tecla/salvar.
+        # Regenerar é ação explícita separada (POST /api/sugestoes/gerar).
+        settings_repo.salvar_template(template)
+        return {"template": template}
+
+    @app.post("/api/configuracoes/template/preview")
+    def preview_template(body: TemplateBody) -> dict:
+        return {
+            "exemplos": [
+                {**exemplo, "destino": render_destino(body.template, exemplo["campos"])}
+                for exemplo in _EXEMPLOS_PREVIEW_TEMPLATE
+            ]
         }
 
     # -- sugestões e duplicatas (leitura; ações nas fatias seguintes) --------

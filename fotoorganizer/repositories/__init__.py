@@ -10,6 +10,10 @@ from fotoorganizer.repositories.operations import (
     OperationRepository,
     PlanRow,
 )
+from fotoorganizer.repositories.settings import (
+    CHAVE_TEMPLATE_DESTINO,
+    SettingsRepository,
+)
 from fotoorganizer.repositories.suggestions import (
     SuggestionFilters,
     SuggestionRepository,
@@ -18,6 +22,7 @@ from fotoorganizer.repositories.suggestions import (
 
 __all__ = [
     "AuditRow",
+    "CHAVE_TEMPLATE_DESTINO",
     "DuplicateRepository",
     "GroupRow",
     "ItemRow",
@@ -26,6 +31,7 @@ __all__ = [
     "MediaRepository",
     "OperationRepository",
     "PlanRow",
+    "SettingsRepository",
     "SuggestionFilters",
     "SuggestionRepository",
     "SuggestionRow",

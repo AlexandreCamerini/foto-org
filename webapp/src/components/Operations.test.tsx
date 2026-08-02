@@ -62,6 +62,9 @@ const ITENS = [
 
 function rotas(dry_run_em: string | null, veredito: object = {}) {
   return {
+    "/api/configuracoes/template": {
+      template: "{categoria}/{ano} - {viagem}/{evento}/{pais}/{regiao}/{cidade}",
+    },
     "/api/operacoes": [plano(dry_run_em, veredito)],
     "/api/operacoes/1": { ...plano(dry_run_em, veredito), itens: ITENS },
     "/api/operacoes/1/auditoria": [
@@ -156,7 +159,10 @@ describe("Operações", () => {
     });
 
   it("estado vazio orienta a próxima ação", async () => {
-    servirApi({ "/api/operacoes": [] });
+    servirApi({
+      "/api/configuracoes/template": { template: "{categoria}/{ano}" },
+      "/api/operacoes": [],
+    });
     montar(<Operations job={jobParado()} />);
     expect(
       await screen.findByText("Aprove sugestões na aba Revisão", {

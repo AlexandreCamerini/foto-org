@@ -173,12 +173,20 @@ class JobManager:
     def _rodar_sugestoes(self) -> None:
         try:
             from fotoorganizer.classification import SuggestionEngine
+            from fotoorganizer.classification.templates import TEMPLATE_PADRAO
             from fotoorganizer.geolocation import LocationResolver
             from fotoorganizer.geolocation.offline import OfflineGeocoder
+            from fotoorganizer.repositories.settings import SettingsRepository
 
+            # Sem preferência salva, o comportamento é idêntico a antes desta
+            # fase: TEMPLATE_PADRAO.
+            template = SettingsRepository(self._factory).obter_template(
+                TEMPLATE_PADRAO
+            )
             engine = SuggestionEngine(
                 self._factory,
                 LocationResolver(OfflineGeocoder()),
+                template=template,
                 advisor=self._advisor(),
             )
             resultado = engine.gerar()

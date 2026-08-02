@@ -162,7 +162,20 @@ identificadas em CR3, e mais rápido que o fallback.
      calendário (dados que este acervo não tem); a versão reescrita usa dado
      que já está no banco.
 
-4. **Templates configuráveis na UI** — editor de template com preview.
+4. **Templates configuráveis na UI** — *implementado em 2026-08-02.* Editor
+   de template com preview, dentro da aba Operações.
+   - *Entregou o quê:* `application_settings` (tabela já migrada, zero uso
+     até então) passou a guardar o template escolhido; três endpoints
+     (`GET`/`PUT /api/configuracoes/template`, `POST .../preview`, este
+     último chamando `render_destino` de verdade — o webapp nunca
+     reimplementa a lógica de renderização); editor colapsável em
+     Operações com preview ao vivo (debounce), erro 422 inline para
+     placeholder inválido, e "regenerar sugestões pendentes" como ação
+     separada do "salvar" — desabilitada enquanto há edição não salva, para
+     nunca regenerar a partir de um rascunho não confirmado. Verificado ao
+     vivo contra o catálogo real (101.516 fotos): preview, erro de
+     validação e persistência entre reinício do servidor confirmados por
+     `curl`, não só por reload de página.
    - *Muda o quê:* é a alavanca que transforma catálogo em pastas quando os
      discos montarem. O motor já aceita template arbitrário; hoje só não há
      onde digitá-lo.
