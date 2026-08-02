@@ -724,3 +724,63 @@ Uma entrada por decisão, em ordem cronológica. Formato e classes em
   catálogo; a regeneração roda numa cópia temporária). Nada persistido
   depende da regra — `trips`/`events` são recriados a cada `gerar()`.
 - Status: decidido por medição
+
+---
+
+## D-035 — As 45.822 miniaturas do Apple Fotos já saíram do catálogo, e o
+item 5 do ROADMAP nasce sem o dado que o sustentava
+
+- Fase: backlog v2+, item 5 de `docs/ROADMAP.md` ("análise visual local"),
+  medição pedida pelo próprio item antes de qualquer código: "a distribuição
+  de datas dessas 45.822 [miniaturas]. Se elas não cobrem 2001–2018, este
+  item cai para o fundo junto com o 7."
+- Classe: A (é registro de um fato medido e de uma decisão já tomada e
+  executada pelo dono — não uma escolha nova).
+- Data: 2026-08-02 (registro); a remoção em si aconteceu em 2026-07-31,
+  commit `7cdd9e7` ("MakerNotes sai da base bruta, e a poda vira comando do
+  projeto"), nunca tinha ganho entrada própria aqui.
+- Contexto: fui medir a premissa do item 5 antes de despachar qualquer
+  agente, como o próprio ROADMAP manda. Esperava contar anos; encontrei
+  **zero linhas** — nenhum registro no catálogo real tem caminho dentro de
+  `.photoslibrary`, e a fonte "Apple Fotos" ativa (`source_id=6`, tipo
+  `APPLE_PHOTOS`) tem `largura`/`altura` nulas nas 44.661 linhas, ou seja,
+  zero pixel local acessível.
+- O que aconteceu: `scripts/remover_testemunhas.py` (commit `7cdd9e7`,
+  2026-07-31, autoria do dono) já removeu as 45.822 miniaturas internas do
+  Apple Fotos do catálogo real. A justificativa está no próprio script e é
+  sólida: D-025 trocou a janela única de herança por uma janela por campo, e
+  com ela as referências do próprio Apple Fotos (`arquivo_ausente=1`, sem
+  pixel mas com data/GPS do osxphotos) passaram a cobrir quase os mesmos
+  lugares que as miniaturas cobriam. Medido no acervo real: remover as
+  45.822 custou **10 fotos** de 4.938 com lugar — muito longe do "2.117 →
+  162" que justificou rebaixá-las (nunca apagá-las) em D-024. A remoção
+  cumpre o invariante 8 (não é acervo, não tem endereço próprio, e o que
+  perdeu foi renegociado por medição, não descartado às cegas) e tem cópia
+  de segurança automática (`_copiar` no próprio script). O que falta, e é o
+  motivo desta entrada, é o registro em si: uma remoção de 45.822 linhas do
+  catálogo real devia ter D-0XX próprio no dia em que rodou, não só o
+  docstring do script. Fica reparado agora.
+- Consequência medida para o item 5: a pergunta do ROADMAP ("essas 45.822
+  cobrem 2001–2018?") não chega a se colocar — elas não existem mais para
+  responder por nada. E o que sobra de pixel local no período é quase nada:
+  **18 fotos** de `papel='ACERVO'` inteiro têm `data_capturada` entre 2001 e
+  2018 (contra 5.191 fotos de acervo no total). Todo o resto do período —
+  inclusive Portugal/Itália, a viagem internacional mais citada nas fases
+  anteriores — só existe como referência sem pixel (Lightroom, volume
+  desmontado, D-028; ou Apple Fotos, sem `photo.path` por ser só-iCloud).
+  Um `VisionProvider` rodando hoje teria 18 fotos de 2001–2018 para olhar,
+  não milhares.
+- Escolhida: item 5 desce para o fim da lista, ao lado do item 7 — a própria
+  condição que o ROADMAP escreveu para isso, só que a resposta é mais forte
+  do que "não cobre": não há imagem nenhuma para cobrir. Ambos voltam a fazer
+  sentido no dia em que "o item que a lista ainda não tem" (reencontrar os
+  volumes, fim de `docs/ROADMAP.md`) entregar acervo remontado — aí sim há
+  pixel de 2001–2018 de novo, via Lightroom.
+- Como reverter a remoção (não recomendado sem novo motivo): restaurar
+  `catalog-antes-da-limpeza-*.db` (a cópia que o próprio script fez) ou
+  reconfigurar a fonte 6 como varredura de pasta direta no pacote
+  `.photoslibrary` e rodar `scan --reprocessar` — mas a fonte hoje é do tipo
+  `APPLE_PHOTOS` (importador osxphotos), não `PASTA`, então "reprocessar"
+  sozinho não traz as miniaturas de volta; precisaria de uma fonte nova.
+- Status: registrado por medição; reordenação do ROADMAP aplicada nesta
+  mesma sessão

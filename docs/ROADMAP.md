@@ -120,7 +120,7 @@ identificadas em CR3, e mais rápido que o fallback.
    - *Custo recorrente:* zero, desde que a cartografia não peça tile externo
      (invariante 4 — tile revela coordenada sem nenhum arquivo sair).
    - *Desbloqueia:* correção manual de lugar (com aviso de cascata) e leitura
-     visual de viagem; é pré-requisito de qualquer confiança no item 6.
+     visual de viagem; é pré-requisito de qualquer confiança no item 5.
    - *Movimentação:* item novo, entra no topo — já está sendo construído.
 
 2. **`docs/EVENTOS.md`** — *dívida da fase 8, não funcionalidade nova*.
@@ -140,7 +140,7 @@ identificadas em CR3, e mais rápido que o fallback.
    temporal já detecta. **Não** detectar aniversário/casamento por rosto e
    visão, que era a formulação antiga.
    - *Entregou o quê:* zero nomes novos **hoje** — 7 grupos antes, 7 depois,
-     nenhum com nome diferente. O motivo é o mesmo bloqueio dos itens 5, 7,
+     nenhum com nome diferente. O motivo é o mesmo bloqueio dos itens 6, 7,
      8 e 9: nenhuma das 27.226 marcações está numa foto alcançável (D-028).
      Os 21 períodos com álbum aproveitável (20.515 fotos, 20 deles sem nome
      de pasta nenhum) ganham nome no dia em que os arquivos aparecerem, sem
@@ -186,23 +186,7 @@ identificadas em CR3, e mais rápido que o fallback.
      tudo que depende de pixel — é o único item alto que não depende de dado
      ausente.
 
-5. **Análise visual local** (`VisionProvider`: cena, qualidade, screenshot vs.
-   foto).
-   - *Muda o quê:* candidato a ser o único sinal novo para 2001–2018. As
-     45.822 miniaturas do Apple Fotos rebaixadas em D-024 são pixel **local**
-     (540×360) e já provaram carregar informação que o resto do acervo não
-     tem — apagá-las derrubaria as fotos com lugar estimado de 2.117 para 162.
-     Cena grosseira (praia/montanha/urbano) sobrevive a 540×360.
-   - *A medir antes de construir:* a distribuição de datas dessas 45.822. Se
-     elas não cobrem 2001–2018, este item cai para o fundo junto com o 7.
-   - *Esforço:* M/L — modelo local, fila de background, rótulos como evidência
-     de baixa confiança no motor.
-   - *Custo recorrente:* zero em dinheiro; CPU por foto, uma vez.
-   - *Movimentação:* sobe de 2º… para 5º na ordem, mas sobe *acima da
-     detecção facial*, invertendo a ordem antiga: cena tolera miniatura,
-     identidade não.
-
-6. **Timezone estimado** — reformulado: inferir `tz_estimado` do **país
+5. **Timezone estimado** — reformulado: inferir `tz_estimado` do **país
    herdado** (janela de 12 h de D-025), não do GPS próprio.
    - *Muda o quê:* na formulação antiga (GPS + hora local) alcançaria 4 dos
      25 anos do acervo — as viagens internacionais que mais precisam de
@@ -217,25 +201,52 @@ identificadas em CR3, e mais rápido que o fallback.
    - *Movimentação:* desce de 5º para 6º e muda de fonte. A versão antiga
      dependia de GPS que existe em 4 de 25 anos.
 
-7. **Detecção facial local real** (`FaceRecognitionProvider` com modelo ONNX).
+6. **Detecção facial local real** (`FaceRecognitionProvider` com modelo ONNX).
    - *Muda o quê:* pouco hoje, muito depois. Precisa de pixel em resolução
      útil, e ~90 mil dos ~99 mil registros conhecidos não têm arquivo local
-     legível (D-028). Miniatura de 540×360 permite *detectar* rosto, não
-     *identificar* pessoa com limiar conservador.
+     legível (D-028).
    - *Esforço:* L — modelo, embeddings cifrados, fila, limiar calibrado,
      revisão. A infraestrutura do M6 cobre a parte fácil.
    - *Custo recorrente:* zero em dinheiro; CPU alta por foto.
    - *Desbloqueia:* item 8 (UI de pessoas), e reforçaria o item 3.
-   - *Movimentação:* **desce de 1º para 7º** — é a maior queda da lista, e a
+   - *Movimentação:* **desce de 1º para 6º** — é a maior queda da lista, e a
      razão é uma só: o dado que ela consome (pixel) está a 90% fora de
      alcance. Volta ao topo no dia em que os volumes do Lightroom montarem.
 
+7. **Análise visual local** (`VisionProvider`: cena, qualidade, screenshot vs.
+   foto) — *rebaixado em 2026-08-02 (D-035), medição pedida pelo próprio
+   item antes de qualquer código.*
+   - *O que a medição achou:* a premissa que sustentava este item acima da
+     detecção facial já não existe. As 45.822 miniaturas do Apple Fotos
+     citadas na formulação original **já saíram do catálogo**
+     (`scripts/remover_testemunhas.py`, commit `7cdd9e7`, 2026-07-31,
+     decisão do dono nunca antes registrada aqui — reparado em D-035): a
+     janela de herança por campo (D-025) tornou as referências do próprio
+     Apple Fotos suficientes para o mesmo lugar, e remover custou 10 fotos
+     de 4.938 com lugar, não as 2.117→162 que justificaram rebaixá-las (não
+     apagá-las) em D-024. Não sobrou pixel de miniatura para medir data.
+   - *O que sobra:* 18 fotos de `papel='ACERVO'` (pixel local de verdade) com
+     data entre 2001 e 2018, contra 5.191 de acervo no total. Um
+     `VisionProvider` hoje teria 18 fotos do período que motivou o item, não
+     milhares — a vantagem "cena sobrevive a miniatura 540×360" não tem mais
+     miniatura para se aplicar.
+   - *Esforço:* M/L — modelo local, fila de background, rótulos como evidência
+     de baixa confiança no motor. Inalterado; o que mudou foi o valor, não
+     o custo.
+   - *Custo recorrente:* zero em dinheiro; CPU por foto, uma vez.
+   - *Movimentação:* desce de 5º para 7º, ao lado do item 6 — exatamente a
+     condição que a formulação original previa ("se elas não cobrem
+     2001–2018, cai para o fundo junto com o 7"), só que o achado é mais
+     forte que "não cobre": não há imagem para cobrir. Continua útil para
+     cena grosseira no acervo recente (2019+, 5.173 fotos de acervo), só
+     perdeu a razão de furar a fila da detecção facial.
+
 8. **UI de pessoas** — cadastro/gestão de perfis e revisão de rostos.
-   - *Muda o quê:* sem o item 7, é uma tela para revisar rostos que ninguém
+   - *Muda o quê:* sem o item 6, é uma tela para revisar rostos que ninguém
      detectou.
    - *Esforço:* S/M — backend do M6 pronto; é tela.
    - *Custo recorrente:* zero.
-   - *Bloqueada por:* item 7. Não faz sentido antes.
+   - *Bloqueada por:* item 6. Não faz sentido antes.
    - *Movimentação:* desce de 3º para 8º, arrastada pela dependência.
 
 9. **Sidecar XMP** — gravar metadados aprovados em `.xmp` ao lado dos
@@ -261,7 +272,7 @@ identificadas em CR3, e mais rápido que o fallback.
 
 11. **Provider externo opt-in** (geocoding e/ou visão via API).
     - *Muda o quê:* o geocoding offline já cobre o caso; sobra a visão por
-      API, que só existiria para compensar o item 5 — e enviaria pixel ou
+      API, que só existiria para compensar o item 7 — e enviaria pixel ou
       coordenada, exatamente o que o invariante 4 e `docs/PRIVACIDADE.md`
       mandam evitar por padrão.
     - *Esforço:* L — provider, indicação visual prévia de o quê/para onde/como
@@ -277,7 +288,7 @@ identificadas em CR3, e mais rápido que o fallback.
 
 A régua acima aponta, sozinha, para algo que não está entre os dez: **reencontrar
 os arquivos**. 45.397 fotos num volume desmontado e 44.661 com original só no
-iCloud (D-028) são a causa direta da queda dos itens 5, 7, 8 e 9. Qualquer
+iCloud (D-028) são a causa direta da queda dos itens 6, 7, 8 e 9. Qualquer
 fatia que reconecte volume por identidade (hash, caminho original, tamanho +
 data) multiplica o valor de quatro itens de uma vez. Fica registrado aqui como
 candidato, não como decisão — a forma exata é assunto de uma fase própria.
