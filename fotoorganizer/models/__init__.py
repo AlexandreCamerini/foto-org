@@ -37,6 +37,7 @@ from fotoorganizer.models.people import (
     FaceState,
     Person,
 )
+from fotoorganizer.models.lexico import NomeClassificado
 from fotoorganizer.models.settings import ApplicationSetting
 from fotoorganizer.models.tagging import MediaTag, Tag
 
@@ -53,4 +54,5 @@ __all__ = [
     "DuplicateGroup", "DuplicateMember", "DuplicateLevel", "DuplicateRole",
     "OperationPlan", "OperationItem", "OperationStatus", "AuditLog",
     "ApplicationSetting",
+    "NomeClassificado",
 ]

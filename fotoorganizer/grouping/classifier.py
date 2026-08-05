@@ -55,6 +55,16 @@ class DadosSessao:
     # Câmeras conhecidas do acervo, normalizadas — `album_nomeia` precisa
     # delas para descartar álbum que é nome de aparelho.
     cameras: frozenset[str] = frozenset()
+    # O que cada NOME de pasta significa: lugar, ocasião, pessoa ou ruído
+    # (`fotoorganizer/classification/lexico.py`). Vazio quando o léxico está
+    # desligado — e aí a cascata decide exatamente como decidia antes.
+    tipos_de_nome: tuple[tuple[str, str], ...] = ()
+
+    def tipo_do_nome(self, nome: str) -> str | None:
+        for chave, tipo in self.tipos_de_nome:
+            if chave == nome:
+                return tipo
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,8 +220,21 @@ def _cascata(
             f"{dados.duracao.days + 1} dias",
         )
 
-    # 6. Nome de álbum + sessão curta = evento nomeado (Quizomba).
+    # 6. Nome de álbum + sessão curta = evento nomeado (Quizomba) — a menos
+    #    que o nome seja um LUGAR, e aí é viagem nomeada pelo lugar.
+    #
+    #    A cascata sabe medir duração e distância; não tem como saber que
+    #    "Pantanal" é destino de viagem e "Quizomba" é festa. Sem o léxico,
+    #    a regra caía sempre em evento — foi o que mandou Pantanal (1d23h) e
+    #    Visconde de Mauá (18 fotos, 0h) para Eventos no acervo do dono. Com
+    #    o léxico desligado, `tipo_do_nome` devolve None e nada muda.
     if evento and dados.duracao <= config.duracao_max_evento:
+        if dados.tipo_do_nome(evento) == "lugar":
+            return Decisao(
+                "viagem", evento, "lexico",
+                f"'{evento}' é um lugar, não um acontecimento",
+                rotulo_de_pasta=True,
+            )
         return Decisao(
             "evento", evento, "pasta",
             f"pasta '{evento}' nomeia uma sessão de "

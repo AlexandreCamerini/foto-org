@@ -31,6 +31,13 @@ SCORES_REFERENCIA: dict[str, float] = {
     "album_externo": 0.55,
     "agrupamento": 0.70,   # viagem por lacuna temporal
     "llm": 0.55,           # sugerido por LLM a partir de metadados (opt-in)
+    # O que a PALAVRA significa — "Pantanal" é lugar, "Quizomba" é festa
+    # (classification/lexico.py, opt-in). Acima de `llm` (0.55) porque a
+    # pergunta é muito mais estreita: classificar um substantivo em quatro
+    # categorias, sem olhar data, GPS nem contagem. Abaixo de `pasta`
+    # (0.60) porque a palavra continua sendo do dono e o significado é
+    # nosso — quando a pasta decide sozinha, ela decide.
+    "lexico": 0.58,
     # Tipo da imagem por sinais de arquivo (nome, pasta, resolução de
     # tela). O score real vem do detector, por sinal — este é só o piso
     # para quando nenhum override chegar.

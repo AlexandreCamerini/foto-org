@@ -222,12 +222,18 @@ class SuggestionEngine:
         template: str = TEMPLATE_PADRAO,
         advisor: ClassificationAdvisor | None = None,
         config: ConfigClassificacao = ConfigClassificacao(),
+        lexico: dict[str, str] | None = None,
     ) -> None:
         self._factory = session_factory
         self._resolver = resolver
         self._template = template
         self._advisor = advisor
         self._config = config
+        # O que cada nome de pasta significa. Vazio quando o léxico está
+        # desligado (padrão) — e aí a cascata decide como sempre decidiu.
+        self._tipos_de_nome: tuple[tuple[str, str], ...] = tuple(
+            (lexico or {}).items()
+        )
 
     # -- API ----------------------------------------------------------------
     def gerar(self) -> dict:
@@ -494,6 +500,7 @@ class SuggestionEngine:
                 albuns=albuns.contagens(sessao.draft.inicio, sessao.draft.fim),
                 fonte_dos_albuns=albuns.fonte_legivel,
                 cameras=albuns.cameras,
+                tipos_de_nome=self._tipos_de_nome,
             ),
             self._config,
         )
