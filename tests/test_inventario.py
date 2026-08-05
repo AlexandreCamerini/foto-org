@@ -148,20 +148,10 @@ def test_funil_diz_os_tres_degraus_na_ordem_em_que_estreitam(migrated_engine):
     assert f.registros == 3        # linhas no catálogo
     assert f.conhecidas == 2       # fotos: a duplicada conta uma vez
     assert f.alcancaveis == 1      # a do HD desmontado não abre agora
-    # Foto, não linha: a do disco e a referência do Lightroom são a mesma
-    # foto — mas a do HD desmontado TAMBÉM é organizável, porque
-    # `MediaFile.organizavel` é `papel=ACERVO and not arquivo_ausente` e não
-    # olha se o disco está montado.
-    assert f.organizaveis == 2
-    assert f.registros >= f.conhecidas
-    # NÃO se afirma `alcancaveis >= organizaveis`, e é de propósito: hoje o
-    # terceiro degrau não é subconjunto do segundo. Medido no acervo real,
-    # 161 fotos são organizáveis sem serem alcançáveis. Um funil cujos
-    # degraus não se encaixam é o problema dos cinco números em escala
-    # menor, e a correção (mudar `organizavel`, ou mudar o nome do degrau)
-    # mexe em grade, revisão e plano ao mesmo tempo — decisão própria, não
-    # efeito colateral desta contagem.
-    assert f.alcancaveis < f.organizaveis
+    assert f.organizaveis == 1     # a alcançável é acervo
+    # Cada degrau é menor ou igual ao anterior — se algum dia deixar de ser,
+    # a tela volta a mostrar um funil que não afunila.
+    assert f.registros >= f.conhecidas >= f.alcancaveis >= f.organizaveis
 
 
 def test_organizavel_conta_foto_e_nao_linha(migrated_engine):
@@ -221,3 +211,57 @@ def test_testemunha_nao_conta_como_organizavel(migrated_engine):
     assert inv.total_registros == 2   # nada saiu do banco
     assert inv.fotos == 2             # as duas existem
     assert inv.organizaveis == 1      # só uma é acervo
+
+
+def test_organizavel_exige_a_fonte_respondendo(migrated_engine):
+    """O caso que quebrava a promessa do funil: a pasta "Dubai, Thai & Viet"
+    saiu do disco, e suas 2.405 fotos continuavam contadas como organizáveis
+    enquanto a grade escrevia "volume ou pasta fora de alcance" em cada
+    miniatura. Acervo é classificação; alcance é uma pergunta sobre agora, e
+    o terceiro degrau precisa das duas. Ver D-068."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        gaveta = _fonte(session, "/Volumes/HD", "HD", disponivel=False)
+        _arquivo(session, gaveta, "/Volumes/HD/Dubai", "a.jpg")
+        session.commit()
+
+    f = funil(factory)
+    assert f.conhecidas == 1
+    assert f.alcancaveis == 0
+    assert f.organizaveis == 0     # é acervo, e mesmo assim não abre agora
+
+
+def test_miniatura_alcancavel_nao_e_organizavel(migrated_engine):
+    """A outra metade da regra continua valendo: estar ao alcance não faz de
+    uma miniatura do pacote do Apple Fotos acervo do dono (invariante 8)."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        apple = _fonte(session, "/Users/eu/Fotos.photoslibrary", "Apple Fotos")
+        session.add(MediaFile(
+            source_id=apple.id, caminho="/Users/eu/Fotos.photoslibrary/t.jpg",
+            pasta="/Users/eu/Fotos.photoslibrary", nome="t.jpg",
+            extensao="jpg", tamanho=1, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    f = funil(factory)
+    assert (f.conhecidas, f.alcancaveis, f.organizaveis) == (1, 1, 0)
+
+
+def test_uma_fonte_montada_basta_para_organizar_a_foto(migrated_engine):
+    """A mesma foto conhecida por duas fontes, uma na gaveta e outra montada.
+
+    O alcance já era decidido por foto e não por linha; o degrau de acervo
+    tinha de seguir a mesma regra, senão a foto seria alcançável e não
+    organizável — o funil afunilando pelo motivo errado."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        gaveta = _fonte(session, "/Volumes/HD", "HD", disponivel=False)
+        aqui = _fonte(session, "/Users/eu/Pictures", "Pictures")
+        _arquivo(session, gaveta, "/Users/eu/Pictures/Dubai", "a.jpg")
+        _arquivo(session, aqui, "/Users/eu/Pictures/Dubai", "a.jpg")
+        session.commit()
+
+    f = funil(factory)
+    assert (f.registros, f.conhecidas) == (2, 1)
+    assert (f.alcancaveis, f.organizaveis) == (1, 1)
