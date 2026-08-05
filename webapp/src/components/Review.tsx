@@ -242,6 +242,11 @@ export default function Review({
                               data_capturada: s.data_capturada ?? null,
                               motivo_indisponivel: s.motivo_indisponivel ?? null,
                             } as Media}
+                            /* 48px de largura não cabem os ~50px da data:
+                               ela vazava para fora da caixa e encostava na
+                               linha da câmera ao lado (6px medidos). A linha
+                               ao lado já traz nome, câmera e data. */
+                            denso
                             className="h-9 w-12 shrink-0 rounded bg-cartao"
                           />
                           <div className="min-w-0 flex-1">

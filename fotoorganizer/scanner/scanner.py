@@ -373,6 +373,8 @@ class CatalogScanner:
         resolved = str(caminho.expanduser())
         source = session.scalar(select(Source).where(Source.caminho == resolved))
         if source is None:
+            source = self._fonte_equivalente(session, caminho.expanduser())
+        if source is None:
             source = Source(
                 caminho=resolved, padroes_ignorados=list(padroes_ignorados)
             )
@@ -381,3 +383,27 @@ class CatalogScanner:
         elif padroes_ignorados:
             source.padroes_ignorados = list(padroes_ignorados)
         return source
+
+    @staticmethod
+    def _fonte_equivalente(session: Session, caminho: Path) -> Source | None:
+        """A fonte que já aponta para ESTA pasta, escrita de outro jeito.
+
+        A comparação anterior era só de string, e o APFS não distingue
+        maiúscula: varrer `/users/acamerini` depois de `/Users/acamerini`
+        criava uma segunda fonte para a mesma pasta. No acervo do dono isso
+        rendeu duas fontes chamadas "acamerini" (93.400 e 695 fotos), lado a
+        lado na barra lateral, sem nenhuma forma de saber qual era qual.
+
+        `samefile` compara dispositivo e inode, então resolve caixa,
+        symlink e caminho equivalente de uma vez. Fonte cujo caminho não
+        existe agora (volume desmontado) não pode ser comparada assim e é
+        pulada — criar uma fonte a mais é recuperável, fundir duas pastas
+        distintas num registro só não é.
+        """
+        for candidata in session.scalars(select(Source)):
+            try:
+                if caminho.samefile(candidata.caminho):
+                    return candidata
+            except OSError:
+                continue
+        return None

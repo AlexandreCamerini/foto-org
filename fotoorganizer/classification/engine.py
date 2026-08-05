@@ -37,6 +37,7 @@ from fotoorganizer.classification.templates import (
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
 from fotoorganizer.grouping.datas import data_no_caminho, rotulo_mes
 from fotoorganizer.geolocation.folder_names import _normalizar
+from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import (
     FotoRef,
@@ -80,7 +81,7 @@ def _delta_legivel(delta: timedelta) -> str:
 def _camera_legivel(media: MediaFile | None) -> str:
     if media is None:
         return ""
-    partes = " ".join(filter(None, [media.make, media.model]))
+    partes = nome_da_camera(media.make, media.model)
     return f" ({partes})" if partes else ""
 
 _CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",

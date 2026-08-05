@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.models import (
     ConfidenceLevel,
     Evidence,
@@ -81,9 +82,7 @@ class SuggestionRepository:
                     pasta=media.pasta, destino=sugestao.destino_sugerido,
                     nivel=sugestao.nivel, status=sugestao.status,
                     data_capturada=media.data_capturada,
-                    camera=" ".join(
-                        filter(None, [media.make, media.model])
-                    ) or None,
+                    camera=nome_da_camera(media.make, media.model),
                     gps_estimado=media.coordenada_estimada,
                     source_id=media.source_id,
                     arquivo_ausente=media.arquivo_ausente,
@@ -167,8 +166,6 @@ class SuggestionRepository:
                 pasta=media.pasta, destino=sugestao.destino_sugerido,
                 nivel=sugestao.nivel, status=sugestao.status,
                 data_capturada=media.data_capturada,
-                camera=" ".join(
-                    filter(None, [media.make, media.model])
-                ) or None,
+                camera=nome_da_camera(media.make, media.model),
                 gps_estimado=media.coordenada_estimada,
             )

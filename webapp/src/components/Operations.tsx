@@ -157,12 +157,18 @@ export default function Operations({ job }: { job: Job }) {
                   {p.com_erro > 0 && (
                     <span className="text-erro"> · {p.com_erro} erros</span>
                   )}
-                  {p.dry_run_em !== null && !p.executavel && (
-                    <span className="text-erro">
-                      {" "}
-                      · dry-run: nada copiável
-                    </span>
-                  )}
+                  {/* "nada copiável" só é notícia enquanto ainda há o que
+                      copiar. Num plano já concluído (143/143) o executável
+                      é falso porque acabou, e a frase lia como falha ao
+                      lado do próprio sucesso. */}
+                  {p.dry_run_em !== null &&
+                    !p.executavel &&
+                    p.concluidos < p.total_itens && (
+                      <span className="text-erro">
+                        {" "}
+                        · dry-run: nada copiável
+                      </span>
+                    )}
                 </div>
               </button>
             ))

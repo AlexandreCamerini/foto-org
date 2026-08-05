@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
+from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.models import (
     ConfidenceLevel,
     MediaFile,
@@ -275,7 +276,7 @@ class MediaRepository:
                 select(MediaFile.make, MediaFile.model, func.count(MediaFile.id))
                 .where(proprias).group_by(MediaFile.make, MediaFile.model)
             ):
-                rotulo = " ".join(p for p in (make, model) if p) or "desconhecida"
+                rotulo = nome_da_camera(make, model) or "desconhecida"
                 cameras[rotulo] = cameras.get(rotulo, 0) + n
 
             return {

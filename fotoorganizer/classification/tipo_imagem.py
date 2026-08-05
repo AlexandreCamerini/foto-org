@@ -18,6 +18,8 @@ no catálogo inteiro.
 from __future__ import annotations
 
 import re
+
+from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.grouping.origens import (
     PASTAS_BAIXADA,
     PASTAS_CAPTURA,
@@ -187,6 +189,7 @@ def classificar(
 
     if not tem_camera:
         return Veredito(FOTO, 0.50, "sem dado de câmera, mas nada indica o contrário")
-    return Veredito(FOTO, 0.90,
-                    f"tem dado de câmera gravado ({make or ''} {model or ''}".strip()
-                    + ")")
+    return Veredito(
+        FOTO, 0.90,
+        f"tem dado de câmera gravado ({nome_da_camera(make, model)})",
+    )

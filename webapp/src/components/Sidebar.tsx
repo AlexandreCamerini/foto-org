@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api";
+import { rotulosDeFontes } from "../fontes";
 import type { Job } from "../hooks/useJob";
 
 const ICONE_TIPO: Record<string, string> = {
@@ -24,6 +25,7 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
   const [erro, setErro] = useState<string | null>(null);
 
   const total = status?.total ?? 0;
+  const rotulos = rotulosDeFontes(fontes ?? []);
 
   const executar = (acao: Promise<void>) => {
     setErro(null);
@@ -55,7 +57,7 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
             }`}
           >
             <span className="mr-1">{ICONE_TIPO[fonte.tipo] ?? "📁"}</span>
-            {fonte.apelido ?? fonte.caminho.split("/").pop()}
+            {rotulos.get(fonte.id) ?? fonte.caminho}
             <span className="ml-1.5 text-texto-2">({fonte.fotos})</span>
             {!fonte.disponivel && (
               <span className="ml-1 text-atencao" title="indisponível">
