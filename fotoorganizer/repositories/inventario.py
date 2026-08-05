@@ -28,10 +28,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from fotoorganizer.models import MediaFile
+from fotoorganizer.models import MediaFile, Source
 
 # Caminho conhecido de um registro: o do arquivo, ou o que o catálogo externo
 # disse que era. Referência sem caminho (iCloud) não tem lugar no disco — e é
@@ -115,70 +115,122 @@ class Inventario:
 def _raiz(caminho: str) -> str:
     """O volume ou a pasta de topo — a granularidade em que o dono pensa
     ("o disco photo", "este Mac"), não a pasta de cada foto."""
-    partes = Path(caminho).parts
-    if len(partes) >= 3 and partes[1] == "Volumes":
-        return str(Path(partes[0], partes[1], partes[2]))
-    if len(partes) >= 3 and partes[1].casefold() == "users":
-        return str(Path(partes[0], "Users", partes[2]))
-    return partes[0] if partes else caminho
+    # String pura, sem `Path`: isto roda uma vez por foto do acervo, e
+    # construir um `Path` por linha custava a maior parte dos 9,1 s medidos
+    # em 197 mil registros. Em milhões de fotos seria o gargalo inteiro.
+    if caminho.startswith("/"):
+        partes = caminho.split("/", 3)     # ['', 'Volumes', 'photo', resto]
+        if len(partes) >= 3 and partes[2]:
+            if partes[1] == "Volumes":
+                return f"/Volumes/{partes[2]}"
+            if partes[1].casefold() == "users":
+                return f"/Users/{partes[2]}"
+        return "/"
+    primeira, _, _ = caminho.partition("/")
+    return primeira or caminho
 
 
 def levantar(factory: sessionmaker[Session]) -> Inventario:
-    """Somente leitura sobre o catálogo; não toca no filesystem."""
+    """Somente leitura sobre o catálogo; não toca no filesystem.
+
+    **A deduplicação por foto acontece no SQL, não em Python**, e a razão é
+    de escala: o acervo do dono está espalhado por NAS e HDs antigos e o
+    catálogo é uma fração dele (D-028). A versão anterior segurava três
+    dicionários com uma entrada por foto — 7,1 s e 134 MB em 197 mil
+    registros, o que projetava 72 s e 1,4 GB em 2 milhões e não terminava
+    em 10 milhões. Agora o `GROUP BY` devolve uma linha por foto já
+    resolvida, o Python percorre em fluxo e só guarda o agregado por
+    RAIZ — dez volumes, não dez milhões de chaves. A memória deixa de
+    depender do tamanho do acervo.
+
+    Alcance e organizável valem se QUALQUER linha da foto valer (`max`), e
+    não se a primeira que o loop encontrar valer: a mesma foto pode ser
+    conhecida por duas fontes, uma montada e outra não, e ter um caminho
+    até o arquivo é o que decide. Medido: 2.620 fotos alcançáveis eram
+    contadas como fora de alcance por causa da ordem das linhas.
+    """
     por_raiz: dict[str, dict] = {}
-    # Alcance por foto, não por linha: a mesma foto pode ser conhecida por
-    # duas fontes, uma montada e outra não. Antes valia a PRIMEIRA linha que
-    # o loop encontrasse — quem chegasse por uma fonte desmontada marcava a
-    # foto como fora de alcance mesmo havendo outro caminho até o arquivo.
-    # Medido no acervo do dono: 2.620 fotos alcançáveis contadas como fora.
-    alcance: dict[str, bool] = {}
-    # Mesma regra de "vale se QUALQUER linha valer", pelo mesmo motivo.
-    organizavel_por_chave: dict[str, bool] = {}
-    raiz_da_chave: dict[str, str] = {}
     sem_caminho = 0
+
+    # Um inteiro por linha, para o `max` do agrupamento poder decidir.
+    _alcancavel = case(
+        (and_(MediaFile.arquivo_ausente.is_(False), Source.disponivel.is_(True)), 1),
+        else_=0,
+    )
+    _organizavel = case((MediaFile.organizavel, 1), else_=0)
+    # macOS não distingue maiúscula no caminho, e as fontes discordam: o
+    # Lightroom grava "/Users", o scan gravou "/users". Sem normalizar, o
+    # mesmo lugar vira dois e a foto é contada duas vezes.
+    _chave = func.lower(_CAMINHO_CONHECIDO)
 
     with factory() as session:
         total = session.scalar(select(func.count(MediaFile.id))) or 0
-        linhas = session.execute(
-            select(
-                _CAMINHO_CONHECIDO,
-                MediaFile.arquivo_ausente,
-                MediaFile.source_id,
-                MediaFile.organizavel,
+        # Referência de nuvem: o app sabe que a foto existe e não há lugar
+        # no disco a informar. Fica de fora do agrupamento por caminho.
+        sem_caminho = session.scalar(
+            select(func.count(MediaFile.id)).where(
+                or_(
+                    _CAMINHO_CONHECIDO.is_(None),
+                    _CAMINHO_CONHECIDO == "",
+                    _CAMINHO_CONHECIDO.like("%://%"),
+                )
             )
+        ) or 0
+
+        apelidos, _ = _fontes(session)
+        por_foto = (
+            select(
+                func.min(_CAMINHO_CONHECIDO).label("caminho"),
+                func.max(_alcancavel).label("alcancavel"),
+                func.max(_organizavel).label("organizavel"),
+                func.group_concat(MediaFile.source_id.distinct()).label("fontes"),
+            )
+            .join(Source, Source.id == MediaFile.source_id)
+            .where(
+                _CAMINHO_CONHECIDO.is_not(None),
+                _CAMINHO_CONHECIDO != "",
+                _CAMINHO_CONHECIDO.not_like("%://%"),
+            )
+            .group_by(_chave)
         )
-        apelidos, disponiveis = _fontes(session)
-        for caminho, ausente, source_id, organizavel in linhas:
-            if not caminho or "://" in caminho:
-                # Referência de nuvem: o app sabe que a foto existe e não há
-                # lugar no disco a informar.
-                sem_caminho += 1
-                continue
-            # macOS não distingue maiúscula no caminho, e as fontes
-            # discordam: o Lightroom grava "/Users", o scan gravou "/users".
-            # Sem normalizar, o mesmo lugar vira dois e a foto é contada duas.
-            chave = caminho.casefold()
-            raiz = _raiz(caminho)
+
+        organizaveis = 0
+        # Dois memos, porque o corpo do laço roda uma vez por foto e as duas
+        # contas se repetem quase sempre: há uma dezena de raízes e uma
+        # dezena de combinações de fonte num acervo inteiro. Sem eles, o
+        # laço custava 2,7 s dos 3,8 s totais em 197 mil registros — e é a
+        # parte que cresce linearmente com o acervo.
+        raiz_de: dict[str, str] = {}
+        nomes_de: dict[str, frozenset[str]] = {}
+        # `yield_per` mantém o cursor em fluxo: sem isto o driver
+        # materializaria todas as fotos de uma vez e a economia se perderia.
+        for caminho, alcancavel, organizavel, fontes in session.execute(
+            por_foto.execution_options(yield_per=10_000)
+        ):
+            # A raiz depende só dos dois primeiros segmentos do caminho.
+            corte = caminho.find("/", caminho.find("/", 1) + 1)
+            prefixo = caminho if corte <= 0 else caminho[:corte]
+            raiz = raiz_de.get(prefixo)
+            if raiz is None:
+                raiz = raiz_de[prefixo] = _raiz(caminho)
+
             dados = por_raiz.setdefault(
                 raiz, {"fotos": 0, "alcancaveis": 0, "fontes": set()}
             )
-            dados["fontes"].add(apelidos.get(source_id, "?"))
-            aqui = not ausente and disponiveis.get(source_id, False)
-            if chave not in raiz_da_chave:
-                raiz_da_chave[chave] = raiz
-                dados["fotos"] += 1
-                alcance[chave] = aqui
-                organizavel_por_chave[chave] = bool(organizavel)
-            else:
-                if aqui:
-                    alcance[chave] = True
-                if organizavel:
-                    organizavel_por_chave[chave] = True
+            dados["fotos"] += 1
+            if alcancavel:
+                dados["alcancaveis"] += 1
+            if organizavel:
+                organizaveis += 1
 
-    for chave, alcancavel in alcance.items():
-        if alcancavel:
-            por_raiz[raiz_da_chave[chave]]["alcancaveis"] += 1
-    organizaveis = sum(1 for v in organizavel_por_chave.values() if v)
+            nomes = nomes_de.get(fontes)
+            if nomes is None:
+                nomes = nomes_de[fontes] = frozenset(
+                    apelidos.get(int(sid), "?")
+                    for sid in (fontes or "").split(",")
+                    if sid
+                )
+            dados["fontes"] |= nomes
 
     lugares = tuple(sorted(
         (Lugar(raiz, d["fotos"], d["alcancaveis"], tuple(sorted(d["fontes"])))
