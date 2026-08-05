@@ -108,3 +108,63 @@ def test_pasta_de_fotos_com_nome_parecido_continua_valendo(tmp_path):
     make_jpeg(tmp_path / "App do Casamento" / "b.jpg")
     achados = _paths(tmp_path, DiscoveryConfig(extensoes=EXTS))
     assert achados == ["App do Casamento/b.jpg", "Vendor Feira/a.jpg"]
+
+
+def test_smart_previews_do_lightroom_entram_como_testemunha(tmp_path):
+    """`.lrdata` é derivado, e derivado não é acervo — mas continua no
+    catálogo doando sinal (invariante 8, mesmo tratamento de D-024).
+
+    Medido no acervo do dono: 14.755 DNG de pré-visualização dentro de
+    "Lightroom Catalog Smart Previews.lrdata" eram 57% de tudo que o app
+    dizia ser organizável, e 100% deles são ilegíveis — não são RAW de
+    verdade. Carregam 1.113 coordenadas, então rebaixar, nunca pular.
+    """
+    dentro = (
+        tmp_path / "Lightroom" / "Catalogo Smart Previews.lrdata"
+        / "0" / "0000" / "preview.dng"
+    )
+    # Conteúdo não importa: a descoberta decide por caminho e extensão, e o
+    # DNG real destes arquivos é justamente o que nenhuma biblioteca abre.
+    dentro.parent.mkdir(parents=True, exist_ok=True)
+    dentro.write_bytes(b"nao e um RAW de verdade")
+    make_jpeg(tmp_path / "Viagens" / "real.jpg")
+
+    # Desce (o arquivo é encontrado)…
+    assert "Lightroom/Catalogo Smart Previews.lrdata/0/0000/preview.dng" in _paths(
+        tmp_path, DiscoveryConfig(extensoes=EXTS | {".dng"})
+    )
+    # …e é reconhecido como conteúdo de pacote, que o scanner marca SINAL.
+    assert dentro_de_pacote(dentro) is True
+    assert dentro_de_pacote(tmp_path / "Viagens" / "real.jpg") is False
+
+
+def test_biblioteca_do_lightroom_nao_e_derivado(tmp_path):
+    """`.lrlibrary` guarda ORIGINAL, ao contrário de `.lrdata`. Confundir os
+    dois rebaixaria foto de verdade a testemunha."""
+    original = (
+        tmp_path / "Lightroom Library.lrlibrary" / "abc" / "originals"
+        / "2025" / "DJI_0001.dng"
+    )
+    assert dentro_de_pacote(original) is False
+
+
+def test_cache_de_aplicativo_nao_e_varrido(tmp_path):
+    """Ninguém guarda acervo numa pasta chamada "Cache".
+
+    Medido: 1.840 texturas de efeito do CapCut
+    (~/Movies/CapCut/User Data/Cache) entraram como ACERVO com 0 GPS,
+    0 câmera e nunca doaram lugar a foto nenhuma.
+    """
+    make_jpeg(tmp_path / "CapCut" / "User Data" / "Cache" / "effect" / "t.png")
+    make_jpeg(tmp_path / "app" / "Caches" / "x.jpg")
+    make_jpeg(tmp_path / "Viagens" / "real.jpg")
+
+    assert _paths(tmp_path, DiscoveryConfig(extensoes=EXTS)) == ["Viagens/real.jpg"]
+
+
+def test_pasta_de_fotos_com_cache_no_nome_continua_valendo(tmp_path):
+    """O casamento é por nome inteiro: "Cachefotos" ou "Cache Bar" é foto."""
+    make_jpeg(tmp_path / "Cachoeira" / "a.jpg")
+    make_jpeg(tmp_path / "Cache Bar" / "b.jpg")
+    achados = _paths(tmp_path, DiscoveryConfig(extensoes=EXTS))
+    assert achados == ["Cache Bar/b.jpg", "Cachoeira/a.jpg"]

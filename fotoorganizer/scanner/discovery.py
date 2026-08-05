@@ -29,6 +29,12 @@ JUNK_DIRS = {"@eadir", ".thumbnails"}
 PASTAS_DE_CODIGO = {
     "node_modules", "bower_components", "__pycache__", "site-packages",
     "deriveddata", "pods", "venv", "vendor", "target",
+    # Cache de aplicativo. Ninguém guarda acervo numa pasta chamada "Cache",
+    # e o que mora lá não é testemunha de nada: medido no acervo do dono,
+    # 1.840 texturas de efeito do CapCut (~/Movies/CapCut/User Data/Cache)
+    # entraram como ACERVO com 0 GPS, 0 câmera e 36 datas — e nunca doaram
+    # lugar a foto nenhuma.
+    "cache", "caches",
 }
 # Pacotes de software cujo nome é "<QualquerCoisa>.sufixo". O miolo do nome
 # não importa: o sufixo já diz que aquilo é um contêiner de app, não uma pasta
@@ -52,6 +58,15 @@ SUFIXOS_DE_PACOTE = (
     ".photolibrary",
     ".migratedphotolibrary",
     ".aplibrary",
+    # Smart Previews do Lightroom: DNG de pré-visualização dentro de
+    # "<Catálogo> Smart Previews.lrdata". Medido no acervo do dono: 14.755
+    # deles entraram como ACERVO e são 57% do que o app dizia ser
+    # organizável — todos ilegíveis (LibRawFileUnsupportedError), porque não
+    # são RAW de verdade. Rebaixar, e não pular, porque carregam 1.113
+    # coordenadas: hoje inertes (não têm data, e a herança de D-025 casa por
+    # tempo), mas é exatamente o tipo de testemunha que o invariante 8
+    # protege. `.lrlibrary` NÃO entra aqui — aquele guarda original.
+    ".lrdata",
 )
 
 

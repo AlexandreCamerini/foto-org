@@ -435,7 +435,7 @@ def create_app(
         número não muda sozinho: só scan, importação e geração de sugestões
         o alteram.
         """
-        f = levantar_funil(session_factory, media_repo.estatisticas()["total"])
+        f = levantar_funil(session_factory)
         return {
             "conhecidas": f.conhecidas,
             "alcancaveis": f.alcancaveis,

@@ -94,6 +94,14 @@ class Inventario:
     lugares: tuple[Lugar, ...]
     sem_caminho: int          # referência de nuvem: existe, não tem lugar
     total_registros: int
+    # Contado aqui, e não em `MediaRepository.estatisticas()`, porque lá a
+    # unidade é a LINHA: as 26.023 linhas organizáveis do acervo real são
+    # 22.150 fotos — a mesma foto vista pelo disco e pelo catálogo do
+    # Lightroom contava duas vezes. Um funil que conta foto em dois degraus
+    # e linha no terceiro é a doença dos cinco números sobrevivendo dentro
+    # do próprio remédio. A REGRA continua sendo uma só: quem decide é
+    # `MediaFile.organizavel`, lido do banco, nunca reescrito aqui.
+    organizaveis: int = 0
 
     @property
     def fotos(self) -> int:
@@ -124,6 +132,8 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
     # foto como fora de alcance mesmo havendo outro caminho até o arquivo.
     # Medido no acervo do dono: 2.620 fotos alcançáveis contadas como fora.
     alcance: dict[str, bool] = {}
+    # Mesma regra de "vale se QUALQUER linha valer", pelo mesmo motivo.
+    organizavel_por_chave: dict[str, bool] = {}
     raiz_da_chave: dict[str, str] = {}
     sem_caminho = 0
 
@@ -134,10 +144,11 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
                 _CAMINHO_CONHECIDO,
                 MediaFile.arquivo_ausente,
                 MediaFile.source_id,
+                MediaFile.organizavel,
             )
         )
         apelidos, disponiveis = _fontes(session)
-        for caminho, ausente, source_id in linhas:
+        for caminho, ausente, source_id, organizavel in linhas:
             if not caminho or "://" in caminho:
                 # Referência de nuvem: o app sabe que a foto existe e não há
                 # lugar no disco a informar.
@@ -157,34 +168,38 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
                 raiz_da_chave[chave] = raiz
                 dados["fotos"] += 1
                 alcance[chave] = aqui
-            elif aqui:
-                alcance[chave] = True
+                organizavel_por_chave[chave] = bool(organizavel)
+            else:
+                if aqui:
+                    alcance[chave] = True
+                if organizavel:
+                    organizavel_por_chave[chave] = True
 
     for chave, alcancavel in alcance.items():
         if alcancavel:
             por_raiz[raiz_da_chave[chave]]["alcancaveis"] += 1
+    organizaveis = sum(1 for v in organizavel_por_chave.values() if v)
 
     lugares = tuple(sorted(
         (Lugar(raiz, d["fotos"], d["alcancaveis"], tuple(sorted(d["fontes"])))
          for raiz, d in por_raiz.items()),
         key=lambda l: -l.fotos,
     ))
-    return Inventario(lugares, sem_caminho, total)
+    return Inventario(lugares, sem_caminho, total, organizaveis)
 
 
-def funil(factory: sessionmaker[Session], organizaveis: int) -> Funil:
+def funil(factory: sessionmaker[Session]) -> Funil:
     """Os três degraus que vêm do catálogo, num objeto só.
 
-    `organizaveis` chega de fora porque quem já sabe contá-lo é o
-    `MediaRepository` (é o mesmo filtro que a grade usa); duplicar a regra
-    aqui seria criar a sexta definição no exato trabalho que existe para
-    eliminar as cinco.
+    Os três contam FOTO. `MediaRepository.estatisticas()["total"]` conta
+    linha e continua certo para o que ele serve (a grade lista registros);
+    só não serve de degrau ao lado de dois que contam foto.
     """
     inv = levantar(factory)
     return Funil(
         conhecidas=inv.fotos,
         alcancaveis=inv.alcancaveis,
-        organizaveis=organizaveis,
+        organizaveis=inv.organizaveis,
         registros=inv.total_registros,
     )
 
