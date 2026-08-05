@@ -97,6 +97,15 @@ export const ROTAS_BASE: Record<string, unknown> = {
   "/api/sugestoes": { contagens: {}, itens: [] },
   "/api/duplicatas": [],
   "/api/operacoes": [],
+  // Os degraus batem com o inventário abaixo de propósito: se a fixture já
+  // se contradiz, o teste não pega a contradição que este endpoint existe
+  // para eliminar.
+  "/api/funil": {
+    conhecidas: 30,
+    alcancaveis: 8,
+    organizaveis: 8,
+    registros: 34,
+  },
   "/api/inventario": {
     fotos: 30,
     alcancaveis: 8,

@@ -40,6 +40,7 @@ from fotoorganizer.classification.templates import (
 from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.geolocation.escala import metros_por_grau
+from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.grouping.correlacao import (
     NOTA_DO_RAIO,
     RAIO_TETO_M,
@@ -65,7 +66,7 @@ from fotoorganizer.repositories import (
     SettingsRepository,
     SuggestionRepository,
 )
-from fotoorganizer.repositories.inventario import levantar
+from fotoorganizer.repositories.inventario import funil as levantar_funil, levantar
 from fotoorganizer.repositories.media import ALCANCES, LACUNAS, MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters, SuggestionRow
 from fotoorganizer.security.paths import CaminhoInvalido, caminho_relativo_seguro
@@ -299,7 +300,7 @@ def _ponto_do_mapa(
         "data_capturada": (
             m.data_capturada.isoformat() if m.data_capturada else None
         ),
-        "camera": " ".join(filter(None, [m.make, m.model])) or None,
+        "camera": nome_da_camera(m.make, m.model),
         # A coordenada é do catálogo; a miniatura é do disco. Um disco
         # desligado tira a segunda, não a primeira — o ponto é desenhado e
         # a tela diz por que não tem imagem.
@@ -423,6 +424,24 @@ def create_app(
     def status() -> dict:
         stats = media_repo.estatisticas()
         return {"versao": __version__, **stats}
+
+    @app.get("/api/funil")
+    def funil() -> dict:
+        """Os degraus entre "existe" e "dá para organizar", numa leitura só.
+
+        Caro por natureza (percorre o catálogo inteiro para contar foto, não
+        registro — ~1,4 s em 197 mil linhas), e por isso o cliente guarda o
+        resultado e só refaz quando um trabalho em background termina. O
+        número não muda sozinho: só scan, importação e geração de sugestões
+        o alteram.
+        """
+        f = levantar_funil(session_factory, media_repo.estatisticas()["total"])
+        return {
+            "conhecidas": f.conhecidas,
+            "alcancaveis": f.alcancaveis,
+            "organizaveis": f.organizaveis,
+            "registros": f.registros,
+        }
 
     @app.get("/api/fontes")
     def fontes() -> list[dict]:
@@ -824,7 +843,7 @@ def create_app(
                     "nome": d.nome,
                     "lat": d.gps_lat,
                     "lon": d.gps_lon,
-                    "camera": " ".join(filter(None, [d.make, d.model])) or None,
+                    "camera": nome_da_camera(d.make, d.model),
                     # Ela também é um dos pontos desenhados, ou vem de fora?
                     "no_grupo": (
                         d.trip_id if trip_id is not None else d.event_id

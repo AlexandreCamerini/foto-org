@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api";
+import Funil from "./Funil";
 import type { Job } from "../hooks/useJob";
 
 const ROTULO_JOB: Record<string, string> = {
@@ -15,7 +16,18 @@ const ROTULO_JOB: Record<string, string> = {
  * é persistente e honesto, nunca um spinner modal — e fica visível em
  * qualquer aba, porque o trabalho continua mesmo quando o usuário sai da
  * tela que o disparou. */
-export default function StatusBar({ job, dica }: { job: Job; dica?: string }) {
+export default function StatusBar({
+  job,
+  dica,
+  noFiltro,
+  aoIrPara,
+}: {
+  job: Job;
+  dica?: string;
+  /** Quantas fotos o filtro da tela atual deixou passar, quando há grade. */
+  noFiltro?: number;
+  aoIrPara?: (alcance: "tudo" | "organizaveis") => void;
+}) {
   const { data: status } = useQuery({
     queryKey: ["status"],
     queryFn: api.status,
@@ -118,13 +130,17 @@ export default function StatusBar({ job, dica }: { job: Job; dica?: string }) {
       )}
 
       <div className="flex-1" />
-      <span className="shrink-0 text-texto-2">
-        {/* "organizáveis", não "fotos": o topo da Biblioteca mostra 44.661
-            quando a fonte é o Apple Fotos, e dois números contraditórios lado
-            a lado fazem o usuário desconfiar dos dois. */}
-        {status?.total ?? 0} organizáveis · {status?.fontes ?? 0} fontes
-        {status?.erros ? ` · ${status.erros} erros` : ""}
-      </span>
+      {/* O funil inteiro, e não só o último degrau. Antes o rodapé dizia
+          "26023 organizáveis" enquanto o topo da Biblioteca dizia "197338
+          fotos": os dois certos, contando coisas diferentes com a mesma
+          palavra, e nenhuma tela explicando a distância entre eles. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <Funil noFiltro={noFiltro} aoIrPara={aoIrPara} compacto />
+        <span className="text-texto-3">
+          · {status?.fontes ?? 0} fontes
+          {status?.erros ? ` · ${status.erros} erros` : ""}
+        </span>
+      </div>
     </footer>
   );
 }

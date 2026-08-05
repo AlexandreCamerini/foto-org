@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api";
 import type { Faceta, Inventario } from "../api";
+import Funil from "./Funil";
 
 export interface Recorte {
   trip_id?: number;
@@ -67,20 +68,15 @@ function ListaFacetas({
  * errada — o que dá para abrir agora — para quem está tentando descobrir o
  * que tem. */
 function OAcervo({ inv }: { inv: Inventario }) {
-  const fora = inv.fotos - inv.alcancaveis;
   return (
     <section className="mb-5">
       <h3 className="titulo-painel mb-1.5">O acervo</h3>
-      <p className="mb-2">
-        <span className="text-lg">{inv.fotos.toLocaleString("pt-BR")}</span>{" "}
-        <span className="text-texto-2">fotos conhecidas</span>
-        {fora > 0 && (
-          <span className="text-texto-2">
-            {" · "}
-            {inv.alcancaveis.toLocaleString("pt-BR")} alcançáveis agora
-          </span>
-        )}
-      </p>
+      {/* O mesmo funil do rodapé, aqui na variante cheia: era esta tela que
+          dizia "190.828 conhecidas · 91.937 alcançáveis" enquanto o rodapé
+          dizia "26.023 organizáveis", sem nada ligando os três números. */}
+      <div className="mb-2">
+        <Funil />
+      </div>
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         {inv.lugares.map((lugar) => (
           <div

@@ -307,6 +307,16 @@ export interface PreviewTemplate {
   exemplos: ExemploPreviewTemplate[];
 }
 
+/** Os degraus entre "o app sabe que existe" e "dá para organizar". Uma
+ *  leitura só, para as telas pararem de contar a mesma coisa de jeitos
+ *  diferentes — ver `components/Funil.tsx`. */
+export interface FunilAcervo {
+  conhecidas: number;
+  alcancaveis: number;
+  organizaveis: number;
+  registros: number;
+}
+
 async function json<T>(url: string): Promise<T> {
   const resposta = await fetch(url);
   if (!resposta.ok) throw new Error(`${resposta.status} em ${url}`);
@@ -417,6 +427,7 @@ export const api = {
     json<LinhaAuditoria[]>(`/api/operacoes/${id}/auditoria`),
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
+  funil: () => json<FunilAcervo>("/api/funil"),
   template: () => json<TemplateConfiguravel>("/api/configuracoes/template"),
   salvarTemplate: (template: string) =>
     put<TemplateConfiguravel>("/api/configuracoes/template", { template }),

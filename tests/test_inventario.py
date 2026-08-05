@@ -2,7 +2,7 @@
 
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.models import MediaFile, MediaRole, Source
-from fotoorganizer.repositories.inventario import levantar
+from fotoorganizer.repositories.inventario import funil, levantar
 
 
 def _fonte(session, caminho, apelido, disponivel=True):
@@ -105,3 +105,50 @@ def test_referencia_de_nuvem_existe_e_nao_tem_lugar(migrated_engine):
 def test_catalogo_vazio_nao_quebra(migrated_engine):
     inv = levantar(create_session_factory(migrated_engine))
     assert (inv.fotos, inv.alcancaveis, inv.lugares) == (0, 0, ())
+
+
+def test_alcance_e_da_foto_nao_da_primeira_linha_encontrada(migrated_engine):
+    """A mesma foto conhecida por duas fontes, uma desmontada e outra não.
+
+    A contagem antiga decidia pela PRIMEIRA linha que o loop encontrasse:
+    entrando pela fonte desmontada, a foto era dada como fora de alcance
+    embora houvesse outro caminho até o arquivo. No acervo do dono isso
+    tirava 2.620 fotos da contagem de alcançáveis.
+    """
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        # A desmontada entra primeiro de propósito: é a ordem que expunha o
+        # defeito.
+        gaveta = _fonte(session, "/Volumes/HD", "HD", disponivel=False)
+        aqui = _fonte(session, "/Users/eu/Pictures", "Pictures")
+        _arquivo(session, gaveta, "/Users/eu/Pictures/Dubai", "a.jpg")
+        _arquivo(session, aqui, "/Users/eu/Pictures/Dubai", "a.jpg")
+        session.commit()
+
+    inv = levantar(factory)
+    assert inv.fotos == 1
+    assert inv.alcancaveis == 1
+    assert inv.lugares[0].alcancaveis == 1
+
+
+def test_funil_diz_os_tres_degraus_na_ordem_em_que_estreitam(migrated_engine):
+    """Os cinco números que se contradiziam viram uma leitura só."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        disco = _fonte(session, "/Users/eu/Pictures", "Pictures")
+        gaveta = _fonte(session, "/Volumes/HD", "HD", disponivel=False)
+        lr = _fonte(session, "/Users/eu/cat.lrcat", "Lightroom")
+        _arquivo(session, disco, "/Users/eu/Pictures", "a.jpg")
+        _arquivo(session, gaveta, "/Volumes/HD", "b.jpg")
+        # Mesma foto que a do disco: registro a mais, foto nenhuma a mais.
+        _referencia(session, lr, "UUID-9", "/Users/eu/Pictures", "a.jpg")
+        session.commit()
+
+    f = funil(factory, organizaveis=1)
+    assert f.registros == 3        # linhas no catálogo
+    assert f.conhecidas == 2       # fotos: a duplicada conta uma vez
+    assert f.alcancaveis == 1      # a do HD desmontado não abre agora
+    assert f.organizaveis == 1     # quem sabe contar isto é o MediaRepository
+    # Cada degrau é menor ou igual ao anterior — se algum dia deixar de ser,
+    # a tela volta a mostrar um funil que não afunila.
+    assert f.registros >= f.conhecidas >= f.alcancaveis >= f.organizaveis

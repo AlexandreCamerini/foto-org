@@ -99,9 +99,17 @@ describe("App", () => {
     });
 
   it("a barra de status mostra os totais em qualquer aba", async () => {
+    // O rodapé dizia só "8 organizáveis", o último degrau, enquanto outras
+    // telas mostravam os degraus de cima com a mesma palavra "fotos". Agora
+    // ele carrega o funil inteiro, que é o que torna a diferença legível.
     servirApi(ROTAS_BASE);
-    montar(<App />);
-    expect(await screen.findByText("8 organizáveis · 1 fontes")).toBeInTheDocument();
+    const { container } = montar(<App />);
+
+    const funil = await screen.findByTestId("funil");
+    expect(funil).toHaveTextContent("30");
+    expect(funil).toHaveTextContent("conhecidas");
+    expect(funil).toHaveTextContent("organizáveis");
+    expect(container).toHaveTextContent("· 1 fontes");
   });
 });
 
@@ -115,8 +123,15 @@ describe("o acervo, antes das lacunas", () => {
     montar(<App />);
 
     expect(await screen.findByText("O acervo")).toBeInTheDocument();
-    expect(screen.getByText("30")).toBeInTheDocument();
-    expect(screen.getByText(/8 alcançáveis agora/)).toBeInTheDocument();
+    // Dois funis na tela — o do Panorama e o do rodapé — e é justamente o
+    // ponto: os dois dizem o mesmo número com a mesma palavra.
+    const funis = screen.getAllByTestId("funil");
+    expect(funis.length).toBeGreaterThan(0);
+    for (const funil of funis) {
+      expect(funil).toHaveTextContent("30");
+      expect(funil).toHaveTextContent("conhecidas");
+      expect(funil).toHaveTextContent("alcançáveis");
+    }
 
     // O disco na gaveta aparece, com o motivo.
     expect(screen.getByText("/Volumes/photo")).toBeInTheDocument();

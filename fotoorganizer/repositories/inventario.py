@@ -57,6 +57,39 @@ class Lugar:
 
 
 @dataclass(frozen=True, slots=True)
+class Funil:
+    """Os degraus entre "o app sabe que existe" e "estou olhando isto agora".
+
+    Existiam cinco números para esta pergunta, e cada tela mostrava um: o
+    Panorama dizia 190.828 conhecidas e 91.937 alcançáveis, a Biblioteca
+    dizia 197.338 no topo, a lateral e o rodapé diziam 26.023, e o contador
+    depois de filtrar dizia 20.832. Nenhum estava errado — eles contavam
+    coisas diferentes com a mesma palavra, e a soma disso é um usuário que
+    não confia em nenhum.
+
+    Aqui os degraus são ditos juntos, na ordem em que estreitam, para que a
+    diferença entre eles seja legível em vez de ser uma contradição:
+
+    - `conhecidas`: toda foto que o app sabe que existe, aqui ou não. Conta
+      FOTO, não registro — a mesma foto vista pelo disco e pelo catálogo do
+      Lightroom é uma só.
+    - `alcancaveis`: dá para abrir o arquivo agora (disco montado, não é
+      referência de nuvem).
+    - `organizaveis`: é acervo do dono e tem arquivo — o que entra na
+      revisão e no plano de cópia. Miniatura de cache e referência ficam de
+      fora por não serem acervo (invariante 8), mesmo estando alcançáveis.
+
+    O quarto degrau — quantas o filtro atual deixou passar — é da tela, não
+    do catálogo, e por isso não mora aqui.
+    """
+
+    conhecidas: int
+    alcancaveis: int
+    organizaveis: int
+    registros: int
+
+
+@dataclass(frozen=True, slots=True)
 class Inventario:
     lugares: tuple[Lugar, ...]
     sem_caminho: int          # referência de nuvem: existe, não tem lugar
@@ -85,7 +118,13 @@ def _raiz(caminho: str) -> str:
 def levantar(factory: sessionmaker[Session]) -> Inventario:
     """Somente leitura sobre o catálogo; não toca no filesystem."""
     por_raiz: dict[str, dict] = {}
-    vistos: set[str] = set()
+    # Alcance por foto, não por linha: a mesma foto pode ser conhecida por
+    # duas fontes, uma montada e outra não. Antes valia a PRIMEIRA linha que
+    # o loop encontrasse — quem chegasse por uma fonte desmontada marcava a
+    # foto como fora de alcance mesmo havendo outro caminho até o arquivo.
+    # Medido no acervo do dono: 2.620 fotos alcançáveis contadas como fora.
+    alcance: dict[str, bool] = {}
+    raiz_da_chave: dict[str, str] = {}
     sem_caminho = 0
 
     with factory() as session:
@@ -113,12 +152,17 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
                 raiz, {"fotos": 0, "alcancaveis": 0, "fontes": set()}
             )
             dados["fontes"].add(apelidos.get(source_id, "?"))
-            if chave in vistos:
-                continue          # mesma foto, outra fonte
-            vistos.add(chave)
-            dados["fotos"] += 1
-            if not ausente and disponiveis.get(source_id, False):
-                dados["alcancaveis"] += 1
+            aqui = not ausente and disponiveis.get(source_id, False)
+            if chave not in raiz_da_chave:
+                raiz_da_chave[chave] = raiz
+                dados["fotos"] += 1
+                alcance[chave] = aqui
+            elif aqui:
+                alcance[chave] = True
+
+    for chave, alcancavel in alcance.items():
+        if alcancavel:
+            por_raiz[raiz_da_chave[chave]]["alcancaveis"] += 1
 
     lugares = tuple(sorted(
         (Lugar(raiz, d["fotos"], d["alcancaveis"], tuple(sorted(d["fontes"])))
@@ -126,6 +170,23 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
         key=lambda l: -l.fotos,
     ))
     return Inventario(lugares, sem_caminho, total)
+
+
+def funil(factory: sessionmaker[Session], organizaveis: int) -> Funil:
+    """Os três degraus que vêm do catálogo, num objeto só.
+
+    `organizaveis` chega de fora porque quem já sabe contá-lo é o
+    `MediaRepository` (é o mesmo filtro que a grade usa); duplicar a regra
+    aqui seria criar a sexta definição no exato trabalho que existe para
+    eliminar as cinco.
+    """
+    inv = levantar(factory)
+    return Funil(
+        conhecidas=inv.fotos,
+        alcancaveis=inv.alcancaveis,
+        organizaveis=organizaveis,
+        registros=inv.total_registros,
+    )
 
 
 def _fontes(session: Session) -> tuple[dict[int, str], dict[int, bool]]:

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api, type FiltrosMidia } from "./api";
+import { rotuloDeFonte } from "./fontes";
 import Inspector from "./components/Inspector";
 import { LinhaDoTempo } from "./components/LinhaDoTempo";
 import Loupe from "./components/Loupe";
@@ -219,7 +220,7 @@ export default function App() {
                 className="flex items-center gap-1 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
                 title="Mostrar todas as fontes"
               >
-                {fontes?.find((f) => f.id === fonte)?.apelido ?? "fonte"} ✕
+                {rotuloDeFonte(fontes, fonte)} ✕
               </button>
             </div>
           )}
@@ -331,7 +332,13 @@ export default function App() {
                   <option value="tamanho_desc">Maiores</option>
                 </select>
                 <div className="flex-1" />
-                <span className="text-texto-2">{total} fotos</span>
+                {/* O contador saiu daqui. Ele dizia "197338 fotos" enquanto a
+                    lateral dizia "26023" e o rodapé outra coisa — três
+                    denominadores, nenhum rótulo. Quem responde "quantas estou
+                    vendo" agora é o degrau "no filtro" do funil, no rodapé,
+                    ao lado dos degraus que explicam a diferença. De quebra a
+                    barra encolhe: ela exigia 1011px só para si e era o que
+                    empurrava a busca por baixo do inspetor em tela estreita. */}
                 <input
                   type="range"
                   min={96}
@@ -385,6 +392,15 @@ export default function App() {
       <StatusBar
         job={job}
         dica={noMapa ? (mapaVazio ? DICA_MAPA_VAZIO : DICA_MAPA) : DICAS[aba]}
+        // O degrau "no filtro" só existe onde há filtro: nas outras abas a
+        // grade não está na tela e o número seria de outra pergunta.
+        noFiltro={aba === "Biblioteca" ? total : undefined}
+        aoIrPara={(novo) => {
+          setAba("Biblioteca");
+          setAlcance(novo);
+          setRecorte(null);
+          setFonte(null);
+        }}
       />
 
       {loupeAberto && selIndex !== null && (
