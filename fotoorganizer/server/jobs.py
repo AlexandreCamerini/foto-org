@@ -176,6 +176,7 @@ class JobManager:
             from fotoorganizer.classification.templates import TEMPLATE_PADRAO
             from fotoorganizer.geolocation import LocationResolver
             from fotoorganizer.geolocation.offline import OfflineGeocoder
+            from fotoorganizer.repositories.lexico import LexicoRepository
             from fotoorganizer.repositories.settings import SettingsRepository
 
             # Sem preferência salva, o comportamento é idêntico a antes desta
@@ -183,11 +184,17 @@ class JobManager:
             template = SettingsRepository(self._factory).obter_template(
                 TEMPLATE_PADRAO
             )
+            # O que cada nome significa, lido do CACHE — nada sai da máquina
+            # aqui. A classificação em si é ação separada e explícita
+            # (`scripts/classificar_nomes.py`). Léxico vazio = cascata
+            # decide como sempre decidiu.
+            lexico = LexicoRepository(self._factory).conhecidos()
             engine = SuggestionEngine(
                 self._factory,
                 LocationResolver(OfflineGeocoder()),
                 template=template,
                 advisor=self._advisor(),
+                lexico=lexico,
             )
             resultado = engine.gerar()
             self._atualizar(
