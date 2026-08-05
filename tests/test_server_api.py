@@ -1302,3 +1302,94 @@ def test_mapa_aceita_viagem_e_recusa_pedido_ambiguo(client, migrated_engine):
     assert client.get(
         "/api/mapa", params={"event_id": 99999}
     ).status_code == 404
+
+
+# -- revisão por grupo, com contagem verdadeira (fatia 1 da crítica) ---------
+
+def _catalogo_com_sugestoes(migrated_engine, tmp_path, n=7):
+    """Um catálogo pequeno com sugestões geradas, para os testes de grupo."""
+    import time
+
+    fotos = tmp_path / "fotos"
+    for i in range(n):
+        make_jpeg(fotos / f"f_{i}.jpg", seed=i)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()).scan_source(fotos)
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+    assert client.post("/api/sugestoes/gerar").status_code == 200
+    for _ in range(150):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+    return client
+
+
+def test_grupos_contam_o_banco_e_nao_a_pagina(migrated_engine, tmp_path):
+    """O defeito que deixava 4.848 de 5.048 pendências inalcançáveis.
+
+    A tela pedia 200 itens e deduzia dali o tamanho do grupo: dizia "85
+    fotos" para um grupo de 597 e o botão "Aprovar 85" fazia o que dizia,
+    deixando 512 para trás sem avisar. O resumo por grupo tem que vir
+    contado do banco, independente de qualquer paginação.
+    """
+    client = _catalogo_com_sugestoes(migrated_engine, tmp_path, n=7)
+
+    grupos = client.get("/api/sugestoes/grupos").json()
+    assert grupos, "sem grupos, o resto do teste não diz nada"
+    total_nos_grupos = sum(g["total"] for g in grupos)
+    assert total_nos_grupos == client.get("/api/sugestoes").json()["total"] == 7
+
+    # Uma página de 2 itens não muda o total de nenhum grupo.
+    pagina = client.get("/api/sugestoes", params={"limit": 2}).json()
+    assert len(pagina["itens"]) == 2
+    assert pagina["total"] == 7
+    assert sum(g["total"] for g in client.get("/api/sugestoes/grupos").json()) == 7
+
+    assert set(grupos[0]) >= {
+        "destino", "total", "nivel", "estimadas", "fora_de_alcance", "origens"
+    }
+    # A origem é a metade "situação atual" do par, e não existia em tela.
+    assert grupos[0]["origens"], "o grupo precisa dizer de onde as fotos vêm"
+
+
+def test_aprovar_grupo_alcanca_alem_da_pagina(migrated_engine, tmp_path):
+    """Aprovar o grupo aprova o GRUPO, não o que a página carregou."""
+    client = _catalogo_com_sugestoes(migrated_engine, tmp_path, n=7)
+    grupos = client.get("/api/sugestoes/grupos").json()
+    maior = max(grupos, key=lambda g: g["total"])
+
+    resposta = client.post("/api/sugestoes/acao", json={
+        "acao": "aprovar", "destino": maior["destino"], "status": "pendente",
+    }).json()
+    assert resposta["afetadas"] == maior["total"]
+
+    depois = client.get("/api/sugestoes").json()
+    assert depois["contagens"].get("aprovada") == maior["total"]
+    # E o grupo sumiu das pendentes, inteiro.
+    assert maior["destino"] not in {
+        g["destino"] for g in client.get("/api/sugestoes/grupos").json()
+    }
+
+
+def test_listar_recorta_por_grupo(migrated_engine, tmp_path):
+    """Abrir um grupo carrega só ele — não a fila inteira."""
+    client = _catalogo_com_sugestoes(migrated_engine, tmp_path, n=7)
+    grupos = client.get("/api/sugestoes/grupos").json()
+    alvo = grupos[0]
+
+    recorte = client.get(
+        "/api/sugestoes", params={"destino": alvo["destino"]}
+    ).json()
+    assert recorte["total"] == alvo["total"]
+    assert {i["destino"] for i in recorte["itens"]} == {alvo["destino"]}
+
+
+def test_acao_sem_ids_e_sem_destino_e_422(client):
+    assert client.post(
+        "/api/sugestoes/acao", json={"acao": "aprovar"}
+    ).status_code == 422

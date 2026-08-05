@@ -105,8 +105,15 @@ class ImportBody(BaseModel):
 
 
 class AcaoSugestoesBody(BaseModel):
-    ids: list[int]
     acao: str  # aprovar | rejeitar | desfazer
+    ids: list[int] | None = None
+    # Alternativa a `ids`: age sobre o GRUPO inteiro, que é a unidade de
+    # decisão (D-018). A tela não tem como mandar 2.406 ids — ela só
+    # carregou uma página —, e era exatamente por isso que "Aprovar 85"
+    # aprovava 85 de um grupo de 597.
+    destino: str | None = None
+    source_id: int | None = None
+    status: str = "pendente"
 
 
 class PrincipalBody(BaseModel):
@@ -891,13 +898,18 @@ def create_app(
     # -- sugestões e duplicatas (leitura; ações nas fatias seguintes) --------
     @app.get("/api/sugestoes")
     def sugestoes(status: str = "pendente", source_id: int | None = None,
+                  destino: str | None = None,
                   offset: int = 0,
                   limit: int = 200) -> dict:
         try:
             status_enum = SuggestionStatus(status)
         except ValueError:
             raise HTTPException(422, f"status inválido: {status}")
-        filters = SuggestionFilters(status=status_enum, source_id=source_id)
+        # `destino` recorta um grupo: é o que permite abrir "Dubai" e
+        # paginar dentro das 2.406 sem carregar a fila inteira.
+        filters = SuggestionFilters(
+            status=status_enum, source_id=source_id, destino=destino
+        )
         linhas = suggestion_repo.listar(
             filters, limit=max(1, min(limit, 500)), offset=offset
         )
@@ -905,6 +917,9 @@ def create_app(
         fora = _fontes_fora_de_alcance()
         return {
             "contagens": {s.value: n for s, n in contagens.items()},
+            # O total do RECORTE, para a tela nunca mais deduzir tamanho de
+            # grupo a partir do que a página trouxe.
+            "total": suggestion_repo.contar(filters),
             "itens": [_sugestao_json(linha, fora) for linha in linhas],
         }
 
@@ -949,7 +964,48 @@ def create_app(
         }
         if body.acao not in acoes:
             raise HTTPException(422, f"ação desconhecida: {body.acao}")
+        if body.destino is not None:
+            # O grupo inteiro, resolvido no banco. `status` importa: um
+            # "desfazer" age sobre aprovadas, não sobre pendentes.
+            try:
+                status_enum = SuggestionStatus(body.status)
+            except ValueError:
+                raise HTTPException(422, f"status inválido: {body.status}")
+            filtros = SuggestionFilters(
+                status=status_enum, source_id=body.source_id,
+                destino=body.destino,
+            )
+            return {"afetadas": suggestion_repo.aplicar_em_lote(filtros, body.acao)}
+        if not body.ids:
+            raise HTTPException(422, "informe `ids` ou `destino`")
         return {"afetadas": acoes[body.acao](body.ids)}
+
+    @app.get("/api/sugestoes/grupos")
+    def grupos_de_sugestoes(status: str = "pendente",
+                            source_id: int | None = None) -> list[dict]:
+        """Um resumo por destino, com a contagem VERDADEIRA de cada grupo.
+
+        A tela pedia 200 itens e deduzia o tamanho do grupo do que tinha
+        chegado: no acervo real isso mostrava 3 dos 10 grupos, dizia "85
+        fotos" para um de 597, e deixava 4.848 das 5.048 pendências sem
+        nenhum gesto que chegasse até elas.
+        """
+        try:
+            status_enum = SuggestionStatus(status)
+        except ValueError:
+            raise HTTPException(422, f"status inválido: {status}")
+        filtros = SuggestionFilters(status=status_enum, source_id=source_id)
+        return [
+            {
+                "destino": g.destino,
+                "total": g.total,
+                "nivel": g.nivel.value,
+                "estimadas": g.estimadas,
+                "fora_de_alcance": g.fora_de_alcance,
+                "origens": [{"pasta": p, "fotos": n} for p, n in g.origens],
+            }
+            for g in suggestion_repo.grupos(filtros)
+        ]
 
     @app.patch("/api/sugestoes/{suggestion_id}/destino")
     def editar_destino_sugestao(suggestion_id: int, body: EditarDestinoBody) -> dict:

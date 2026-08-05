@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Miniatura } from "./Miniatura";
 import { api, type Media, type Sugestao } from "../api";
@@ -40,21 +40,42 @@ export default function Review({
   fonte?: number;
 }) {
   const [status, setStatus] = useState<string>("pendente");
-  const [fechados, setFechados] = useState<Set<string>>(new Set());
+  // ABERTOS, não "fechados": a tela nasce com os grupos dobrados. Aberta,
+  // ela mostrava ~200 linhas quase idênticas de 3 dos 10 grupos; dobrada,
+  // mostra as 10 decisões que a fila realmente pede. Medido no acervo do
+  // dono: 5.048 pendências, 10 destinos, e o nível de confiança é constante
+  // dentro de cada um — a linha por foto não distingue nada.
+  const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [porque, setPorque] = useState<number | null>(null);
   const [editando, setEditando] = useState<number | null>(null);
   const [valorEdicao, setValorEdicao] = useState("");
   const [erroEdicao, setErroEdicao] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({
-    queryKey: ["sugestoes", status, fonte],
-    queryFn: () => api.sugestoes(status, 0, 200, fonte),
+  // Os grupos vêm inteiros e contados no banco — são dez linhas. A fila de
+  // fotos NÃO vem junto: era ela que trazia 200 itens e fazia a tela
+  // acreditar que o acervo tinha 3 grupos.
+  const { data: grupos } = useQuery({
+    queryKey: ["sugestoes", "grupos", status, fonte],
+    queryFn: () => api.gruposDeSugestoes(status, fonte),
+  });
+  const { data: contagensData } = useQuery({
+    queryKey: ["sugestoes", "contagens", status, fonte],
+    queryFn: () => api.sugestoes(status, 0, 1, fonte),
   });
 
   const acao = useMutation({
     mutationFn: ({ ids, tipo }: { ids: number[]; tipo: string }) =>
       api.acaoSugestoes(ids, tipo),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["sugestoes"] }),
+  });
+
+  // Ação sobre o GRUPO: a tela manda o destino, o servidor resolve os ids.
+  // Sem isto "Aprovar 597" aprovava as 85 que a página tinha trazido.
+  const acaoNoGrupo = useMutation({
+    mutationFn: ({ destino, tipo }: { destino: string; tipo: string }) =>
+      api.acaoNoGrupo(destino, tipo, status, fonte),
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: ["sugestoes"] }),
   });
@@ -91,19 +112,9 @@ export default function Review({
     editarDestino.mutate({ id, destino });
   };
 
-  const itens = (data?.itens ?? []) as Item[];
-  const contagens = data?.contagens ?? {};
-
-  // O repositório já devolve ordenado por destino, então agrupar é varrer.
-  const grupos = useMemo(() => {
-    const mapa = new Map<string, Item[]>();
-    for (const item of itens) {
-      const lista = mapa.get(item.destino);
-      if (lista) lista.push(item);
-      else mapa.set(item.destino, [item]);
-    }
-    return [...mapa.entries()];
-  }, [itens]);
+  const contagens = contagensData?.contagens ?? {};
+  const lista = grupos ?? [];
+  const totalNaFila = lista.reduce((s, g) => s + g.total, 0);
 
   return (
     <div className="flex h-full flex-col">
@@ -122,8 +133,10 @@ export default function Review({
         ))}
         <div className="flex-1" />
         <span className="text-texto-3">
-          {itens.length} em {grupos.length}{" "}
-          {grupos.length === 1 ? "grupo" : "grupos"}
+          {/* Números do banco, não da página: dizia "200 em 3 grupos" para
+              uma fila de 5.048 em 10. */}
+          {totalNaFila.toLocaleString("pt-BR")} em {lista.length}{" "}
+          {lista.length === 1 ? "grupo" : "grupos"}
         </span>
         <button
           onClick={() => job.gerarSugestoes()}
@@ -136,20 +149,21 @@ export default function Review({
         </button>
       </div>
 
-      {itens.length === 0 ? (
+      {lista.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-texto-2">
           Nada aqui — gere as sugestões ou mude o filtro de status.
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          {grupos.map(([destino, doGrupo]) => {
-            const aberto = !fechados.has(destino);
-            const estimadas = doGrupo.filter((i) => i.gps_estimado).length;
+          {lista.map((grupo) => {
+            const destino = grupo.destino;
+            const aberto = abertos.has(destino);
+            const estimadas = grupo.estimadas;
             return (
               <section key={destino}>
                 <header
                   onClick={() =>
-                    setFechados((s) => {
+                    setAbertos((s) => {
                       const novo = new Set(s);
                       novo.has(destino) ? novo.delete(destino) : novo.add(destino);
                       return novo;
@@ -158,36 +172,59 @@ export default function Review({
                   className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 border-b border-borda bg-cartao px-3 py-2 hover:bg-realce"
                 >
                   <span className="w-3 text-texto-3">{aberto ? "▾" : "▸"}</span>
+                  {/* Origem → destino na mesma linha: é a leitura "situação
+                      atual → situação proposta" que não existia em tela
+                      nenhuma. A pasta de origem só aparecia na linha da foto
+                      quando faltavam câmera E data — ou seja, quase nunca. */}
+                  <span className="min-w-0 shrink truncate text-texto-2">
+                    {origemLegivel(grupo.origens)}
+                  </span>
+                  <span aria-hidden className="shrink-0 text-texto-3">
+                    →
+                  </span>
                   <span className="truncate font-medium">{destino}</span>
                   <span className="shrink-0 text-texto-2">
-                    · {doGrupo.length}{" "}
-                    {doGrupo.length === 1 ? "foto" : "fotos"}
+                    · {grupo.total.toLocaleString("pt-BR")}{" "}
+                    {grupo.total === 1 ? "foto" : "fotos"}
                     {estimadas > 0 && (
                       <span className="text-herdado">
                         {" "}
-                        · {estimadas} com lugar estimado
+                        · {estimadas.toLocaleString("pt-BR")} com lugar estimado
+                      </span>
+                    )}
+                    {grupo.fora_de_alcance > 0 && (
+                      // Sem isto o dono aprova 2.405 fotos de um disco
+                      // desligado sem saber (mesma honestidade de D-033).
+                      <span className="text-texto-3">
+                        {" "}
+                        · {grupo.fora_de_alcance.toLocaleString("pt-BR")} fora
+                        de alcance
                       </span>
                     )}
                   </span>
+                  <Confianca nivel={grupo.nivel} />
                   <div className="flex-1" />
                   {status === "pendente" && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        acao.mutate({
-                          ids: doGrupo.map((i) => i.id),
-                          tipo: "aprovar",
-                        });
+                        acaoNoGrupo.mutate({ destino, tipo: "aprovar" });
                       }}
                       className="shrink-0 rounded-md border border-borda px-2 py-0.5 text-[11px] text-texto-2 hover:border-ok hover:text-ok"
                     >
-                      Aprovar {doGrupo.length}
+                      Aprovar {grupo.total.toLocaleString("pt-BR")}
                     </button>
                   )}
                 </header>
 
-                {aberto &&
-                  doGrupo.map((s) => (
+                {aberto && (
+                  <FotosDoGrupo
+                    destino={destino}
+                    status={status}
+                    fonte={fonte}
+                    total={grupo.total}
+                    renderizar={(s) => (
+
                     <div key={s.id} className="border-b border-borda/60">
                       {editando === s.id ? (
                         <div className="flex items-center gap-3 px-3 py-2">
@@ -310,7 +347,9 @@ export default function Review({
                       )}
                       {porque === s.media_id && <PorQue mediaId={s.media_id} />}
                     </div>
-                  ))}
+                    )}
+                  />
+                )}
               </section>
             );
           })}
@@ -318,6 +357,69 @@ export default function Review({
       )}
     </div>
   );
+}
+
+/** Quantas fotos de um grupo a tela carrega de uma vez.
+ *
+ *  O grupo maior do acervo real tem 2.406. Trazer tudo ao abrir seria
+ *  repetir, dentro do grupo, o erro que a tela tinha na fila inteira. */
+const POR_PAGINA = 200;
+
+/** As fotos de UM grupo, buscadas só quando ele abre.
+ *
+ *  Antes a tela pedia 200 sugestões da fila inteira e deduzia os grupos do
+ *  que chegava — o que, no acervo do dono, mostrava 3 dos 10 grupos e
+ *  deixava 4.848 das 5.048 pendências sem nenhum gesto que as alcançasse.
+ *  Agora o recorte é do servidor (`destino=`), e o que não coube tem um
+ *  botão dizendo quanto falta em vez de sumir em silêncio. */
+function FotosDoGrupo({
+  destino,
+  status,
+  fonte,
+  total,
+  renderizar,
+}: {
+  destino: string;
+  status: string;
+  fonte?: number;
+  total: number;
+  renderizar: (item: Item) => React.ReactNode;
+}) {
+  const [limite, setLimite] = useState(POR_PAGINA);
+  const { data, isPending } = useQuery({
+    queryKey: ["sugestoes", "grupo", destino, status, fonte, limite],
+    queryFn: () => api.sugestoes(status, 0, limite, fonte, destino),
+  });
+
+  if (isPending) {
+    return <div className="px-3 py-2 text-texto-3">carregando…</div>;
+  }
+  const itens = (data?.itens ?? []) as Item[];
+  const faltam = total - itens.length;
+  return (
+    <>
+      {itens.map(renderizar)}
+      {faltam > 0 && (
+        <button
+          onClick={() => setLimite((n) => n + POR_PAGINA)}
+          className="w-full border-b border-borda/60 px-3 py-2 text-left text-texto-2 hover:bg-painel"
+        >
+          mostrar mais {Math.min(faltam, POR_PAGINA).toLocaleString("pt-BR")} ·
+          faltam {faltam.toLocaleString("pt-BR")} de{" "}
+          {total.toLocaleString("pt-BR")}
+        </button>
+      )}
+    </>
+  );
+}
+
+/** "de onde vêm", em uma linha. */
+function origemLegivel(origens: { pasta: string; fotos: number }[]): string {
+  if (origens.length === 0) return "—";
+  const [maior, ...resto] = origens;
+  const nome = maior.pasta.split("/").filter(Boolean).pop() || maior.pasta || "—";
+  if (resto.length === 0) return nome;
+  return `${nome} e mais ${resto.length}`;
 }
 
 /** Busca as evidências só quando o usuário pergunta — 63 linhas não podem

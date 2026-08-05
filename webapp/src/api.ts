@@ -239,7 +239,23 @@ export interface SugestaoRow {
 
 export interface PaginaSugestoes {
   contagens: Record<string, number>;
+  /** O total do RECORTE, contado no banco. A tela deduzia o tamanho de um
+   *  grupo a partir da página carregada e dizia "85 fotos" para um de 597. */
+  total: number;
   itens: SugestaoRow[];
+}
+
+/** Um destino proposto e o que a decisão sobre ele precisa saber.
+ *
+ *  A unidade de decisão é o grupo (D-018): no acervo real, 5.048 sugestões
+ *  pendentes são 10 destinos, com confiança constante dentro de cada um. */
+export interface GrupoSugestoes {
+  destino: string;
+  total: number;
+  nivel: string;
+  estimadas: number;
+  fora_de_alcance: number;
+  origens: { pasta: string; fotos: number }[];
 }
 
 /** Plano de cópia: nada sai do lugar até dry-run + aprovação explícita. */
@@ -407,10 +423,16 @@ export const api = {
       params.set("event_id", String(filtro.event_id));
     return json<DadosMapa>(`/api/mapa?${params}`);
   },
-  sugestoes: (status: string, offset = 0, limit = 200, sourceId?: number) =>
+  sugestoes: (
+    status: string, offset = 0, limit = 200, sourceId?: number,
+    /** Recorta um grupo de destino — é o que permite abrir "Dubai" e
+     *  paginar dentro das 2.406 sem carregar a fila inteira. */
+    destino?: string,
+  ) =>
     json<PaginaSugestoes>(
       `/api/sugestoes?status=${status}&offset=${offset}&limit=${limit}` +
-        (sourceId ? `&source_id=${sourceId}` : ""),
+        (sourceId ? `&source_id=${sourceId}` : "") +
+        (destino ? `&destino=${encodeURIComponent(destino)}` : ""),
     ),
   acaoSugestoes: (ids: number[], acao: string) =>
     post<{ afetadas: number }>("/api/sugestoes/acao", { ids, acao }),
@@ -428,6 +450,20 @@ export const api = {
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
   funil: () => json<FunilAcervo>("/api/funil"),
+  gruposDeSugestoes: (status: string, source_id?: number) =>
+    json<GrupoSugestoes[]>(
+      `/api/sugestoes/grupos?status=${status}` +
+        (source_id != null ? `&source_id=${source_id}` : ""),
+    ),
+  /** Age sobre o grupo inteiro: a tela manda o destino, o servidor resolve
+   *  os ids. Sem isto "Aprovar 597" aprovava as 85 da página carregada. */
+  acaoNoGrupo: (destino: string, acao: string, status: string, source_id?: number) =>
+    post<{ afetadas: number }>("/api/sugestoes/acao", {
+      acao,
+      destino,
+      status,
+      source_id: source_id ?? null,
+    }),
   template: () => json<TemplateConfiguravel>("/api/configuracoes/template"),
   salvarTemplate: (template: string) =>
     put<TemplateConfiguravel>("/api/configuracoes/template", { template }),
