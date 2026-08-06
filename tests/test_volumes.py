@@ -131,6 +131,10 @@ def test_disco_na_gaveta_e_indisponivel_sem_perder_identidade(
     """"Na gaveta" e "sumiu" são coisas diferentes, e a interface precisa
     dizer qual é."""
     monkeypatch.setattr(volumes.os.path, "ismount", lambda p: str(p) == "/")
+    # A decisão de disponibilidade é `Path.exists()`: sem este dublê, o
+    # teste passa ou falha conforme o NAS real do dono estar montado.
+    import fotoorganizer.sources.disponibilidade as disp
+    monkeypatch.setattr(disp.Path, "exists", lambda self: False)
     factory = create_session_factory(migrated_engine)
     with factory() as session:
         _fonte(session, "/Volumes/photo/Portfolio", apelido="photo",
@@ -156,6 +160,8 @@ def test_volume_que_voltou_noutro_ponto_e_apontado(migrated_engine, monkeypatch)
                         lambda ident: Path("/Volumes/photo 1"))
     import fotoorganizer.sources.disponibilidade as disp
     monkeypatch.setattr(disp, "montado_em", lambda ident: Path("/Volumes/photo 1"))
+    # Mesmo isolamento do teste acima: o NAS real não pode decidir o teste.
+    monkeypatch.setattr(disp.Path, "exists", lambda self: False)
 
     factory = create_session_factory(migrated_engine)
     with factory() as session:
