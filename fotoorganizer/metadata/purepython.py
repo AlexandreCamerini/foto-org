@@ -43,6 +43,12 @@ except ImportError:  # pragma: no cover
 PILLOW_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp", ".gif"}
 HEIF_EXTENSIONS = {".heic", ".heif", ".hif"}
 RAW_EXTENSIONS = {".dng", ".cr2", ".cr3", ".nef", ".arw", ".raf", ".orf", ".rw2"}
+# A descoberta (scanner/discovery.py) só enumera o que está nesta lista —
+# um .mov numa pasta de fotos era ignorado ANTES de existir uma linha no
+# banco: invisível por completo, sem erro, sem log. Com exiftool instalado
+# (ExifToolExtractor, que herda esta lista), CreateDate/ImageWidth/Height
+# de QuickTime já eram lidos — só faltava a descoberta oferecer o arquivo.
+VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi"}
 
 _EXIF_DATE_FORMAT = "%Y:%m:%d %H:%M:%S"
 
@@ -241,7 +247,7 @@ def _dms_to_decimal(dms, ref: str) -> float:
 
 class PurePythonExtractor:
     def supported_extensions(self) -> set[str]:
-        exts = set(PILLOW_EXTENSIONS)
+        exts = set(PILLOW_EXTENSIONS) | VIDEO_EXTENSIONS
         if _HAS_HEIF:
             exts |= HEIF_EXTENSIONS
         if _HAS_RAW:
@@ -249,9 +255,20 @@ class PurePythonExtractor:
         return exts
 
     def extract(self, path: Path) -> MediaMetadata:
-        if path.suffix.lower() in RAW_EXTENSIONS:
+        suffix = path.suffix.lower()
+        if suffix in VIDEO_EXTENSIONS:
+            return self._extract_video(path)
+        if suffix in RAW_EXTENSIONS:
             return self._extract_raw(path)
         return self._extract_pillow(path)
+
+    def _extract_video(self, path: Path) -> MediaMetadata:
+        """Cataloga sem metadado: Pillow não decodifica vídeo, e adivinhar
+        data/dimensão seria pior que não afirmar nada. Sem `erro` — o
+        arquivo não está corrompido, só não há extração local dele; com
+        exiftool disponível, `ExifToolExtractor` lê o QuickTime real
+        (CreateDate, ImageWidth/Height) antes de chegar aqui."""
+        return MediaMetadata()
 
     def _extract_pillow(self, path: Path) -> MediaMetadata:
         meta = MediaMetadata()

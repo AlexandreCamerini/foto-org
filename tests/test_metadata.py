@@ -55,6 +55,22 @@ def test_extensoes_suportadas_incluem_raw_e_heif():
     assert {".dng", ".cr3", ".heic", ".hif"} <= exts
 
 
+def test_video_entra_no_catalogo_em_vez_de_ser_invisivel(tmp_path):
+    """Sem isto, um .mov/.mp4 numa pasta de fotos era ignorado pela
+    descoberta ANTES de existir uma linha no banco — invisível por
+    completo, sem erro, sem log (docs/AVALIACAO_UX.md, seção C.3)."""
+    exts = PurePythonExtractor().supported_extensions()
+    assert {".mov", ".mp4", ".m4v"} <= exts
+
+    video = tmp_path / "clipe.mov"
+    video.write_bytes(b"nao e um frame de imagem")
+    meta = PurePythonExtractor().extract(video)
+    # Cataloga sem metadado (não é Pillow que decodifica vídeo) — e sem
+    # fingir "erro de leitura" num arquivo que não está corrompido.
+    assert meta.erro is None
+    assert meta.data_capturada is None
+
+
 # -- RAW: lente e orientação vêm do libraw, inclusive em CR3 ------------------
 class _FakeSizes:
     def __init__(self, flip: int) -> None:
