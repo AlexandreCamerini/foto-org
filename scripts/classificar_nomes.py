@@ -41,7 +41,8 @@ from fotoorganizer.database.engine import (  # noqa: E402
     create_db_engine,
     create_session_factory,
 )
-from fotoorganizer.grouping.eventos import extrair_evento  # noqa: E402
+from fotoorganizer.grouping.datas import separar_data  # noqa: E402
+from fotoorganizer.grouping.eventos import extrair_evento, nome_de_album  # noqa: E402
 from fotoorganizer.models import MediaFile, MetadataEntry  # noqa: E402
 from fotoorganizer.repositories.lexico import LexicoRepository  # noqa: E402
 
@@ -53,6 +54,12 @@ def nomes_do_acervo(factory) -> set[str]:
     data ("Pantanal Jul.2023" → "Pantanal"), e a regra 6 decide com o nome
     já limpo. Classificar o segmento cru produziria um léxico que nunca
     casa com nada.
+
+    Além do nome extraído, entra cada NÍVEL nomeável do caminho: a cascata
+    consulta o léxico da folha à raiz ("Pantanal/Dia 2" pergunta pelos
+    dois), e um nível que nunca foi oferecido à classificação é um nível
+    em que o léxico nunca terá opinião. `nome_de_album` corta o técnico —
+    sem ele voltaria o ruído dos 12.665 fragmentos.
     """
     nomes: set[str] = set()
     with factory() as session:
@@ -68,6 +75,11 @@ def nomes_do_acervo(factory) -> set[str]:
             nome, _ = extrair_evento([pasta])
             if nome:
                 nomes.add(nome)
+            for segmento in pasta.split("/"):
+                nivel, _data = separar_data(segmento)
+                nivel = (nivel or "").strip()
+                if nivel and nome_de_album(nivel):
+                    nomes.add(nivel)
         for (album,) in session.execute(
             select(MetadataEntry.valor)
             .where(MetadataEntry.chave == "album")

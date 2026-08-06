@@ -59,6 +59,33 @@ def test_sem_lexico_a_cascata_decide_como_sempre():
     assert decisao.origem == "pasta"
 
 
+def test_lexico_alcanca_o_lugar_um_nivel_acima_da_folha():
+    """"Pantanal Jul.2023/Dia 2": a folha nomeia a subpasta, mas quem diz o
+    que a sessão É mora um nível acima — e o léxico o conhece. Antes, só o
+    nome extraído da folha era consultado, e a sessão virava evento 'Dia
+    2'."""
+    dados = _sessao(
+        "Pantanal Jul.2023/Dia 2", tipos_de_nome=(("Pantanal", LUGAR),)
+    )
+    decisao = classificar_sessao(dados)
+    assert decisao.tipo == "viagem"
+    assert decisao.rotulo == "Pantanal"
+    assert decisao.origem == "lexico"
+
+
+def test_lexico_reconhece_ocasiao_em_nivel_intermediario():
+    """".../Quizomba 2019/Selecionadas": a ocasião num nível de cima nomeia
+    o evento — melhor que a folha genérica que só diz arrumação."""
+    dados = _sessao(
+        "Quizomba 2019/Selecionadas",
+        tipos_de_nome=(("Quizomba", "ocasiao"),),
+    )
+    decisao = classificar_sessao(dados)
+    assert decisao.tipo == "evento"
+    assert decisao.rotulo == "Quizomba"
+    assert decisao.origem == "lexico"
+
+
 def test_lugar_nao_transforma_sessao_longa_em_evento():
     """A regra 6 só vale para sessão curta; o léxico não muda esse limite.
 

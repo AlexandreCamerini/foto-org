@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from fotoorganizer.grouping.albuns import escolher_album
+from fotoorganizer.grouping.datas import separar_data
 from fotoorganizer.grouping.eventos import extrair_evento
 from fotoorganizer.geolocation import extrair_hierarquia_da_pasta
 from fotoorganizer.geolocation.folder_names import _normalizar
@@ -138,6 +139,26 @@ def _nomear_por_album(decisao: Decisao, dados: DadosSessao) -> Decisao:
     )
 
 
+def _opiniao_no_caminho(dados: DadosSessao) -> tuple[str, str] | None:
+    """A primeira palavra do caminho que o léxico conhece como lugar ou
+    ocasião, da folha à raiz — data removida, como em tudo que nomeia.
+
+    Pessoa e ruído não decidem tipo de sessão e seguem adiante. Com o
+    léxico desligado (o padrão), `tipo_do_nome` devolve None para tudo e
+    esta função nunca opina.
+    """
+    for pasta in dados.pastas:
+        for segmento in reversed([s for s in pasta.split("/") if s]):
+            nome, _data = separar_data(segmento)
+            nome = (nome or "").strip()
+            if not nome:
+                continue
+            tipo = dados.tipo_do_nome(nome)
+            if tipo in ("lugar", "ocasiao"):
+                return nome, tipo
+    return None
+
+
 def _cascata(
     dados: DadosSessao,
     config: ConfigClassificacao = ConfigClassificacao(),
@@ -235,6 +256,25 @@ def _cascata(
                 f"'{evento}' é um lugar, não um acontecimento",
                 rotulo_de_pasta=True,
             )
+        if dados.tipo_do_nome(evento) is None:
+            # O léxico não conhece o nome extraído, mas pode conhecer OUTRO
+            # nível do caminho: em "Pantanal/Dia 2" a folha nomeia a
+            # subpasta, e quem diz o que a sessão É mora um nível acima.
+            conhecido = _opiniao_no_caminho(dados)
+            if conhecido is not None:
+                nome_conhecido, tipo_conhecido = conhecido
+                if tipo_conhecido == "lugar":
+                    return Decisao(
+                        "viagem", nome_conhecido, "lexico",
+                        f"'{nome_conhecido}' no caminho é um lugar, não um "
+                        f"acontecimento",
+                        rotulo_de_pasta=True,
+                    )
+                return Decisao(
+                    "evento", nome_conhecido, "lexico",
+                    f"'{nome_conhecido}' no caminho é uma ocasião",
+                    rotulo_de_pasta=True,
+                )
         return Decisao(
             "evento", evento, "pasta",
             f"pasta '{evento}' nomeia uma sessão de "
