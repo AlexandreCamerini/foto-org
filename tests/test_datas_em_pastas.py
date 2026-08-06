@@ -115,3 +115,60 @@ def test_pacote_de_codigo_nao_nomeia_evento():
 
     # E o que é festa de verdade continua nomeando.
     assert nome_de_album("Bora Churrasco Rio")
+
+
+# -- data no nome do ARQUIVO --------------------------------------------------
+# WhatsApp, câmera de celular e captura de tela carimbam a data no nome.
+# Para foto sem EXIF, esse carimbo é uma testemunha muito melhor que o
+# mtime — que muda a cada cópia entre discos.
+
+def _nome(nome):
+    from fotoorganizer.grouping.datas import data_no_nome
+
+    return data_no_nome(nome)
+
+
+def test_nome_whatsapp_carrega_a_data():
+    d = _nome("IMG-20240315-WA0012.jpg")
+    assert d is not None
+    assert (d.data.year, d.data.month, d.data.day) == (2024, 3, 15)
+    assert "WhatsApp" in d.padrao
+    assert d.texto == "20240315"
+
+
+def test_nome_de_video_whatsapp_tambem():
+    d = _nome("VID-20230801-WA0003.mp4")
+    assert d is not None and d.data.year == 2023
+
+
+def test_nome_compacto_de_camera_de_celular():
+    # Samsung/Android: 20240315_123456.jpg; e IMG_20240315_123456.
+    for nome in ["20240315_123456.jpg", "IMG_20240315_123456.jpg",
+                 "PXL_20240315_123456789.jpg"]:
+        d = _nome(nome)
+        assert d is not None, nome
+        assert (d.data.year, d.data.month, d.data.day) == (2024, 3, 15), nome
+
+
+def test_nome_iso_de_captura_e_mensageiro():
+    for nome in ["Screenshot_2024-03-15-10-30-22.png",
+                 "Captura de Tela 2024-03-15 às 10.30.22.png",
+                 "photo_2024-03-15_10-30-00.jpg",
+                 "WhatsApp Image 2024-03-15 at 10.30.00.jpeg"]:
+        d = _nome(nome)
+        assert d is not None, nome
+        assert (d.data.year, d.data.month, d.data.day) == (2024, 3, 15), nome
+
+
+def test_nome_sem_data_ou_com_data_impossivel_nao_inventa():
+    assert _nome("IMG_1234.jpg") is None          # contador, não data
+    assert _nome("Serena 15 Anos.jpg") is None
+    assert _nome("096A9198.DNG") is None
+    assert _nome("IMG-20241315-WA0001.jpg") is None   # mês 13
+    assert _nome("IMG-20990315-WA0001.jpg") is None   # futuro
+
+
+def test_numero_de_serie_nao_vira_data():
+    """8 dígitos que por acaso parecem data válida mas estão colados em
+    mais dígitos (número de série, hash) não casam."""
+    assert _nome("P1020240315999.jpg") is None

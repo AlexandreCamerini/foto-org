@@ -42,6 +42,11 @@ SCORES_REFERENCIA: dict[str, float] = {
     # tela). O score real vem do detector, por sinal — este é só o piso
     # para quando nenhum override chegar.
     "arquivo": 0.70,
+    # Data carimbada no nome do arquivo por convenção (IMG-20240315-WA…,
+    # Screenshot_2024-03-15…, 20240315_123456). Mais forte que o mtime,
+    # que muda a cada cópia entre discos; mais fraca que o EXIF, porque a
+    # data do WhatsApp é a do RECEBIMENTO, não a do clique.
+    "nome_arquivo": 0.65,
     "fs": 0.40,            # data do filesystem (sem EXIF)
     "visao": 0.30,         # apenas análise visual
     "usuario": 1.00,       # correção manual prevalece sobre tudo

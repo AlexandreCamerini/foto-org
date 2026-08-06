@@ -35,7 +35,11 @@ from fotoorganizer.classification.templates import (
     render_destino,
 )
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
-from fotoorganizer.grouping.datas import data_no_caminho, rotulo_mes
+from fotoorganizer.grouping.datas import (
+    data_no_caminho,
+    data_no_nome,
+    rotulo_mes,
+)
 from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
@@ -649,10 +653,23 @@ class SuggestionEngine:
                 score_override=veredito.score,
             ))
 
+        # Cascata da data: EXIF manda; sem ele, a data carimbada no NOME
+        # (WhatsApp, câmera de celular, captura de tela) vale mais que o
+        # mtime — o nome nasce com o arquivo, o mtime muda a cada cópia.
+        # Uma evidência só de data por foto: é ela que vira o {ano} do
+        # destino, e duas testemunhas do mesmo campo disputariam a vaga.
+        data_nome = data_no_nome(media.nome) \
+            if media.data_capturada is None else None
         if media.data_capturada is not None:
             drafts.append(_Draft(
                 "data", "exif", media.data_capturada.isoformat(),
                 "data de captura lida do EXIF (DateTimeOriginal)",
+            ))
+        elif data_nome is not None:
+            drafts.append(_Draft(
+                "data", "nome_arquivo", data_nome.data.isoformat(),
+                f"sem EXIF; '{data_nome.texto}' no nome do arquivo "
+                f"({data_nome.padrao})",
             ))
         elif media.mtime is not None:
             drafts.append(_Draft(

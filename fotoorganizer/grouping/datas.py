@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 # Só "março" tem acento entre os nomes de mês, então as duas grafias
 # cobrem o caso sem depender de normalização (que muda o comprimento do
@@ -159,3 +160,66 @@ def rotulo_mes(ano: int, mes: int) -> str:
     """"jun.2026" — o formato que o dono já usa no próprio acervo
     ("Pantanal Jul.2023"), em minúsculas para não competir com o nome."""
     return f"{_ABREV_MES[mes - 1]}.{ano}"
+
+
+# -- data no nome do ARQUIVO --------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class DataDoNome:
+    """Data carimbada no nome do arquivo por convenção de app ou câmera.
+
+    Para foto sem EXIF é uma testemunha muito melhor que o mtime, que muda
+    a cada cópia entre discos: o WhatsApp, o Android e as capturas de tela
+    escrevem a data no nome no momento em que o arquivo nasce.
+    """
+
+    data: datetime
+    texto: str    # o trecho reconhecido, para a justificativa citar
+    padrao: str   # que convenção denunciou a data
+
+
+# `(?<!\d)`/`(?!\d)` isolam o número: um serial de 13 dígitos que contém
+# "20240315" no meio não é uma data — é um serial.
+_RE_NOME_WHATSAPP = re.compile(r"^(?:IMG|VID|AUD|PTT)-(\d{8})-WA", re.I)
+_RE_NOME_ISO = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
+_RE_NOME_COMPACTO = re.compile(
+    r"(?<!\d)((?:19|20)\d{2})(\d{2})(\d{2})(?!\d)"
+)
+
+
+def _data_valida(ano: int, mes: int, dia: int) -> datetime | None:
+    try:
+        quando = datetime(ano, mes, dia)
+    except ValueError:
+        return None
+    # Mesmo teto do EXIF: foto não nasce no futuro (metadata.base).
+    return quando if quando <= datetime.now() else None
+
+
+def data_no_nome(nome: str) -> DataDoNome | None:
+    """Data escrita no nome do arquivo, ou None quando não há (ou quando o
+    que parece data é impossível — na dúvida, não inventa)."""
+    base = nome.rsplit(".", 1)[0]
+
+    m = _RE_NOME_WHATSAPP.match(base)
+    if m:
+        bruto = m.group(1)
+        quando = _data_valida(int(bruto[:4]), int(bruto[4:6]), int(bruto[6:8]))
+        if quando is not None:
+            return DataDoNome(quando, bruto, "convenção do WhatsApp")
+        return None
+
+    m = _RE_NOME_ISO.search(base)
+    if m:
+        quando = _data_valida(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if quando is not None:
+            return DataDoNome(quando, m.group(0), "data escrita no nome")
+
+    m = _RE_NOME_COMPACTO.search(base)
+    if m:
+        quando = _data_valida(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if quando is not None:
+            return DataDoNome(
+                quando, m.group(0), "padrão de câmera de celular"
+            )
+    return None

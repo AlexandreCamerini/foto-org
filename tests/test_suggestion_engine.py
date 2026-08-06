@@ -203,6 +203,39 @@ def test_fotos_sem_data_de_captura_nao_viram_viagem(migrated_engine):
     assert stats["sugestoes"] == 5
 
 
+def test_data_no_nome_do_arquivo_vira_evidencia_media(migrated_engine):
+    """Critério de aceite da fase 2: foto sem EXIF mas com nome
+    IMG-20240315-WA0012.jpg ganha evidência de data com origem no nome do
+    arquivo e confiança média — em vez de cair no mtime (baixa), que muda
+    a cada cópia entre discos."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "IMG-20240315-WA0012.jpg", "/fotos/WhatsApp",
+            mtime=datetime(2026, 7, 29, 14, 0),  # chegou ao disco em 2026
+        ))
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    with factory() as session:
+        data = session.scalar(
+            select(Evidence).where(Evidence.campo == "data")
+        )
+        assert data.origem == "nome_arquivo"
+        assert data.nivel == ConfidenceLevel.MEDIA
+        assert data.valor.startswith("2024-03-15")
+        assert "20240315" in data.justificativa
+        # O ano do destino vem do nome, não do mtime: a foto recebida em
+        # 2024 não pode ser arquivada como 2026.
+        sugestao = session.scalar(select(Suggestion))
+        assert "2024" in sugestao.destino_sugerido
+        assert "2026" not in sugestao.destino_sugerido
+
+
 def test_vizinhanca_infere_pais_de_fotos_proximas(ambiente):
     factory, engine = ambiente
     engine.gerar()
