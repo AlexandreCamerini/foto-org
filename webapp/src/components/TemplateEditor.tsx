@@ -136,7 +136,7 @@ export default function TemplateEditor({ job }: { job: Job }) {
             {(preview.data?.exemplos ?? []).map((ex) => (
               <div key={ex.rotulo}>
                 <div className="text-texto-3">{ex.rotulo}</div>
-                <div className="truncate text-acento">{ex.destino || "—"}</div>
+                <div className="truncate font-medium">{ex.destino || "—"}</div>
               </div>
             ))}
           </div>

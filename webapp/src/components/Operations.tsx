@@ -285,7 +285,7 @@ export default function Operations({ job }: { job: Job }) {
                       <span className="min-w-0 flex-1 truncate text-texto-2">
                         {semPrefixo(item.origem, raizOrigem)}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-acento">
+                      <span className="min-w-0 flex-1 truncate font-medium">
                         → {semPrefixo(item.destino, raizDestino)}
                       </span>
                       <span
