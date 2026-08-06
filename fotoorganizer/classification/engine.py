@@ -570,7 +570,25 @@ class SuggestionEngine:
         if resultado is None:
             return
         sessao.categoria = resultado.categoria
-        if resultado.evento:
+        # Simétrico ao caminho de Eventos logo abaixo: sem isto, um "Viagens"
+        # do LLM só preenchia `categoria` (texto de fallback da pasta,
+        # `_categoria` mais abaixo) e nunca criava/juntava um Trip de
+        # verdade — a sessão nunca aparecia na aba Viagens. Medido em
+        # docs/AVALIACAO_UX.md, seção C.4.
+        if resultado.categoria == "Viagens":
+            sessao.tipo = "viagem"
+            # Nome de viagem do LLM manda; sem ele, o país já geocodificado
+            # da sessão (sempre calculado antes do advisor ser consultado);
+            # sem os dois, o período por extenso — nunca um rótulo vazio.
+            sessao.rotulo = (
+                resultado.evento or sessao.pais_dominante
+                or sessao.periodo_curto()
+            )
+            sessao.origem = sessao.origem_do_rotulo = "llm"
+            sessao.justificativa = (
+                f"LLM (apenas metadados): {resultado.justificativa}"
+            )
+        elif resultado.evento:
             sessao.tipo = "evento"
             sessao.rotulo = resultado.evento
             sessao.origem = sessao.origem_do_rotulo = "llm"

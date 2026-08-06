@@ -657,6 +657,108 @@ def test_advisor_llm_apoia_sessao_neutra(migrated_engine):
     assert sugestao.destino_sugerido == "Eventos/2025/Luau da firma"
 
 
+def test_advisor_llm_promove_sessao_neutra_a_viagem(migrated_engine):
+    """A mesma assimetria medida em docs/AVALIACAO_UX.md (seção C.4): o
+    advisor sabe dizer 'Viagens', mas só 'Eventos' fazia algo além de
+    preencher a categoria — a sessão nunca virava um Trip de verdade, nunca
+    aparecia na aba Viagens. Aqui o LLM diz 'Viagens' e um nome de viagem
+    (não de evento), e uma Trip precisa nascer, com a mesma origem 'llm'
+    que o caminho de Evento já tinha."""
+    from fotoorganizer.classification.advisor import AdvisorResult
+
+    class FakeAdvisorDeViagem:
+        def __init__(self):
+            self.clusters = []
+
+        @property
+        def local(self):
+            return False
+
+        def classificar(self, cluster):
+            self.clusters.append(cluster)
+            return AdvisorResult(
+                categoria="Viagens", evento="Fim de semana em Búzios",
+                justificativa="nomes de pasta e período de 3 dias fora de casa",
+            )
+
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 6, 6, 9, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"buzios_{i}.jpg", "/fotos/2025_06",
+                data=base + timedelta(hours=6 * i),
+            ))
+        session.commit()
+
+    advisor = FakeAdvisorDeViagem()
+    resultado = SuggestionEngine(factory, advisor=advisor).gerar()
+    assert resultado["viagens"] == 1
+    assert resultado["eventos"] == 0
+
+    with factory() as session:
+        trip = session.scalar(select(Trip))
+        assert trip is not None
+        assert trip.nome == "Fim de semana em Búzios"
+        assert trip.metodo == "llm"
+        media = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "buzios_0.jpg")
+        )
+        assert media.trip_id == trip.id
+
+    sugestao, evidencias = _sugestao_de(factory, "buzios_0.jpg")
+    viagem = next(e for e in evidencias if e.campo == "viagem")
+    assert viagem.origem == "llm"
+    assert "LLM (apenas metadados)" in viagem.justificativa
+    assert sugestao.destino_sugerido == "Viagens/2025 - Fim de semana em Búzios"
+
+
+def test_advisor_llm_viagem_sem_nome_usa_pais_dominante(migrated_engine):
+    """Sem nome de viagem do LLM (só a categoria), o rótulo cai para o país
+    já geocodificado da sessão — nunca para um rótulo vazio. A sessão fica
+    curta demais (poucas horas) para a cascata decidir viagem sozinha
+    (regra 5 exige dias), mas o país já foi geocodificado antes do
+    advisor ser consultado."""
+    from fotoorganizer.classification.advisor import AdvisorResult
+
+    class FakeAdvisorSoCategoria:
+        @property
+        def local(self):
+            return False
+
+        def classificar(self, cluster):
+            return AdvisorResult(
+                categoria="Viagens", evento=None,
+                justificativa="GPS num único país, sessão curta",
+            )
+
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 9, 1, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"escala_{i}.jpg", "/fotos/Diversos",
+                data=base + timedelta(hours=i), gps=(43.95, 4.81),
+            ))
+        session.commit()
+
+    advisor = FakeAdvisorSoCategoria()
+    SuggestionEngine(
+        factory, LocationResolver(FakeGeocoder()), advisor=advisor,
+    ).gerar()
+
+    with factory() as session:
+        trip = session.scalar(select(Trip))
+        assert trip is not None
+        assert trip.nome == "França"
+
+
 def test_advisor_nulo_nao_opina():
     from fotoorganizer.classification.advisor import ClusterInfo, NullAdvisor
 
