@@ -108,6 +108,37 @@ def test_corrompido_nao_interrompe_scan(scanner_env, tmp_path):
         assert boa.erro_leitura is None
 
 
+def test_extracao_que_excede_o_teto_vira_erro_e_o_scan_segue(
+    migrated_engine, tmp_path, monkeypatch
+):
+    """Segundo cinto além do teto do exiftool: se QUALQUER extração passar
+    do limite (filesystem de rede parado, lib presa), a foto vira erro de
+    leitura em vez de congelar a fila inteira em RODANDO."""
+    import fotoorganizer.scanner.scanner as mod
+    monkeypatch.setattr(mod, "_EXTRACAO_TIMEOUT_S", 0.2)
+
+    class ExtractorLento(PurePythonExtractor):
+        def extract(self, path):
+            if path.name == "presa.jpg":
+                time.sleep(1.5)  # termina (o pool precisa poder fechar),
+                # mas só bem depois do teto do teste
+            return super().extract(path)
+
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(factory, ExtractorLento(), ScannerSettings())
+    make_jpeg(tmp_path / "boa.jpg")
+    make_jpeg(tmp_path / "presa.jpg", seed=2)
+
+    scan, metrics = scanner.scan_source(tmp_path)
+
+    assert scan.status == ScanStatus.CONCLUIDO
+    assert metrics.erros == 1
+    assert metrics.indexados == 1
+    with factory() as session:
+        boa = session.scalar(select(MediaFile).where(MediaFile.nome == "boa.jpg"))
+        assert boa is not None and boa.erro_leitura is None
+
+
 def test_cancelamento_e_retomada(scanner_env, tmp_path):
     scanner, extractor, factory = scanner_env
     _make_library(tmp_path, n=20)

@@ -108,6 +108,32 @@ def test_quebra_de_linha_no_nome_vai_para_o_fallback(tmp_path):
     assert espiao.chamado_com == estranho
 
 
+def test_exiftool_travado_cai_no_fallback_dentro_do_teto(tmp_path, monkeypatch):
+    """A única espera potencialmente infinita do scan: um arquivo que faça o
+    exiftool emudecer congelava a fila inteira em RODANDO para sempre (o
+    readline do -stay_open não tem fim). Depois do teto, o processo é morto
+    e o fallback responde — o scan segue."""
+    import time
+
+    import fotoorganizer.metadata.exiftool as mod
+    monkeypatch.setattr(mod, "_TIMEOUT_S", 0.5)
+
+    travado = tmp_path / "exiftool-travado"
+    travado.write_text("#!/bin/bash\nwhile read linha; do :; done\n")
+    travado.chmod(0o755)
+
+    class FallbackEspiao:
+        def supported_extensions(self): return {".jpg"}
+        def extract(self, path): return MediaMetadata(make="do fallback")
+
+    foto = make_jpeg(tmp_path / "a.jpg")
+    extrator = ExifToolExtractor(binario=str(travado), fallback=FallbackEspiao())
+    inicio = time.monotonic()
+    meta = extrator.extract(foto)
+    assert meta.make == "do fallback"
+    assert time.monotonic() - inicio < 5  # teto + fallback, não a eternidade
+
+
 def test_binario_ausente_cai_no_fallback(tmp_path):
     """Sem exiftool o app continua catalogando — com menos sinal."""
     foto = make_jpeg(tmp_path / "a.jpg")

@@ -190,15 +190,25 @@ class ExifToolExtractor:
         proc.stdin.write("\n".join(argumentos) + "\n")
         proc.stdin.flush()
 
-        linhas: list[str] = []
-        while True:
-            linha = proc.stdout.readline()
-            if not linha:                      # processo morreu
-                self._proc = None
-                return None
-            if linha.strip() == _FIM:
-                break
-            linhas.append(linha)
+        # A única espera potencialmente infinita do scan inteiro: se o
+        # exiftool emudecer diante de um arquivo, este readline não tem fim
+        # e a fila congela em RODANDO. O vigia mata o processo no teto; o
+        # readline devolve EOF, o chamador recebe None e o fallback
+        # puro-Python responde pelo arquivo.
+        vigia = threading.Timer(_TIMEOUT_S, proc.kill)
+        vigia.start()
+        try:
+            linhas: list[str] = []
+            while True:
+                linha = proc.stdout.readline()
+                if not linha:                      # processo morreu
+                    self._proc = None
+                    return None
+                if linha.strip() == _FIM:
+                    break
+                linhas.append(linha)
+        finally:
+            vigia.cancel()
         bruto = "".join(linhas).strip()
         if not bruto:
             return None

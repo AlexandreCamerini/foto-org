@@ -50,6 +50,11 @@ log = logging.getLogger(__name__)
 SCANNER_VERSION = "1.0"
 _BATCH_SIZE = 200
 _MTIME_TOLERANCE = 1e-6  # segundos
+# Teto por arquivo para a extração inteira (EXIF + hash + thumbnail).
+# Folgado de propósito: um RAW de 25 MB num NAS frio leva segundos, não
+# minutos. O que passar disto é tratado como erro de leitura — a foto entra
+# no catálogo sem metadado e a varredura segue, em vez de congelar a fila.
+_EXTRACAO_TIMEOUT_S = 120.0
 
 
 @dataclass
@@ -183,7 +188,9 @@ class CatalogScanner:
             while len(pendentes) > max_restantes:
                 path, stat, futuro = pendentes.popleft()
                 try:
-                    meta, assinatura = futuro.result()
+                    meta, assinatura = futuro.result(
+                        timeout=_EXTRACAO_TIMEOUT_S
+                    )
                     self._gravar(session, source.id, path, stat, meta, assinatura)
                     metrics.indexados += 1
                     metrics.bytes_processados += stat.st_size
