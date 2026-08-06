@@ -111,6 +111,35 @@ describe("App", () => {
     expect(funil).toHaveTextContent("organizáveis");
     expect(container).toHaveTextContent("· 1 fontes");
   });
+
+  it("abrir uma viagem limpa a busca deixada de outra visita à Biblioteca", async () => {
+    // Bug relatado: com "IMG" ainda no campo de busca de uma visita
+    // anterior, abrir uma viagem de 4.812 fotos mostrava "nenhuma foto no
+    // filtro" — a busca antiga filtrava tudo, e a tela não dizia por quê.
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/viagens": [{
+        id: 1, nome: "Dubai, Thai & Viet", inicio: "2024-05-01T00:00:00",
+        fim: "2024-05-20T00:00:00", metodo: "temporal", fotos: 2405,
+        capa_id: null,
+      }],
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByText("Biblioteca"));
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    await usuario.type(busca, "IMG");
+
+    await usuario.click(screen.getByText("Viagens"));
+    await usuario.click(await screen.findByText("Dubai, Thai & Viet"));
+
+    expect(
+      await screen.findByPlaceholderText("Buscar por nome ou caminho…"),
+    ).toHaveValue("");
+  });
 });
 
 

@@ -233,6 +233,11 @@ export default function App() {
           {aba === "Panorama" && (
             <Panorama
               aoRecortar={(novo) => {
+                // Uma busca de texto deixada de outra visita à Biblioteca
+                // fazia um recorte de 4.812 fotos aparecer como "vazio" —
+                // a tela mostrava a mensagem genérica de biblioteca vazia
+                // em vez de dizer que era a busca antiga filtrando tudo.
+                setBusca("");
                 setRecorte(novo);
                 setAba("Biblioteca");
               }}
@@ -242,6 +247,7 @@ export default function App() {
             <Trips
               fonte={fonte ?? undefined}
               onAbrir={(filtro, nome) => {
+                setBusca("");
                 setRecorte({ ...filtro, nome });
                 setAba("Biblioteca");
               }}
