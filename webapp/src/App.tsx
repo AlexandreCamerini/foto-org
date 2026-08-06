@@ -12,6 +12,7 @@ import Operations from "./components/Operations";
 import Panorama from "./components/Panorama";
 import type { Recorte } from "./components/Panorama";
 import PhotoGrid from "./components/PhotoGrid";
+import RetomarScan from "./components/RetomarScan";
 import Review from "./components/Review";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
@@ -201,6 +202,11 @@ export default function App() {
           </button>
         ))}
       </header>
+
+      {/* Pendência de trabalho perdido, visível em qualquer aba: uma
+          varredura interrompida sem rastro foi como o dono perdeu um dia
+          inteiro de scan sem saber. */}
+      <RetomarScan job={job} />
 
       <div className="flex min-h-0 flex-1">
         {sidebarVisivel && ABAS_COM_FONTE.includes(aba) && (

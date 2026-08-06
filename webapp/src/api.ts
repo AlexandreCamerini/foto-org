@@ -323,6 +323,19 @@ export interface PreviewTemplate {
   exemplos: ExemploPreviewTemplate[];
 }
 
+/** Varredura que morreu com o processo — a mais recente de cada fonte.
+ *  O servidor carimba no boot; a retomada é um novo scan do mesmo caminho
+ *  (o incremental pula o que já foi indexado). */
+export interface ScanInterrompido {
+  source_id: number;
+  caminho: string;
+  apelido: string;
+  disponivel: boolean;
+  quando: string | null;
+  vistos: number;
+  indexados: number;
+}
+
 /** Os degraus entre "o app sabe que existe" e "dá para organizar". Uma
  *  leitura só, para as telas pararem de contar a mesma coisa de jeitos
  *  diferentes — ver `components/Funil.tsx`. */
@@ -450,6 +463,8 @@ export const api = {
   thumbUrl: (id: number) => `/api/midia/${id}/thumb`,
   previewUrl: (id: number) => `/api/midia/${id}/preview`,
   funil: () => json<FunilAcervo>("/api/funil"),
+  scansInterrompidos: () =>
+    json<ScanInterrompido[]>("/api/scan/interrompidos"),
   gruposDeSugestoes: (status: string, source_id?: number) =>
     json<GrupoSugestoes[]>(
       `/api/sugestoes/grupos?status=${status}` +

@@ -90,6 +90,7 @@ export const ROTAS_BASE: Record<string, unknown> = {
     },
   ],
   "/api/job": { status: "nenhum" },
+  "/api/scan/interrompidos": [],
   "/api/midia": { total: 0, offset: 0, itens: [] },
   "/api/midia/filtros": { extensoes: ["jpg"], anos: [2024] },
   "/api/viagens": [],
