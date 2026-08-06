@@ -69,6 +69,18 @@ async function abrirGrupo(usuario: ReturnType<typeof userEvent.setup>,
   await usuario.click(await screen.findByText(destino));
 }
 
+/** O único caminho até Aprovar/Rejeitar de cada foto é abrir o grupo — e o
+ *  cabeçalho era um `<header onClick>` sem tabIndex nem onKeyDown: só
+ *  mouse chegava lá. Tab até o cabeçalho e Enter precisa abrir o grupo. */
+async function abrirGrupoPeloTeclado(
+  usuario: ReturnType<typeof userEvent.setup>, destino: string,
+) {
+  const rotulo = await screen.findByText(destino);
+  const cabecalho = rotulo.closest('[role="button"]') as HTMLElement;
+  cabecalho.focus();
+  await usuario.keyboard("{Enter}");
+}
+
 const DETALHE_12 = {
   id: 12, nome: "DSC_0100.jpg",
   sugestao: {
@@ -97,6 +109,34 @@ describe("Review", () => {
     expect(screen.getByText("Aprovar 1")).toBeInTheDocument();
     // Dobrado por padrão: a decisão é o grupo, não as 3 linhas.
     expect(screen.queryByText("DSC_0100.jpg")).not.toBeInTheDocument();
+  });
+
+  it("abre e fecha o grupo pelo teclado, sem depender do mouse", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupoPeloTeclado(usuario, "Viagens/2024 - França");
+    expect(await screen.findByText("DSC_0100.jpg")).toBeInTheDocument();
+
+    await usuario.keyboard("{Enter}");
+    expect(screen.queryByText("DSC_0100.jpg")).not.toBeInTheDocument();
+  });
+
+  it("Enter no botão Aprovar do grupo não fecha o cabeçalho junto", async () => {
+    // O keydown do botão borbulha para o header — sem o filtro, aprovar
+    // pelo teclado também alternaria aberto/fechado por engano.
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupoPeloTeclado(usuario, "Viagens/2024 - França");
+    expect(await screen.findByText("DSC_0100.jpg")).toBeInTheDocument();
+
+    await usuario.tab(); // do cabeçalho para o botão "Aprovar 2"
+    expect(screen.getByRole("button", { name: "Aprovar 2" })).toHaveFocus();
+    await usuario.keyboard("{Enter}");
+    expect(screen.getByText("DSC_0100.jpg")).toBeInTheDocument(); // segue aberto
   });
 
   it("mostra o nome do arquivo, não o caminho que o truncava", async () => {

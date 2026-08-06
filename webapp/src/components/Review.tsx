@@ -116,6 +116,13 @@ export default function Review({
   const lista = grupos ?? [];
   const totalNaFila = lista.reduce((s, g) => s + g.total, 0);
 
+  const alternarGrupo = (destino: string) =>
+    setAbertos((s) => {
+      const novo = new Set(s);
+      novo.has(destino) ? novo.delete(destino) : novo.add(destino);
+      return novo;
+    });
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
@@ -162,14 +169,21 @@ export default function Review({
             return (
               <section key={destino}>
                 <header
-                  onClick={() =>
-                    setAbertos((s) => {
-                      const novo = new Set(s);
-                      novo.has(destino) ? novo.delete(destino) : novo.add(destino);
-                      return novo;
-                    })
-                  }
-                  className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 border-b border-borda bg-cartao px-3 py-2 hover:bg-realce"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={aberto}
+                  onClick={() => alternarGrupo(destino)}
+                  onKeyDown={(e) => {
+                    // O botão "Aprovar" aqui dentro já responde ao próprio
+                    // Enter — sem este filtro, o keydown dele borbulharia e
+                    // abriria/fecharia o grupo junto com a aprovação.
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      alternarGrupo(destino);
+                    }
+                  }}
+                  className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 border-b border-borda bg-cartao px-3 py-2 hover:bg-realce focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-acento"
                 >
                   <span className="w-3 text-texto-3">{aberto ? "▾" : "▸"}</span>
                   {/* Origem → destino na mesma linha: é a leitura "situação
