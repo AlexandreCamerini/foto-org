@@ -192,6 +192,36 @@ def test_scan_deixa_thumbnail_pronta_no_cache(migrated_engine, tmp_path):
     assert cache.get(media.hash_rapido) is not None  # gerada durante o scan
 
 
+def test_testemunha_nao_ganha_thumbnail(migrated_engine, tmp_path):
+    """SINAL nunca aparece na grade, na revisão nem no plano — a miniatura
+    dele no scan é custo puro. Medido no acervo real: 2 GB de cache e
+    leitura integral de RAW pelo SMB para imagens que ninguém veria. A
+    testemunha continua doando data/GPS/câmera (a extração roda), e o
+    phash das duplicatas ainda pode lê-la sob demanda; só a thumb sai."""
+    from fotoorganizer.thumbnails import ThumbnailCache
+
+    fotos = tmp_path / "fotos"
+    make_jpeg(fotos / "acervo.jpg", seed=1)
+    make_jpeg(
+        fotos / "Biblioteca.photoslibrary" / "resources" / "interna.jpg",
+        seed=2,
+    )
+    cache = ThumbnailCache(tmp_path / "cache")
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(
+        factory, PurePythonExtractor(), ScannerSettings(), thumb_cache=cache
+    )
+
+    scanner.scan_source(fotos)
+
+    with factory() as session:
+        arquivos = {m.nome: m for m in session.scalars(select(MediaFile))}
+    acervo, interna = arquivos["acervo.jpg"], arquivos["interna.jpg"]
+    assert cache.get(acervo.hash_rapido) is not None
+    assert cache.get(interna.hash_rapido) is None      # nada gerado
+    assert interna.data_capturada is not None          # o sinal continua doando
+
+
 def test_fonte_reutilizada_entre_scans(scanner_env, tmp_path):
     scanner, extractor, factory = scanner_env
     make_jpeg(tmp_path / "a.jpg")

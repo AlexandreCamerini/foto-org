@@ -287,11 +287,16 @@ class CatalogScanner:
         """Roda nas threads do pool: só leitura do arquivo, nada de DB."""
         meta = self._extractor.extract(path)
         assinatura = quick_signature(path)
-        if self._thumb_cache is not None:
+        if self._thumb_cache is not None and not dentro_de_pacote(path):
             # Aproveita que o arquivo já está sendo lido para deixar a
             # miniatura pronta: a grade e o phash das duplicatas deixam de
             # reabrir o original (em RAW, ~0.4s a menos por arquivo depois).
             # Best-effort: imagem indecodificável vira placeholder na UI.
+            #
+            # Testemunha (dentro de pacote) fica de fora: ela nunca aparece
+            # na grade, e a miniatura dela era quase só custo — 2 GB de
+            # cache e RAW inteiro lido pelo SMB no acervo real. O phash das
+            # duplicatas ainda a alcança sob demanda, lendo o original.
             self._thumb_cache.get_or_generate(assinatura, path)
         return meta, assinatura
 
