@@ -373,6 +373,13 @@ def cmd_web(args: argparse.Namespace) -> int:
 
     settings = _settings(args)
     settings.ensure_dirs()
+    # Log estruturado em arquivo, não só stderr: o servidor costuma morrer
+    # junto com o terminal que o abriu, e sem isto a morte não deixa rastro
+    # nenhum — dois scans do acervo real (93 mil e 225 mil arquivos)
+    # morreram sem uma linha de log que dissesse por quê.
+    from fotoorganizer.app.logsetup import setup_logging
+
+    setup_logging(settings.log_dir)
     upgrade_to_head(settings.db_path)
     factory = create_session_factory(create_db_engine(settings.db_path))
     app = create_app(settings, factory)
