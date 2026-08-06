@@ -138,6 +138,50 @@ def test_smart_previews_do_lightroom_entram_como_testemunha(tmp_path):
     assert dentro_de_pacote(tmp_path / "Viagens" / "real.jpg") is False
 
 
+def test_original_dentro_do_pacote_nao_e_rebaixado(tmp_path):
+    """"originals" (Apple Fotos) e "Masters" (Aperture/iPhoto) são a pasta
+    que o pacote existe para preservar — o arquivo ali É o original, não
+    um derivado. `dentro_de_pacote` tratava tudo dentro do pacote igual, e
+    um acervo real tinha 21.387 originais assim rebaixados a testemunha —
+    8.419 deles sem cópia em lugar nenhum, nunca vistos em Revisão, Viagens
+    ou Operações (docs/AVALIACAO_UX.md, seção C.2, medido em 2026-08-06).
+    """
+    original_apple = (
+        tmp_path / "Photos Library.photoslibrary" / "originals" / "0"
+        / "ABCDE.heic"
+    )
+    original_aperture = (
+        tmp_path / "Walter.aplibrary" / "Masters" / "2010" / "10" / "30"
+        / "IMG_0941.jpg"
+    )
+    derivado = (
+        tmp_path / "Photos Library.photoslibrary" / "resources"
+        / "derivatives" / "masters" / "x.jpeg"
+    )
+    assert dentro_de_pacote(original_apple) is False
+    assert dentro_de_pacote(original_aperture) is False
+    assert dentro_de_pacote(derivado) is True  # continua testemunha
+
+
+def test_pasta_chamada_originals_fora_de_pacote_continua_normal(tmp_path):
+    """Sem estar dentro de um pacote, "originals" é só um nome de pasta
+    comum — não deve virar caso especial."""
+    assert dentro_de_pacote(
+        tmp_path / "Viagens" / "originals" / "x.jpg"
+    ) is False
+
+
+def test_original_do_lrdata_continua_testemunha(tmp_path):
+    """`.lrdata` não tem a distinção original/derivado: é sempre preview
+    de pré-visualização, mesmo que uma subpasta por acaso se chame
+    'originals' ou 'masters' dentro dele."""
+    dentro = (
+        tmp_path / "Catalogo Smart Previews.lrdata" / "originals"
+        / "0" / "preview.dng"
+    )
+    assert dentro_de_pacote(dentro) is True
+
+
 def test_biblioteca_do_lightroom_nao_e_derivado(tmp_path):
     """`.lrlibrary` guarda ORIGINAL, ao contrário de `.lrdata`. Confundir os
     dois rebaixaria foto de verdade a testemunha."""

@@ -69,6 +69,24 @@ SUFIXOS_DE_PACOTE = (
     ".lrdata",
 )
 
+# Destes sufixos, o pacote separa o ORIGINAL (uma pasta própria) do
+# derivado (o resto): Apple Fotos guarda em "originals", Aperture/iPhoto em
+# "Masters". `.lrdata` fica de fora — por dentro é sempre pré-visualização,
+# nunca original, mesmo que uma subpasta por acaso se chame "originals".
+SUFIXOS_COM_ORIGINAL_PROPRIO = (
+    ".photoslibrary",
+    ".photolibrary",
+    ".migratedphotolibrary",
+    ".aplibrary",
+)
+
+# A pasta que guarda o original dentro dos sufixos acima. Medido num
+# acervo real: 21.387 arquivos aqui eram rebaixados a testemunha por
+# `dentro_de_pacote` tratar o pacote inteiro como derivado — 8.419 deles
+# sem cópia em lugar nenhum, nunca vistos em Revisão, Viagens ou Operações
+# (docs/AVALIACAO_UX.md, seção C.2, medido em 2026-08-06).
+_PASTAS_DE_ORIGINAL_NO_PACOTE = frozenset({"originals", "masters"})
+
 
 def e_pasta_de_codigo(nome: str) -> bool:
     """Pasta de trabalho de programação — nem acervo, nem testemunha."""
@@ -77,15 +95,25 @@ def e_pasta_de_codigo(nome: str) -> bool:
 
 
 def dentro_de_pacote(caminho: Path | str) -> bool:
-    """True quando o arquivo mora dentro de um pacote de biblioteca de foto.
+    """True quando o arquivo mora dentro de um pacote de biblioteca de foto
+    e não é ele próprio o original que o pacote guarda.
 
     Olha o caminho inteiro, não só o pai: os derivados ficam vários níveis
-    abaixo, em `.../resources/derivatives/masters/`.
+    abaixo, em `.../resources/derivatives/masters/`. Só o nível
+    imediatamente abaixo da raiz do pacote decide original × derivado — o
+    resto do caminho, além dele, não importa para essa decisão.
     """
     partes = Path(caminho).parts
-    return any(
-        parte.lower().endswith(SUFIXOS_DE_PACOTE) for parte in partes
-    )
+    for i, parte in enumerate(partes):
+        baixo = parte.lower()
+        if not baixo.endswith(SUFIXOS_DE_PACOTE):
+            continue
+        if baixo.endswith(SUFIXOS_COM_ORIGINAL_PROPRIO):
+            seguinte = partes[i + 1].lower() if i + 1 < len(partes) else ""
+            if seguinte in _PASTAS_DE_ORIGINAL_NO_PACOTE:
+                return False
+        return True
+    return False
 
 
 @dataclass(frozen=True)
