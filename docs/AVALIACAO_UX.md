@@ -50,38 +50,99 @@ pontos concretos e recorrentes.
 | 7 | Hover de "cancelar" diverge por tela: `StatusBar.tsx:98` usa `hover:text-erro`; `Sidebar.tsx:170,213` e `Review.tsx:267` usam `hover:bg-cartao` neutro | Consistência entre botões da mesma família semântica | Alinhar todos ao mesmo padrão (decidir se cancelar job é irreversível o bastante para justificar `erro`) | P |
 | 8 | Peso de texto sem token — `font-semibold` e `font-medium` convivem sem regra (vários arquivos) | `_tokens.md` previa peso único de ênfase (`--p-tit: 510`) | Adicionar `--font-weight-titulo` ao `@theme` e migrar, ou documentar a regra implícita | M |
 
-## C. Feedback do dono (2026-08-06) — requer diagnóstico, ainda não medido
+## C. Feedback do dono (2026-08-06) — Fase 5, diagnosticado com evidência
 
-Recebido durante a espera dos agentes acima. Nenhum destes itens tem
-evidência ainda (arquivo:linha ou consulta) — são hipóteses do dono, não
-conclusões, e por isso NÃO estão na tabela priorizada abaixo. Uma sessão
-seguinte tem um prompt pronto (Fase 5 de diagnóstico → Fase 6 de correção)
-para investigar cada um antes de qualquer código:
+Recebido durante a espera dos agentes da seção A/B. Os itens 2–4 abaixo
+foram medidos (consulta na cópia do catálogo real de 422.738 registros, ou
+citação de código) — deixaram de ser hipótese. Os itens 1, 5, 6 e 7
+continuam como design a decidir (dependem do que sai daqui).
 
-1. **Painel único de decisão.** Origem, dados informacionais, análise feita
-   e destino proposto não estão reunidos num lugar só hoje. Provável extensão
-   do Inspector; depende de A.5/A.6 acima primeiro (Inspector já tem bugs de
-   formatação a corrigir antes de ganhar mais conteúdo).
-2. **Fotos presentes e não exibidas.** Precisa cruzar `media_files` por
-   papel/arquivo_ausente/tipo_imagem contra o que a grade lista — hipóteses
-   a testar: SINAL confundido com grade, extensão não suportada, erro de
-   leitura silencioso.
-3. **Cobertura de formato.** Levantar extensões aceitas hoje
-   (`fotoorganizer/metadata/purepython.py`) contra a distribuição real do
-   catálogo e formatos comuns fora da lista.
-4. **Classificação de evento/viagem por LLM "desativada".** O
-   `ClassificationAdvisor`/`_consultar_advisor` existe em `engine.py`
-   (linha ~556) — não confirmado se/quando é chamado em relação à cascata
-   determinística. Diagnóstico antes de qualquer reativação (e continua
-   atrás do opt-in de privacidade).
-5. **Viagens só viagens; abrir aba Eventos irmã com o mesmo tratamento**
-   (cards, Lista×Mapa). Relaciona-se com B.6/A.7 acima (cards de evento sem
-   selo, estados vazios sem ação).
-6. **Redesenho da Revisão** — soma-se diretamente aos achados A.1, A.2, A.6,
-   B.1, B.3, B.4 acima; não é item novo, é confirmação do que os dois
-   agentes já mediram.
-7. **Rever propósito/rótulo da aba Operações** — hoje é plano→dry-run→cópia
-   verificada; avaliar se o nome comunica isso.
+### C.2 Fotos presentes e não exibidas — MEDIDO, causa raiz encontrada
+
+**21.378 arquivos são originais de verdade** dentro de
+`Photos Library.photoslibrary/originals/` (Apple Fotos) ou
+`.aplibrary/Masters/` (Aperture) — não miniaturas, não derivados — e estão
+catalogados com `papel='SINAL'`, porque `dentro_de_pacote()`
+([scanner/discovery.py:79-88](../fotoorganizer/scanner/discovery.py))
+decide pelo SUFIXO da pasta (`.photoslibrary`, `.aplibrary`) sem olhar o
+subcaminho: `originals/` (a testemunha real) e `resources/derivatives/` (a
+miniatura interna) recebem o mesmo veredito.
+
+De acordo com a política já documentada (D-024): SINAL não entra na
+Revisão, não é agrupado em Viagem/Evento (`engine.py`: `organizaveis = [m
+for m in midias if m.organizavel]`) e não entra em plano de cópia — mesmo
+sendo o arquivo original.
+
+**8.419 desses 21.378 SÓ EXISTEM dentro da biblioteca** (nenhuma cópia
+catalogada em `papel='ACERVO'` com o mesmo hash) — ou seja, são fotos
+reais, únicas, que o dono nunca vê em Revisão/Viagens/Operações. Os outros
+12.959 têm uma cópia equivalente já classificada como ACERVO em outro
+lugar (aí o rebaixamento é inofensivo — é exatamente para isso que D-024
+existe).
+
+Achado secundário, sem o mesmo peso: o filtro "Tudo" da Biblioteca
+(`alcance=tudo`) não filtra NADA —
+[repositories/media.py:143](../fotoorganizer/repositories/media.py) devolve
+`select(MediaFile)` sem `WHERE` — então a grade em "Tudo" já mostra os
+353.480 SINAL junto com o acervo. O sintoma do dono não é sobre essa tela;
+é sobre Revisão/Viagens/Operações, que filtram por `organizavel`.
+
+### C.3 Cobertura de formato — MEDIDO, um gap real e um não-gap
+
+- **Vídeo não é lido pelo scanner de arquivo, em hipótese nenhuma.**
+  `PILLOW_EXTENSIONS`/`HEIF_EXTENSIONS`/`RAW_EXTENSIONS`
+  ([metadata/purepython.py:43-45](../fotoorganizer/metadata/purepython.py))
+  não têm `.mov`/`.mp4`/`.mpg`/nenhuma extensão de vídeo — e é essa lista
+  que `scanner/discovery.py` usa para decidir o que sequer enumerar. Um
+  `.mov` numa pasta de fotos nunca vira linha no banco, nunca gera erro,
+  nunca aparece em lugar nenhum — é invisível por completo. Os
+  `.mov`/`.mp4`/`.mpg` que HOJE existem no catálogo (43+37+17 registros)
+  vieram do catálogo do Apple Fotos importado, não do scanner de pasta.
+- **Formato de imagem: sem gap medido.** A amostra de uma pasta real
+  (`/Users/acamerini/Pictures/2026`, 1.382 arquivos) não trouxe nenhuma
+  extensão de imagem fora da lista suportada — só `.jpg` e um `.DS_Store`
+  (corretamente ignorado). A lista de RAW já cobre Canon/Nikon/Sony/
+  Fujifilm/Olympus/Panasonic. Sem evidência de fotos perdidas por formato.
+
+### C.4 "Confusão entre eventos e viagens" — MEDIDO, é uma assimetria no código, não desligamento
+
+O advisor está ATIVO (`servicos_externos = true` no `config.toml` real) e
+É chamado — mas só quando a cascata determinística já decidiu "neutra"
+([engine.py:389-390](../fotoorganizer/classification/engine.py)). O
+prompt do sistema pede exatamente a distinção que o dono lembra
+([classification/advisor.py:89-96](../fotoorganizer/classification/advisor.py)):
+"nomes de pasta... indicam aniversário (Eventos); estadias de dias em
+outro país indicam Viagens."
+
+O bug está no que o motor FAZ com a resposta
+([engine.py:572-579](../fotoorganizer/classification/engine.py)): só
+`resultado.evento` (nome de evento) promove a sessão para `tipo="evento"`.
+**Não existe nenhum caminho de código em que `categoria="Viagens"` vindo
+do LLM crie ou junte a sessão a uma Viagem.** Quando a cascata fica neutra
+e o LLM responde "Viagens", o único efeito é `sessao.categoria = "Viagens"`
+— usado três passos depois só como texto de fallback da pasta
+`{categoria}` ([engine.py:826-830](../fotoorganizer/classification/engine.py)),
+NUNCA cria um `Trip`, nunca aparece na aba Viagens. A suíte de testes
+confirma a assimetria: `test_advisor_llm_apoia_sessao_neutra`
+([tests/test_suggestion_engine.py:612](../tests/test_suggestion_engine.py))
+só cobre o caminho Evento — não existe teste equivalente para Viagem,
+porque não há comportamento a testar.
+
+**Não é reativação — é completar o código que já existe** para tratar
+`categoria="Viagens"` com o mesmo peso de `evento`: criar/juntar a sessão
+a uma Viagem quando o LLM disser isso, com a mesma justificativa e nível
+de confiança que o caminho de Evento já tem.
+
+### Itens ainda de design (não medidos por natureza — são decisão, não fato)
+
+1. **Painel único de decisão** (origem + dados + análise + destino):
+   depende de A.5/A.6 (já corrigidos nesta rodada).
+5. **Viagens só viagens; aba Eventos irmã** — soma-se a C.4: sem o fix de
+   C.4, uma "viagem" mal-classificada continua aparecendo em lugar nenhum
+   mesmo depois de separar as abas.
+6. **Redesenho da Revisão** — já parcialmente endereçado (A.1, A.2, A.6,
+   B.1, B.3, B.4 desta rodada).
+7. **Rever rótulo/propósito da aba Operações** — sem medição própria ainda.
 
 ## D. Priorização consolidada (A + B, ordenada por valor/esforço)
 
