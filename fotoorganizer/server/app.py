@@ -1163,6 +1163,46 @@ def create_app(
             raise HTTPException(409, "já existe um trabalho em andamento")
         return jobs.estado()
 
+    @app.get("/api/scan/interrompidos")
+    def scans_interrompidos() -> list[dict]:
+        """Varreduras que morreram com o processo, uma por fonte.
+
+        Só a sessão MAIS RECENTE de cada fonte conta: se um scan posterior
+        concluiu, a interrupção antiga é história, não pendência. A
+        retomada é um novo POST /api/scan no mesmo caminho — o incremental
+        pula o que já foi indexado.
+        """
+        from fotoorganizer.models import ScanSession, ScanStatus
+
+        with session_factory() as session:
+            ultimas = select(func.max(ScanSession.id)).group_by(
+                ScanSession.source_id
+            )
+            linhas = session.execute(
+                select(ScanSession, Source)
+                .join(Source, Source.id == ScanSession.source_id)
+                .where(
+                    ScanSession.id.in_(ultimas),
+                    ScanSession.status == ScanStatus.INTERROMPIDO,
+                )
+                .order_by(ScanSession.finalizado_em.desc())
+            )
+            return [
+                {
+                    "source_id": fonte.id,
+                    "caminho": fonte.caminho,
+                    "apelido": fonte.apelido or Path(fonte.caminho).name,
+                    "disponivel": fonte.disponivel,
+                    "quando": (
+                        scan.finalizado_em.isoformat()
+                        if scan.finalizado_em else None
+                    ),
+                    "vistos": scan.arquivos_vistos,
+                    "indexados": scan.arquivos_indexados,
+                }
+                for scan, fonte in linhas
+            ]
+
     @app.get("/api/job")
     def job_estado() -> dict:
         return jobs.estado()
@@ -1206,6 +1246,19 @@ def create_app(
         app.mount(
             "/", StaticFiles(directory=_WEBAPP_DIST, html=True), name="webapp"
         )
+
+    @app.on_event("startup")
+    def _reconciliar_scans() -> None:
+        """RODANDO no banco com o servidor nascendo agora é sempre órfã:
+        vira INTERROMPIDO, e a UI oferece a retomada. Sem isto o catálogo
+        mente sobre trabalho em curso — para sempre."""
+        from fotoorganizer.scanner import reconciliar_orfas
+
+        try:
+            reconciliar_orfas(session_factory)
+        except Exception:
+            log.warning("não consegui reconciliar sessões de scan órfãs",
+                        exc_info=True)
 
     @app.on_event("startup")
     def _conferir_fontes() -> None:

@@ -25,6 +25,10 @@ class ScanStatus(enum.StrEnum):
     PAUSADO = "pausado"
     CONCLUIDO = "concluido"
     ERRO = "erro"
+    # O processo morreu com a varredura em curso (app fechado, queda). É o
+    # boot do servidor quem carimba isto: RODANDO no banco sem servidor de
+    # pé é sempre órfã — no acervo real, duas sessões ficaram dias assim.
+    INTERROMPIDO = "interrompido"
 
 
 class SourceType(enum.StrEnum):

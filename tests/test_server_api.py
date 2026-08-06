@@ -141,6 +141,49 @@ def test_scan_em_background_indexa_e_reporta(migrated_engine, tmp_path):
     ).status_code == 422
 
 
+def test_scan_orfao_e_reconciliado_no_boot_e_oferecido_para_retomada(
+    migrated_engine, tmp_path
+):
+    """Duas promessas num fluxo só: subir o servidor não deixa nenhum
+    RODANDO zumbi no banco, e a varredura que morreu é oferecida para
+    retomada — some da oferta quando um scan mais novo da fonte conclui."""
+    from fotoorganizer.models import ScanSession, ScanStatus, Source
+
+    fotos = tmp_path / "fotos"
+    make_jpeg(fotos / "a.jpg")
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho=str(fotos), apelido="fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(ScanSession(source_id=fonte.id,
+                                status=ScanStatus.RODANDO,
+                                arquivos_vistos=42))
+        session.commit()
+        fonte_id = fonte.id
+
+    # O lifespan (startup) é quem reconcilia — daí o context manager.
+    with TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    ) as client:
+        (oferta,) = client.get("/api/scan/interrompidos").json()
+        assert oferta["source_id"] == fonte_id
+        assert oferta["caminho"] == str(fotos)
+        assert oferta["vistos"] == 42
+
+        with factory() as session:
+            sessao = session.scalar(select(ScanSession))
+            assert sessao.status == ScanStatus.INTERROMPIDO
+
+        # Um scan novo da mesma fonte conclui: a oferta desaparece.
+        with factory() as session:
+            session.add(ScanSession(source_id=fonte_id,
+                                    status=ScanStatus.CONCLUIDO))
+            session.commit()
+        assert client.get("/api/scan/interrompidos").json() == []
+
+
 def test_pausar_continuar_sem_job_e_recusado_limpo(client):
     """Sem trabalho pausável — nem 500, nem silenciosamente escolhendo um
     job que não existe: 409 com detalhe."""

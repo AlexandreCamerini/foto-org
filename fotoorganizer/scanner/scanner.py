@@ -108,6 +108,31 @@ def _ts(epoch: float) -> datetime:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).replace(tzinfo=None)
 
 
+def reconciliar_orfas(session_factory: sessionmaker[Session]) -> int:
+    """Carimba como INTERROMPIDO toda sessão RODANDO sem processo por trás.
+
+    Só o fim feliz (ou o cancelamento) escreve status: quando o processo
+    morre no meio — app fechado, Mac desligado —, a sessão fica RODANDO
+    para sempre e o catálogo passa a mentir sobre trabalho em curso.
+    Chamar no boot do servidor é seguro por construção: nenhum job pode
+    estar rodando antes de o servidor existir.
+    """
+    with session_factory() as session:
+        orfas = list(session.scalars(
+            select(ScanSession).where(ScanSession.status == ScanStatus.RODANDO)
+        ))
+        if not orfas:
+            return 0
+        agora = datetime.now(timezone.utc).replace(tzinfo=None)
+        for scan in orfas:
+            scan.status = ScanStatus.INTERROMPIDO
+            scan.finalizado_em = agora
+        session.commit()
+    log.info("scan: %d sessão(ões) órfã(s) marcadas como interrompidas",
+             len(orfas))
+    return len(orfas)
+
+
 class CatalogScanner:
     def __init__(
         self,

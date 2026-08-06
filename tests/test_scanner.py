@@ -162,6 +162,37 @@ def test_cancelamento_e_retomada(scanner_env, tmp_path):
         assert len(session.scalars(select(MediaFile)).all()) == 20
 
 
+def test_sessao_rodando_orfa_vira_interrompida_no_boot(scanner_env):
+    """O processo morre (fechou o app, dormiu o Mac) e a sessão fica
+    RODANDO para sempre no banco — foi o que aconteceu duas vezes no
+    acervo real, com dias de diferença. No boot do servidor nenhum job
+    pode estar rodando ainda: RODANDO ali é sempre órfã."""
+    from fotoorganizer.models import ScanSession
+    from fotoorganizer.scanner import reconciliar_orfas
+
+    _, _, factory = scanner_env
+    with factory() as session:
+        fonte = Source(caminho="/tmp/fantasma")
+        session.add(fonte)
+        session.flush()
+        session.add(ScanSession(source_id=fonte.id,
+                                status=ScanStatus.RODANDO,
+                                arquivos_vistos=93408))
+        session.add(ScanSession(source_id=fonte.id,
+                                status=ScanStatus.CONCLUIDO))
+        session.commit()
+
+    assert reconciliar_orfas(factory) == 1
+
+    with factory() as session:
+        sessoes = session.scalars(select(ScanSession)).all()
+        por_status = {s.status for s in sessoes}
+        assert ScanStatus.RODANDO not in por_status
+        orfa = next(s for s in sessoes if s.arquivos_vistos == 93408)
+        assert orfa.status == ScanStatus.INTERROMPIDO
+        assert orfa.finalizado_em is not None
+
+
 def test_fonte_indisponivel(scanner_env, tmp_path):
     scanner, extractor, factory = scanner_env
     scan, metrics = scanner.scan_source(tmp_path / "volume_desconectado")

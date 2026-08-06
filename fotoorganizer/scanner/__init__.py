@@ -1,5 +1,10 @@
 from fotoorganizer.scanner.discovery import DiscoveryConfig, iter_media_files
-from fotoorganizer.scanner.scanner import CatalogScanner, ScanControl, ScanMetrics
+from fotoorganizer.scanner.scanner import (
+    CatalogScanner,
+    ScanControl,
+    ScanMetrics,
+    reconciliar_orfas,
+)
 
 __all__ = [
     "DiscoveryConfig",
@@ -7,4 +12,5 @@ __all__ = [
     "CatalogScanner",
     "ScanControl",
     "ScanMetrics",
+    "reconciliar_orfas",
 ]
