@@ -58,6 +58,19 @@ const DETALHE_HERDADO = {
 };
 
 describe("Inspector", () => {
+  it("formata a data capturada em pt-BR, não o ISO cru", async () => {
+    // O Loupe e a Revisão já formatam em pt-BR; o Inspetor mostrava
+    // "2026-07-31T21:28:05" lado a lado com "31/07/2026, 21:28" nas outras
+    // telas, para a mesma foto (achado A.5 da crítica de UX).
+    servirApi({
+      "/api/midia/7": { ...DETALHE_HERDADO, data_capturada: "2026-07-31T21:28:05" },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("31/07/2026, 21:28")).toBeInTheDocument();
+    expect(screen.queryByText(/2026-07-31T/)).not.toBeInTheDocument();
+  });
+
   it("mostra o lugar mesmo quando a foto não tem coordenada própria", async () => {
     servirApi({ "/api/midia/7": DETALHE_HERDADO });
     montar(<Inspector media={MEDIA} />);

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, type Media, type MediaDetalhe } from "../api";
+import { formatarData } from "../data";
 import { Confianca } from "./Confianca";
 
 /** Só o que NÃO é foto ganha rótulo: dizer "foto" em toda foto é ruído. */
@@ -34,7 +35,10 @@ export default function Inspector({ media }: { media: Media | null }) {
           />
           <div className="mb-2 break-all font-semibold">{media.nome}</div>
           <dl className="space-y-1 text-texto-2">
-            <Linha rotulo="Capturada" valor={detalhe?.data_capturada} />
+            <Linha
+              rotulo="Capturada"
+              valor={formatarData(detalhe?.data_capturada)}
+            />
             <Linha
               rotulo="Câmera"
               valor={[detalhe?.make, detalhe?.model].filter(Boolean).join(" ")}

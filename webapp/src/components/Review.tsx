@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Miniatura } from "./Miniatura";
 import { api, type Media, type Sugestao } from "../api";
+import { formatarData } from "../data";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
 
@@ -468,19 +469,6 @@ function PorQue({ mediaId }: { mediaId: number }) {
       ))}
     </ul>
   );
-}
-
-function formatarData(iso?: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 /** Caminho absoluto inteiro não cabe e não informa: o que localiza a foto é
