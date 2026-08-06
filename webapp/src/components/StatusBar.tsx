@@ -115,6 +115,20 @@ export default function StatusBar({
                 (estado.pulados ? `, ${estado.pulados} pulados` : "") +
                 (estado.erros ? `, ${estado.erros} erros` : "")}
           </span>
+          {/* Varrer cataloga registros; quem produz viagens, eventos e
+              destinos é a geração de sugestões — um job separado que nada
+              disparava. No acervo real, 86% do organizável ficou sem
+              sugestão porque o fluxo morria aqui, num scan mudo. */}
+          {estado.status === "concluido" &&
+            (estado.tipo === "scan" || estado.tipo === "import") && (
+              <button
+                onClick={() => void job.gerarSugestoes()}
+                title="Transforma o que a varredura achou em viagens, eventos e destinos para revisar"
+                className="shrink-0 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
+              >
+                Gerar sugestões
+              </button>
+            )}
           <button
             onClick={job.limpar}
             title="Dispensar"

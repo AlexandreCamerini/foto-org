@@ -107,6 +107,54 @@ describe("StatusBar", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("scan concluído oferece o próximo passo: gerar sugestões", async () => {
+    servirApi(ROTAS_BASE);
+    const gerarSugestoes = vi.fn();
+    const usuario = userEvent.setup();
+    montar(
+      <StatusBar
+        job={job({
+          estado: { status: "concluido", tipo: "scan", processados: 42 },
+          gerarSugestoes,
+        })}
+      />,
+    );
+    const botao = await screen.findByRole("button", {
+      name: "Gerar sugestões",
+    });
+    await usuario.click(botao);
+    expect(gerarSugestoes).toHaveBeenCalledTimes(1);
+  });
+
+  it("importação concluída também oferece gerar sugestões", async () => {
+    servirApi(ROTAS_BASE);
+    montar(
+      <StatusBar
+        job={job({
+          estado: { status: "concluido", tipo: "import", processados: 7 },
+        })}
+      />,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Gerar sugestões" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sugestões concluídas não oferecem gerar sugestões de novo", async () => {
+    servirApi(ROTAS_BASE);
+    montar(
+      <StatusBar
+        job={job({
+          estado: { status: "concluido", tipo: "sugestoes", processados: 9 },
+        })}
+      />,
+    );
+    await screen.findByText(/Concluído/);
+    expect(
+      screen.queryByRole("button", { name: "Gerar sugestões" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("a barra de progresso é proporcional a processados/vistos", async () => {
     servirApi(ROTAS_BASE);
     montar(
