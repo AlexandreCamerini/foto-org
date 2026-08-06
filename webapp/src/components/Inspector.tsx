@@ -265,7 +265,7 @@ function Linha({ rotulo, valor }: { rotulo: string; valor?: string | null }) {
   if (!valor) return null;
   return (
     <div className="flex gap-2">
-      <dt className="w-20 shrink-0 text-texto-3">{rotulo}</dt>
+      <dt className="w-20 shrink-0 text-texto-2">{rotulo}</dt>
       <dd className="break-all">{valor}</dd>
     </div>
   );

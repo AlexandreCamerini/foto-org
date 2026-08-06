@@ -266,7 +266,7 @@ export default function Operations({ job }: { job: Job }) {
                 </div>
               )}
 
-              <div className="flex gap-6 border-b border-borda px-3 py-1 text-texto-3">
+              <div className="flex gap-6 border-b border-borda px-3 py-1 text-texto-2">
                 <span className="min-w-0 flex-1 truncate">
                   de {raizOrigem || "/"}
                 </span>
@@ -312,7 +312,7 @@ export default function Operations({ job }: { job: Job }) {
                   </summary>
                   <div className="max-h-48 overflow-y-auto px-3 pb-2">
                     {auditoria.map((linha) => (
-                      <div key={linha.id} className="text-texto-3">
+                      <div key={linha.id} className="text-texto-2">
                         {new Date(linha.quando).toLocaleTimeString()} ·{" "}
                         {linha.acao} · {linha.resultado}
                       </div>

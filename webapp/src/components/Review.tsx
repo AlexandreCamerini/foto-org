@@ -306,7 +306,7 @@ export default function Review({
                                 truncate cortava a linha antes de o nome do
                                 arquivo aparecer — 63 linhas idênticas. */}
                             <div className="truncate font-medium">{s.nome}</div>
-                            <div className="truncate text-[11px] text-texto-3">
+                            <div className="truncate text-[11px] text-texto-2">
                               {[s.camera, formatarData(s.data_capturada)]
                                 .filter(Boolean)
                                 .join(" · ") || pastaCurta(s.pasta)}
@@ -335,7 +335,7 @@ export default function Review({
                                 onClick={() =>
                                   acao.mutate({ ids: [s.id], tipo: "aprovar" })
                                 }
-                                className="rounded-md border border-borda px-2 py-0.5 text-ok hover:bg-cartao"
+                                className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:border-ok hover:text-ok"
                               >
                                 Aprovar
                               </button>
@@ -343,7 +343,7 @@ export default function Review({
                                 onClick={() =>
                                   acao.mutate({ ids: [s.id], tipo: "rejeitar" })
                                 }
-                                className="rounded-md border border-borda px-2 py-0.5 text-erro hover:bg-cartao"
+                                className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:border-erro hover:text-erro"
                               >
                                 Rejeitar
                               </button>
