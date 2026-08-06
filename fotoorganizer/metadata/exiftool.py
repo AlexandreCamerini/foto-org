@@ -87,7 +87,12 @@ _TAGS_OPACAS = frozenset({
     "ThumbnailTIFF", "PhotoshopThumbnail", "DataDump", "Padding",
 })
 
-_FORMATOS_DE_DATA = ("%Y:%m:%d %H:%M:%S", "%Y:%m:%d %H:%M:%S%z")
+_FORMATOS_DE_DATA = (
+    "%Y:%m:%d %H:%M:%S", "%Y:%m:%d %H:%M:%S%z",
+    # XMP (Lightroom/Photoshop) escreve ISO-8601; IPTC IIM grava só a data.
+    "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S%z",
+    "%Y:%m:%d", "%Y-%m-%d",
+)
 
 
 def _data(valor: str | None) -> datetime | None:
@@ -255,10 +260,13 @@ class ExifToolExtractor:
             return None
 
         meta = MediaMetadata()
+        # IPTC:DateCreated é a data em que a foto foi FEITA (padrão IIM) e
+        # costuma sobreviver à edição que apaga o EXIF. Entra antes do
+        # ModifyDate, que fala da edição, não do clique.
         quando = _data(
             valor("EXIF:DateTimeOriginal", "EXIF:CreateDate",
                   "QuickTime:CreateDate", "XMP:DateCreated",
-                  "EXIF:ModifyDate")
+                  "IPTC:DateCreated", "EXIF:ModifyDate")
         )
         # Data impossível não entra na coluna; o valor bruto segue nos extras.
         meta.data_capturada = quando if data_plausivel(quando) else None

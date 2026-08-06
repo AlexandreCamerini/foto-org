@@ -214,6 +214,36 @@ def test_data_impossivel_nao_entra_na_coluna():
     }
 
 
+def test_sem_exif_a_data_vem_do_iptc():
+    """Scan de agência ou arquivo digitalizado: o EXIF se perdeu na edição,
+    mas o IPTC DateCreated (data em que a foto foi FEITA, pelo padrão IIM)
+    sobreviveu. 7.957 JPGs do acervo real estão sem data por caminhos
+    assim."""
+    meta = ExifToolExtractor._converter({
+        "IPTC:DateCreated": "2015:04:20",
+        "IPTC:City": "Paraty",
+    })
+    assert meta.data_capturada == datetime(2015, 4, 20)
+
+
+def test_sem_exif_a_data_vem_do_xmp_iso():
+    """Lightroom/Photoshop escrevem XMP em ISO-8601 — que o parser não
+    entendia: só o formato com dois-pontos do EXIF."""
+    meta = ExifToolExtractor._converter({
+        "XMP:DateCreated": "2018-11-02T09:15:30",
+    })
+    assert meta.data_capturada == datetime(2018, 11, 2, 9, 15, 30)
+
+
+def test_exif_continua_mandando_sobre_iptc_e_xmp():
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2020:01:05 08:00:00",
+        "IPTC:DateCreated": "2015:04:20",
+        "XMP:DateCreated": "2018-11-02T09:15:30",
+    })
+    assert meta.data_capturada == datetime(2020, 1, 5, 8, 0)
+
+
 def test_data_antiga_continua_valendo():
     """Não há piso: filme digitalizado com data manual pode ser de 1950, e um
     piso arbitrário transformaria acervo antigo em erro."""

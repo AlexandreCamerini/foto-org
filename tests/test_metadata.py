@@ -238,3 +238,46 @@ def test_xmp_traz_autor_e_palavras_chave(tmp_path):
     juntos = " ".join(f"{c}={v}" for c, v in achatado.items())
     assert "Alexandre Camerini" in juntos
     assert "viagem" in juntos and "franca" in juntos
+
+
+def test_sem_exif_a_data_vem_dos_extras_iptc_ou_xmp():
+    """Arquivo editado perde EXIF e conserva IPTC/XMP: a data de captura
+    não pode se perder junto. O IIM grava a data como '20150420' (8
+    dígitos) e o XMP como ISO-8601 — os dois caminhos valem."""
+    from fotoorganizer.metadata.purepython import _data_dos_extras
+    from datetime import datetime
+
+    assert _data_dos_extras([
+        ("iptc", "DateCreated", "20150420"),
+    ]) == datetime(2015, 4, 20)
+    assert _data_dos_extras([
+        ("xmp", "photoshop.DateCreated", "2018-11-02T09:15:30"),
+    ]) == datetime(2018, 11, 2, 9, 15, 30)
+    # Chave que não é de captura (data de modificação) não entra.
+    assert _data_dos_extras([
+        ("xmp", "xmp.ModifyDate", "2018-11-02T09:15:30"),
+    ]) is None
+    assert _data_dos_extras([("iptc", "City", "Paraty")]) is None
+
+
+def test_data_dos_extras_chega_a_data_capturada_num_jpeg_com_xmp(tmp_path):
+    """Ponta a ponta no extrator puro-Python: JPEG sem EXIF, com
+    photoshop:DateCreated no XMP → data_capturada preenchida."""
+    from datetime import datetime
+
+    from PIL import Image
+
+    xmp = (
+        '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+        '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        '<rdf:Description rdf:about="" '
+        'xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/">'
+        "<photoshop:DateCreated>2018-11-02T09:15:30</photoshop:DateCreated>"
+        "</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end='w'?>"
+    ).encode()
+    caminho = tmp_path / "sem_exif_com_xmp.jpg"
+    Image.new("RGB", (32, 24), (10, 20, 30)).save(caminho, "JPEG", xmp=xmp)
+
+    meta = PurePythonExtractor().extract(caminho)
+    assert meta.data_capturada == datetime(2018, 11, 2, 9, 15, 30)

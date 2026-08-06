@@ -201,6 +201,36 @@ def _parse_exif_date(raw: object) -> datetime | None:
         return None
 
 
+# Chaves de IPTC/XMP que falam do CLIQUE (não da edição): IIM grava
+# DateCreated como "20150420"; XMP como ISO-8601. "ModifyDate" e afins
+# ficam de fora de propósito — data de edição não é data de captura.
+_CHAVES_DATA_EXTRAS = ("datecreated", "datetimeoriginal", "createdate")
+
+
+def _data_dos_extras(extras: list) -> datetime | None:
+    """Data de captura sobrevivente em IPTC/XMP quando o EXIF se perdeu.
+
+    Arquivo editado (Lightroom, Photoshop, export de agência) costuma sair
+    sem EXIF e com IPTC/XMP intactos — 7.957 JPGs de acervo estavam sem
+    data por caminhos assim. `fromisoformat` cobre o ISO-8601 do XMP (com
+    ou sem fuso) e o "20150420" compacto do IIM de uma vez.
+    """
+    for _ns, chave, valor in extras:
+        # A chave XMP vem pontuada ("photoshop.DateCreated"); compara o fim.
+        if chave.lower().split(".")[-1] not in _CHAVES_DATA_EXTRAS:
+            continue
+        texto = str(valor).strip().replace("Z", "")
+        try:
+            return datetime.fromisoformat(texto).replace(tzinfo=None)
+        except ValueError:
+            pass
+        try:  # variante com dois-pontos do EXIF, vista em XMP antigo
+            return datetime.strptime(texto, "%Y:%m:%d %H:%M:%S")
+        except ValueError:
+            continue
+    return None
+
+
 def _dms_to_decimal(dms, ref: str) -> float:
     degrees, minutes, seconds = (float(part) for part in dms)
     decimal = degrees + minutes / 60 + seconds / 3600
@@ -235,7 +265,7 @@ class PurePythonExtractor:
                 _coletar_iptc(meta.extras, img)
                 exif = img.getexif()
                 if not exif:
-                    return meta
+                    return self._completar_data(meta)
 
                 make = exif.get(ExifTags.Base.Make)
                 model = exif.get(ExifTags.Base.Model)
@@ -283,6 +313,13 @@ class PurePythonExtractor:
                             meta.extras.append(("exif", "gps_invalido", str(gps_ifd)))
         except Exception as exc:  # arquivo corrompido/ilegível: catalogar mesmo assim
             meta.erro = f"{type(exc).__name__}: {exc}"
+        return self._completar_data(meta)
+
+    @staticmethod
+    def _completar_data(meta: MediaMetadata) -> MediaMetadata:
+        """EXIF manda; sem ele, a data de captura de IPTC/XMP vale."""
+        if meta.data_capturada is None:
+            meta.data_capturada = _plausivel(_data_dos_extras(meta.extras))
         return meta
 
     def _extract_raw(self, path: Path) -> MediaMetadata:
