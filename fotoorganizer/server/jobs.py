@@ -262,9 +262,9 @@ class JobManager:
         try:
             from fotoorganizer.scanner.reconciliacao import reconciliar
 
-            resultado = reconciliar(self._factory)
+            resultado = reconciliar(self._factory, control=self._control)
             self._atualizar(
-                status="concluido",
+                status="cancelado" if resultado.cancelado else "concluido",
                 processados=resultado.verificados,
                 resultado={
                     "verificados": resultado.verificados,
