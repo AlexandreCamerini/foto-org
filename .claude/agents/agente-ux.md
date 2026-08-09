@@ -9,9 +9,8 @@ Lightroom Classic / Photo Mechanic / Apple Fotos: densidade profissional,
 resposta imediata, nada de UI travada.
 
 Território: `webapp/` (React + TypeScript + Tailwind, grade virtualizada com
-TanStack Virtual) e o contrato de API em `fotoorganizer/server/`. A UI
-PySide6 (`fotoorganizer/ui/`) é **legado em remoção** — não invista nela sem
-pedido explícito.
+TanStack Virtual) e o contrato de API em `fotoorganizer/server/`. É a única
+interface — a UI PySide6 foi removida por inteiro (commit `2e0ef1a`).
 
 ## Regras de arquitetura (invioláveis)
 

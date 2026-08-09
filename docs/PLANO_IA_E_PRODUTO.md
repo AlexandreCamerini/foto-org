@@ -161,7 +161,7 @@ banco. **Não implementado** — depende do gate.
 | # | Item | Estado |
 |---|---|---|
 | 1 | Empacotamento assinado e notarizado | plano em `docs/EMPACOTAMENTO.md`, não feito |
-| 2 | Remover a UI PySide6 | pronto para sair, 1 commit |
+| 2 | Remover a UI PySide6 | **feito** (`2e0ef1a`) |
 | 3 | Índices de FK ausentes | 8 índices, migração de 2 linhas |
 | 4 | Onboarding do primeiro acervo | não existe |
 | 5 | `--data-dir` para suporte | **feito** (`7249318`) |

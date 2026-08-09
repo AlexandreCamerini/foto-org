@@ -40,8 +40,7 @@ Requisitos: macOS, Python 3.12+ (`brew install python@3.12` se faltar).
 
 ```bash
 scripts/instalar.sh          # uma vez (use --llm p/ incluir o advisor Claude)
-scripts/executar.sh web      # abre a UI web local (recomendada; 127.0.0.1)
-scripts/executar.sh          # UI nativa (PySide6, fallback)
+scripts/executar.sh web      # abre a UI web local (127.0.0.1) — única interface
 scripts/atualizar.sh         # traz código novo + re-sincroniza dependências
 ```
 
