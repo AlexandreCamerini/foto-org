@@ -447,6 +447,20 @@ class CatalogScanner:
         media.mtime = _ts(stat.st_mtime)
         media.hash_rapido = assinatura
         media.data_capturada = meta.data_capturada
+        # Sem fuso vindo do arquivo — o caso de todo scan hoje — os dois
+        # instantes são iguais, e a igualdade é como se diz "não sei o fuso
+        # desta foto". O `or` já deixa o lugar pronto para quando o extrator
+        # souber ler `OffsetTimeOriginal` (D-038).
+        #
+        # Sem hora de parede não há instante absoluto, mesmo que o extrator
+        # mande um: é a mesma guarda de `sources/importer.py`, e o ponto de
+        # extensão criado para a fase 11 precisa dela tanto quanto. Um `.mov`
+        # cujo `QuickTime:CreateDate` venha só em UTC não pode virar linha
+        # que sabe quando a foto foi tirada sem saber que horas eram.
+        media.data_capturada_utc = (
+            None if meta.data_capturada is None
+            else (meta.data_capturada_utc or meta.data_capturada)
+        )
         media.make = meta.make
         media.model = meta.model
         media.lente = meta.lente

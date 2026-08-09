@@ -36,7 +36,10 @@ fallback até paridade.
 - `scan_sessions` — fonte, início/fim, status (rodando/pausado/concluído),
   checkpoint, contadores (arquivos, erros, bytes), versão do scanner.
 - `media_files` — id, source_id, caminho, volume, pasta, nome, extensão,
-  tamanho, inode, ctime, mtime, data_capturada, tz_estimado, make, model,
+  tamanho, inode, ctime, mtime, data_capturada (hora de parede) +
+  data_capturada_utc (o mesmo instante, absoluto — o offset é a diferença
+  entre as duas, nunca uma coluna; iguais quer dizer "fuso desconhecido",
+  ver D-038), tz_estimado, make, model,
   lente, orientação, largura, altura, gps_lat, gps_lon, hash_rapido,
   hash_sha256 (nullable), status_revisão, erro_leitura, indexado_em.
 - `metadata_entries` — media_id, namespace, chave, valor (dados brutos

@@ -16,7 +16,7 @@ import logging
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -34,6 +34,11 @@ from fotoorganizer.thumbnails import ThumbnailCache
 log = logging.getLogger(__name__)
 
 _BATCH_SIZE = 200
+
+# Quanto duas horas de parede podem diferir e ainda ser a mesma captura. É
+# subsegundo, não folga de relógio: só absorve a diferença de precisão entre
+# quem grava com microssegundo e quem trunca no segundo.
+_TOLERANCIA_DE_PAREDE = timedelta(seconds=1)
 
 # Namespace de metadata_entries por tipo de fonte ("apple", "google").
 _NAMESPACES = {
@@ -216,6 +221,30 @@ class ExternalCatalogImporter:
         media.hash_rapido = assinatura
         # Arquivo manda; catálogo externo preenche as lacunas.
         media.data_capturada = meta.data_capturada or asset.data_capturada
+        # O par (local, absoluto) é escolhido JUNTO. Casar a hora de parede
+        # de uma origem com o instante absoluto de outra inventaria um
+        # offset que ninguém mediu — e offset aqui não é coluna, é a
+        # diferença entre as duas, então a mentira seria invisível.
+        #
+        # A exceção é o caso que vale ouro: arquivo e catálogo externo
+        # descrevem a MESMA captura (o Apple Fotos importou a data do próprio
+        # EXIF) e só o catálogo sabe o fuso. Aí o que se empresta é o OFFSET,
+        # aplicado à hora do arquivo — ver `_com_o_fuso_do_catalogo`.
+        if meta.data_capturada is not None:
+            media.data_capturada_utc = (
+                meta.data_capturada_utc
+                or _com_o_fuso_do_catalogo(meta.data_capturada, asset)
+                or meta.data_capturada
+            )
+        elif asset.data_capturada is None:
+            # Sem hora de parede não há instante absoluto: o espelho da regra
+            # das referências. Nenhum provider faz isso hoje, e o tipo
+            # `ExternalAsset` não impede que um futuro faça.
+            media.data_capturada_utc = None
+        else:
+            media.data_capturada_utc = (
+                asset.data_capturada_utc or asset.data_capturada
+            )
         media.make = meta.make
         media.model = meta.model
         media.lente = meta.lente
@@ -277,6 +306,14 @@ class ExternalCatalogImporter:
             asset.data_capturada
             if data_plausivel(asset.data_capturada) else None
         )
+        # Sem fuso conhecido, os dois instantes são iguais — nunca nulo com a
+        # hora local preenchida, senão "não sei o fuso" viraria "não sei
+        # quando". Data implausível sai das duas colunas junto: manter o
+        # registro de 2100 no absoluto seria trocar o lugar do problema.
+        media.data_capturada_utc = (
+            None if media.data_capturada is None
+            else (asset.data_capturada_utc or media.data_capturada)
+        )
         if asset.gps_lat is not None:
             media.gps_lat, media.gps_lon = asset.gps_lat, asset.gps_lon
         media.indexado_em = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -310,11 +347,46 @@ class ExternalCatalogImporter:
             entradas.append(("gps", f"{asset.gps_lat:.6f},{asset.gps_lon:.6f}"))
         if asset.data_capturada is not None:
             entradas.append(("data", asset.data_capturada.isoformat()))
+        # O fuso emprestado do catálogo externo responde "de onde veio?" como
+        # todo o resto: sem isto, o offset viraria a única informação do
+        # catálogo cuja origem some depois de gravada.
+        if asset.data_capturada_utc is not None:
+            entradas.append(("data_utc", asset.data_capturada_utc.isoformat()))
         for chave, valor in entradas:
             session.add(MetadataEntry(
                 media_id=media.id, namespace=namespace, chave=chave,
                 valor=valor,
             ))
+
+
+def _com_o_fuso_do_catalogo(
+    local: datetime, asset: ExternalAsset
+) -> datetime | None:
+    """O instante absoluto da foto quando o ARQUIVO diz a hora e o CATÁLOGO
+    EXTERNO diz o fuso. `None` quando os dois não estão falando da mesma
+    captura, e aí o arquivo manda sozinho.
+
+    O que se empresta é o OFFSET (`utc - local` do catálogo), aplicado à hora
+    do arquivo — não o instante absoluto do catálogo direto. Os dois medem o
+    mesmo momento com precisão diferente: o Apple Fotos guarda a data com
+    subsegundo e o EXIF trunca no segundo (`exiftool.py:_data()` faz
+    `split(".")[0]`). Copiar o absoluto do catálogo ao lado da hora do
+    arquivo deixaria a diferença entre as colunas em 1h59min59,184s em vez do
+    offset real de duas horas.
+
+    Pela mesma razão a concordância se mede com tolerância de um segundo, e
+    não por igualdade exata: 65% das 44.661 linhas do Apple Fotos no acervo
+    real têm microssegundo, e nenhuma das 120.448 de EXIF tem. Exigir
+    igualdade descartaria o fuso medido em quase toda foto — em silêncio,
+    porque sem coluna de offset não há onde a perda apareceria.
+    """
+    if asset.data_capturada is None or asset.data_capturada_utc is None:
+        return None
+    # Discordância maior que o subsegundo é outra data (editada no Fotos, por
+    # exemplo), não a mesma captura arredondada.
+    if abs(asset.data_capturada - local) >= _TOLERANCIA_DE_PAREDE:
+        return None
+    return local + (asset.data_capturada_utc - asset.data_capturada)
 
 
 def _ts(epoch: float) -> datetime:

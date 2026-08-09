@@ -60,6 +60,93 @@ def test_scan_indexa_tudo(scanner_env, tmp_path):
         assert jpg.make == "TestMake"
 
 
+def test_scan_iguala_os_dois_instantes_quando_o_exif_nao_traz_fuso(
+    scanner_env, tmp_path
+):
+    """O caso comum de todo scan hoje: o EXIF dá a hora de parede e não dá o
+    fuso. A hora local e o instante absoluto saem iguais — e a igualdade é
+    como este catálogo diz "não sei o fuso desta foto", nunca "foi tirada em
+    UTC". Nenhuma linha nova fica com hora local e absoluto nulo."""
+    scanner, _extractor, factory = scanner_env
+    _make_library(tmp_path, n=5)
+    make_jpeg(tmp_path / "img.jpg", data_exif="2019:07:14 14:00:00")
+
+    scanner.scan_source(tmp_path)
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile).where(
+            MediaFile.nome == "img.jpg"
+        )).one()
+        assert media.data_capturada is not None
+        assert media.data_capturada_utc == media.data_capturada
+        # O invariante, sobre a passada inteira: hora local preenchida e
+        # instante absoluto nulo diria "não sei quando", que é outra coisa —
+        # e bem pior — do que "não sei o fuso".
+        tortas = session.scalars(select(MediaFile).where(
+            MediaFile.data_capturada.is_not(None),
+            MediaFile.data_capturada_utc.is_(None),
+        )).all()
+        assert tortas == []
+
+
+def test_scan_respeita_o_fuso_quando_o_extrator_souber_ler(
+    migrated_engine, tmp_path
+):
+    """O gancho da fase 11: no dia em que o extrator ler `OffsetTimeOriginal`,
+    `MediaMetadata.data_capturada_utc` chega preenchido e a coluna absoluta
+    para de ser cópia da local. Nenhum extrator faz isso hoje — o teste guarda
+    o contrato para que a fase 11 não precise descobri-lo de novo."""
+    from datetime import datetime, timedelta
+
+    class ExtratorComFuso(PurePythonExtractor):
+        def extract(self, path):
+            meta = super().extract(path)
+            if meta.data_capturada is not None:
+                meta.data_capturada_utc = (
+                    meta.data_capturada - timedelta(hours=2)  # foto em Roma
+                )
+            return meta
+
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(factory, ExtratorComFuso(), ScannerSettings())
+    make_jpeg(tmp_path / "roma.jpg", data_exif="2019:07:14 14:00:00")
+
+    scanner.scan_source(tmp_path)
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).one()
+        assert media.data_capturada == datetime(2019, 7, 14, 14, 0)
+        assert media.data_capturada_utc == datetime(2019, 7, 14, 12, 0)
+
+
+def test_scan_nao_grava_instante_absoluto_sem_hora_de_parede(
+    migrated_engine, tmp_path
+):
+    """A mesma guarda que `sources/importer.py` já tem, no ponto de extensão
+    criado para a fase 11: um `.mov` cujo `QuickTime:CreateDate` venha só em
+    UTC não pode virar linha que sabe quando a foto foi tirada sem saber que
+    horas eram."""
+    from datetime import datetime
+
+    class ExtratorSoComUTC(PurePythonExtractor):
+        def extract(self, path):
+            meta = super().extract(path)
+            meta.data_capturada = None
+            meta.data_capturada_utc = datetime(2019, 7, 14, 12, 0)
+            return meta
+
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(factory, ExtratorSoComUTC(), ScannerSettings())
+    make_jpeg(tmp_path / "so_utc.jpg", data_exif="2019:07:14 14:00:00")
+
+    scanner.scan_source(tmp_path)
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).one()
+        assert media.data_capturada is None
+        assert media.data_capturada_utc is None
+
+
 def test_segunda_passada_nao_rele_inalterados(scanner_env, tmp_path):
     scanner, extractor, factory = scanner_env
     _make_library(tmp_path, n=5)

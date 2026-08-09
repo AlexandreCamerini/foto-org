@@ -37,7 +37,17 @@ def data_plausivel(quando: datetime | None) -> bool:
 
 @dataclass(slots=True)
 class MediaMetadata:
+    # Hora de parede da captura (naive) — o EXIF não tem fuso, e o pouco que
+    # tem (`OffsetTimeOriginal`, o `Z` do QuickTime) é descartado hoje por
+    # `exiftool.py:_data()` e `purepython.py`.
     data_capturada: datetime | None = None
+    # O mesmo instante, absoluto. Nenhum extrator preenche isto ainda: ler o
+    # fuso do arquivo exige `_data()` devolver o PAR em vez de só a hora
+    # local, o que muda todos os campos de data dos dois extratores de uma
+    # vez. Fica para a fase 11, que já vai mexer em fuso (D-038). Enquanto
+    # for `None`, quem grava iguala os dois — a forma de dizer "fuso
+    # desconhecido".
+    data_capturada_utc: datetime | None = None
     make: str | None = None
     model: str | None = None
     lente: str | None = None

@@ -857,3 +857,139 @@ fosse caminho de arquivo
   marcar nada numa passada duvidosa do que marcar tudo errado; o laço
   orçado que já existia para outro motivo (item B) acabou sendo também a
   rede de segurança certa para este caso.
+
+---
+
+## D-038 — Uma foto tem dois instantes, e o offset não é coluna
+
+- Fase: `docs/prompts/fase-12-alcance-e-tempo.md`, item C (modelo de tempo
+  de dois instantes), implementado em 2026-08-09.
+- Classe: A
+- Contexto: o item C foi escrito supondo que `MediaFile.data_capturada`
+  tinha semântica ambígua — ora hora local, ora absoluta. A leitura do
+  código antes de implementar mostrou que **não**: `metadata/exiftool.py`
+  (`_data()`), `metadata/purepython.py`, `sources/lightroom.py` e
+  `sources/apple_photos.py` já descartam qualquer fuso antes de devolver a
+  data, este último com o comentário explícito "coerente com EXIF no resto
+  do catálogo". A coluna sempre foi a **hora de parede**, por desenho — o
+  `localDateTime` do Immich, com outro nome. Não havia ambiguidade a
+  desfazer, e por isso nada em `classification/`, `grouping/`,
+  `repositories/media.py` ou no webapp mudou: todos eles ordenam e agrupam
+  pela hora que a pessoa viveu, que é a hora certa para isso.
+- O que faltava era o outro instante, o absoluto — e o achado que decidiu a
+  fatia: **o Apple Fotos já sabe o fuso de cada foto e o app jogava fora.**
+  A biblioteca guarda `ZTIMEZONEOFFSET`/`ZTIMEZONENAME` por asset; o
+  osxphotos entrega `photo.date` já com esse `tzinfo`
+  (`photos_datetime.py`, verificado na versão 0.76.1 instalada, com
+  conversão de ida e volta conferida para +02:00 e -03:00); e
+  `_asset_de()` fazia `replace(tzinfo=None)` na linha seguinte. Preservar
+  isso não é inferência nova (isso é a fase 11) — é parar de descartar dado
+  medido, no mesmo espírito de D-030 e D-034.
+- Escolhida: duas colunas, nenhuma de offset.
+  `data_capturada` (hora de parede, inalterada em significado e em uso) e
+  `data_capturada_utc` (o mesmo instante, absoluto). O offset é a
+  **diferença** entre as duas — guardá-lo numa terceira coluna criaria um
+  terceiro lugar para a mesma verdade, livre para discordar dos outros dois
+  em silêncio. É a parte do desenho do Immich que vale copiar
+  (`docs/referencia-immich/03-modelo-de-dados.md` §3).
+- **Igualdade quer dizer "fuso desconhecido", nunca "tirada em UTC".** Vale
+  para o backfill da migração `0014` e para toda linha nova: quem grava
+  iguala as duas quando não há fuso, e nunca deixa a absoluta nula com a
+  local preenchida — isso diria "não sei quando", que é outra coisa e bem
+  pior. Quem for derivar offset precisa ler zero como desconhecido.
+- **O par é escolhido junto, da mesma origem.** Em `sources/importer.py`,
+  casar a hora de parede do arquivo com o instante absoluto do catálogo
+  externo inventaria um offset que ninguém mediu — e, sem coluna de offset,
+  a mentira seria invisível. A única exceção é quando os dois **concordam
+  na hora de parede** (o Apple Fotos importou a data do próprio EXIF): aí é
+  a mesma captura descrita duas vezes, e o que se empresta é o **offset**,
+  aplicado à hora do arquivo (`_com_o_fuso_do_catalogo`).
+- **Concordância medida com tolerância de um segundo, não por igualdade**, e
+  isto foi achado por revisão antes do commit: a primeira versão exigia
+  igualdade exata de `datetime`, e as duas origens têm precisão diferente
+  por construção — 29.023 das 44.661 linhas do Apple Fotos (65%) têm
+  microssegundo, e nenhuma das 120.448 de EXIF tem, porque
+  `exiftool.py:_data()` faz `split(".")[0]`. A regra teria descartado o fuso
+  medido em quase toda foto com arquivo local, em silêncio. Emprestar o
+  offset em vez do instante absoluto vem do mesmo achado: copiar o absoluto
+  do catálogo ao lado da hora truncada do arquivo deixaria a diferença entre
+  as colunas em 1h59min59,184s no lugar de duas horas.
+- Limitação aceita: fuso real de +00:00 (Londres/Lisboa no inverno,
+  Islândia, Marrocos) fica indistinguível de desconhecido, porque nos dois
+  casos as colunas ficam iguais. É inerente ao padrão — o `keepLocalTime` do
+  Immich tem a mesma — e a saída não é uma terceira coluna: quando a fase 11
+  existir, o sinal de "fuso conhecido" passa a ser `tz_estimado IS NOT NULL`,
+  nunca a diferença entre as duas datas. Registrado também no comentário da
+  coluna e na nota de `docs/prompts/fase-11-timezone-estimado.md`.
+- A migração `0014` **não é atômica** e é escrita sabendo disso: sob pysqlite
+  o `ADD COLUMN` comita sozinho, então uma interrupção antes do backfill
+  deixaria a coluna criada com `alembic_version` em 0013, e a tentativa
+  seguinte morreria em "duplicate column name" — o app deixaria de abrir. O
+  que se garante é o suficiente: o `upgrade()` é **seguro para retomar** (só
+  adiciona a coluna se ela faltar, e o backfill só preenche o que está nulo,
+  para não passar por cima de um fuso real escrito por uma reimportação no
+  meio-tempo).
+- Sem índice em `data_capturada_utc`: ordenação, recorte por mês/ano e
+  agrupamento continuam na coluna local, que já tem o seu
+  (`ix_media_files_data_capturada`). Índice sem consumidor é custo de
+  escrita em 101 mil linhas em troca de nada. Quando aparecer uma consulta
+  que ordene pelo absoluto, ele entra com ela.
+- Ficou de fora, com motivo:
+  - **Fuso do EXIF/QuickTime** (`OffsetTimeOriginal`, o `Z` que
+    `exiftool.py:_data()` já detecta e descarta). Exige `_data()` devolver o
+    PAR em vez de só a hora local, o que mexe em todos os campos de data dos
+    dois extratores de uma vez. Cabe junto da fase 11, que já vai mexer em
+    fuso. `MediaMetadata.data_capturada_utc` já existe esperando, em `None`.
+  - **Lightroom**, medido e descartado: dos 54.086 `captureTime` do `.lrcat`
+    do dono, **10** trazem fuso colado (0,02%), e `AgHarvestedExifMetadata`
+    não tem coluna de offset nenhuma. Não há o que preservar ali.
+  - **Google Takeout**, e este é o caso interessante: o `photoTakenTime` do
+    sidecar *é* um epoch, ou seja, o instante absoluto exato. Mesmo assim
+    fica de fora, porque `google_takeout.py:_data()` produz a hora local com
+    `datetime.fromtimestamp(...)` **no fuso da máquina que importou** — não
+    no da foto. Preencher o absoluto verdadeiro ao lado dessa local faria a
+    diferença entre as duas afirmar o fuso do Mac do dono como se fosse o da
+    foto: uma foto de Roma passaria a alegar −03:00. Igualadas, elas dizem
+    "não sei o fuso", que é a verdade. O conserto certo é na coluna local, e
+    é território da fase 11.
+- **O offset do Apple Fotos é o fuso da FOTO, não o do Mac — medido, não
+  suposto.** A revisão levantou a hipótese séria de que
+  `ZADDITIONALASSETATTRIBUTES.ZTIMEZONEOFFSET` fosse o fuso do dispositivo
+  que importou, o que faria a fatia gravar medição do Mac do dono como se
+  fosse da captura. Investiguei o `Photos.sqlite` real (somente leitura,
+  `immutable=1`, 51.845 assets) e o padrão é o **oposto** do temido:
+  - Das 7.838 linhas em que o offset efetivo diverge do offset do próprio
+    arquivo (`ZEXTENDEDATTRIBUTES.ZTIMEZONEOFFSET`), **7.799 saem do fuso de
+    casa** (−03, Rio) enquanto o arquivo insistia nele — é o Apple
+    corrigindo relógio de câmera que viajou sem ser acertado, e bate com as
+    viagens conhecidas do acervo (D-029). Na direção temida — efetivo virar
+    −03 contra um EXIF que dizia outra coisa — há **11 linhas**.
+  - Offset praticamente nunca é inventado do nada: das 42.438 linhas com
+    offset efetivo, só **4** não têm offset nenhum no próprio arquivo.
+  - Quando o Apple não sabe, ele deixa `ZTIMEZONEOFFSET` NULL (9.407
+    linhas). O osxphotos então devolve +00:00, os dois instantes saem
+    iguais, e a linha diz honestamente "fuso desconhecido" — verificado
+    rodando `photos_datetime()` com `tzoffset=None`.
+  - `ZINFERREDTIMEZONEOFFSET` **não serve** como discriminador "isto foi
+    inferido": está preenchido em 31.656 das 34.596 linhas cujo offset bate
+    com o do arquivo (91%, justamente as medidas) e em só 33% das
+    divergentes. O Apple guarda a própria inferência ao lado, use-a ou não.
+- Por isso **não** restringi o empréstimo de offset a fotos com GPS, que era
+  a saída conservadora sugerida: ela descartaria 23.961 linhas (56% de todas
+  as que têm offset) das quais apenas 4 não têm respaldo no arquivo, para se
+  defender de uma falha medida em 11. E seria incoerente com o que o
+  importador já faz ao lado: `asset.gps_lat` do catálogo externo entra em
+  `gps_lat`, a coluna medida, não em `gps_lat_estimado` — dado que outro
+  catálogo afirma vai para a coluna de fato, com a origem registrada em
+  `metadata_entries`. O fuso segue a mesma regra, e ganhou a mesma
+  proveniência (chave `data_utc` no namespace da fonte). reimportar o Apple Fotos recupera o fuso das linhas que
+  entraram como **referência** (reescritas a cada import — as 44.661 do
+  acervo real, que roda em "Otimizar armazenamento"). Asset com arquivo
+  local é pulado por assinatura tamanho+mtime inalterada, e só volta a ganhar
+  o fuso quando o arquivo mudar. Reprocessar campos que não dependem de ler
+  o arquivo seria mudança no importador, e não vale sem um caso concreto.
+- Como reverter: a migração `0014` tem `downgrade()`; os pontos de escrita
+  são três (`scanner/scanner.py:_gravar`, `sources/importer.py:_gravar` e
+  `:_gravar_referencia`) e nenhum leitor depende da coluna ainda — é aditivo
+  de ponta a ponta.
+- Status: decidido

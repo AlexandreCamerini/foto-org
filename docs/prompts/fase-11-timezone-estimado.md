@@ -7,6 +7,38 @@ migrada desde `0001_schema_inicial.py:145`) e a janela de país (D-025) já
 está pronta. Ninguém escreve nem lê essa coluna hoje — terreno virgem,
 confirmado por `grep -rn "tz_estimado" fotoorganizer/ webapp/ tests/`.
 
+## Nota de 2026-08-09 — o modelo de tempo mudou embaixo desta fase
+
+A fase 12 (item C) entregou o par de instantes que esta fase pressupunha e
+não tinha. Leia **D-038** em `docs/DECISOES.md` antes de começar; em resumo:
+
+- `MediaFile.data_capturada` é a **hora de parede** (sempre foi, por
+  desenho: os extratores descartam fuso) e continua sendo o que ordena a
+  grade e agrupa evento e viagem. Não mexa nela.
+- `MediaFile.data_capturada_utc` é o **mesmo instante, absoluto**. O offset
+  é a diferença entre as duas e **nunca** vira coluna. As duas iguais quer
+  dizer "fuso desconhecido", nunca "tirada em UTC" — quem derivar offset
+  precisa ler zero assim.
+- **`tz_estimado IS NOT NULL` é o sinal de "fuso conhecido", não a diferença
+  entre as duas datas.** Fuso real de +00:00 (Londres e Lisboa no inverno,
+  Islândia, Marrocos) deixa as duas colunas iguais, exatamente como
+  "desconhecido" — limitação inerente ao padrão, que o Immich também tem, e
+  aceita de propósito. Quem for perguntar "esta foto tem fuso?" tem de
+  perguntar a `tz_estimado`, e é esta fase que faz esse campo passar a
+  existir.
+- Logo, `tz_estimado` já nasce enriquecendo um modelo coerente sozinho, em
+  vez de ser metadado decorativo. E escrever `tz_estimado` **não** autoriza
+  reescrever `data_capturada_utc`: fuso estimado por país é palpite, o
+  instante absoluto é medição, e este projeto não mistura os dois na mesma
+  coluna (o mesmo motivo de `gps_lat` vs `gps_lat_estimado`). Se a fase
+  quiser um absoluto derivado do fuso estimado, ele é coluna nova, com nome
+  que diga que é estimado.
+- Duas oportunidades ficaram explicitamente para cá, porque já mexem em
+  fuso: ler `OffsetTimeOriginal` (e o `Z` do QuickTime) nos extratores —
+  `MediaMetadata.data_capturada_utc` já existe esperando, em `None` — e
+  corrigir `sources/google_takeout.py:_data()`, que hoje monta a hora local
+  no fuso da máquina que importou, não no da foto.
+
 ## Formulação (reescrita — não é a antiga)
 
 A formulação antiga era GPS próprio + hora local (alcançaria só 4 dos 25

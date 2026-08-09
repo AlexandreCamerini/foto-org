@@ -34,6 +34,107 @@ def test_migracao_e_idempotente(db_path, migrated_engine):
     upgrade_to_head(db_path)  # segunda vez: no-op, não pode falhar
 
 
+def test_migracao_0014_iguala_os_dois_instantes_do_que_ja_estava_no_catalogo(
+    db_path,
+):
+    """O backfill do segundo instante (`data_capturada_utc`).
+
+    Sem fuso conhecido os dois instantes são iguais — é assim que se diz
+    "não sei o fuso desta foto". Quem não tem hora local nenhuma continua
+    sem instante absoluto: "não sei o fuso" não pode virar "não sei quando".
+    """
+    import sqlite3
+
+    from alembic import command
+
+    from fotoorganizer.database.migrate import alembic_config
+
+    cfg = alembic_config(db_path)
+    command.upgrade(cfg, "0013")  # o catálogo como estava ANTES desta fatia
+
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "insert into sources (id, caminho, ativo, disponivel, "
+        "padroes_ignorados, criado_em) values (1, '/Volumes/Fotos', 1, 1, "
+        "'[]', '2026-01-01 00:00:00')"
+    )
+    for id_, caminho, data in (
+        (1, "/Volumes/Fotos/a.jpg", "2019-07-14 09:00:00"),
+        (2, "/Volumes/Fotos/b.jpg", None),
+    ):
+        con.execute(
+            "insert into media_files (id, source_id, caminho, pasta, nome, "
+            "extensao, tamanho, status_revisao, indexado_em, data_capturada) "
+            "values (?, 1, ?, '/Volumes/Fotos', 'x.jpg', 'jpg', 10, "
+            "'NAO_REVISADO', '2026-01-01 00:00:00', ?)",
+            (id_, caminho, data),
+        )
+    con.commit()
+    con.close()
+
+    command.upgrade(cfg, "head")
+
+    con = sqlite3.connect(db_path)
+    linhas = dict(
+        con.execute("select id, data_capturada_utc from media_files")
+    )
+    con.close()
+    assert linhas[1] == "2019-07-14 09:00:00"  # igual à local
+    assert linhas[2] is None                   # sem data, sem instante
+
+
+def test_migracao_0014_retoma_depois_de_morrer_entre_a_coluna_e_o_backfill(
+    db_path,
+):
+    """O `ADD COLUMN` comita sozinho sob pysqlite: se o processo morrer antes
+    do backfill, a coluna existe e `alembic_version` ainda diz 0013. Sem
+    tolerar isso, toda abertura seguinte do app morreria em "duplicate column
+    name" — o catálogo inteiro travado por um acidente de timing.
+
+    Simula exatamente esse estado: coluna criada à mão sobre um banco em
+    0013, com uma linha por preencher e outra já preenchida com fuso de
+    verdade (uma reimportação que aconteceu no meio-tempo).
+    """
+    import sqlite3
+
+    from alembic import command
+
+    from fotoorganizer.database.migrate import alembic_config
+
+    cfg = alembic_config(db_path)
+    command.upgrade(cfg, "0013")
+
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "insert into sources (id, caminho, ativo, disponivel, "
+        "padroes_ignorados, criado_em) values (1, '/V', 1, 1, '[]', "
+        "'2026-01-01 00:00:00')"
+    )
+    con.execute("alter table media_files add column data_capturada_utc DATETIME")
+    for id_, utc in ((1, None), (2, "2019-07-14 12:00:00")):
+        con.execute(
+            "insert into media_files (id, source_id, caminho, pasta, nome, "
+            "extensao, tamanho, status_revisao, indexado_em, data_capturada, "
+            "data_capturada_utc) values (?, 1, ?, '/V', 'x.jpg', 'jpg', 10, "
+            "'NAO_REVISADO', '2026-01-01 00:00:00', '2019-07-14 14:00:00', ?)",
+            (id_, f"/V/{id_}.jpg", utc),
+        )
+    con.commit()
+    con.close()
+
+    command.upgrade(cfg, "head")  # a retomada: termina o serviço, não quebra
+
+    con = sqlite3.connect(db_path)
+    linhas = dict(
+        con.execute("select id, data_capturada_utc from media_files")
+    )
+    con.close()
+    # A que faltava foi preenchida...
+    assert linhas[1] == "2019-07-14 14:00:00"
+    # ...e o fuso real escrito no meio-tempo NÃO foi atropelado pelo backfill.
+    assert linhas[2] == "2019-07-14 12:00:00"
+
+
 def test_roundtrip_media_file(migrated_engine):
     from fotoorganizer.models import (
         ConfidenceLevel,
