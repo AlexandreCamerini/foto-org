@@ -292,3 +292,11 @@ iCloud (D-028) são a causa direta da queda dos itens 6, 7, 8 e 9. Qualquer
 fatia que reconecte volume por identidade (hash, caminho original, tamanho +
 data) multiplica o valor de quatro itens de uma vez. Fica registrado aqui como
 candidato, não como decisão — a forma exata é assunto de uma fase própria.
+
+**Proposta de forma, 2026-08-08:** `docs/prompts/fase-12-alcance-e-tempo.md`,
+derivada da leitura do Immich (`docs/referencia-immich/`). O achado que a
+encurta: `sources/disponibilidade.py:99-107` **já detecta** o volume que voltou
+noutro ponto de montagem e recusa-se, por desenho, a reescrever o caminho; a
+CLI manda o usuário reapontar a fonte (`cli.py:156-158`) e não existe comando
+que o faça. O item vira **S**, não a fase própria que esta linha antecipava.
+Continua candidato, não decisão.
