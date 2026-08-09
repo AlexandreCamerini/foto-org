@@ -7,10 +7,10 @@ Aftershoot/Narrative (survey de rajadas). Regra de ouro dos apps dessa
 classe: **a foto é a cor da interface** — o chrome é neutro, escuro e
 silencioso.
 
-Este documento é a spec das DUAS UIs (webapp React, principal; PySide6,
-fallback): mesmos tokens, mesmo layout de 3 painéis. No webapp os tokens
-vivem em `webapp/src/index.css` (@theme) e devem espelhar os valores
-abaixo.
+Este documento é a spec da UI (webapp React — única interface desde a
+remoção da UI PySide6 em `2e0ef1a`): tokens e layout de 3 painéis. Os
+tokens vivem em `webapp/src/index.css` (@theme) e devem espelhar os
+valores abaixo.
 
 ## Layout (3 painéis, estilo Lightroom)
 
@@ -39,7 +39,7 @@ abaixo.
 - Revisão de sugestões é uma lista com origem → destino e badges, não um
   formulário.
 
-## Tokens (webapp — fonte de verdade; ver nota sobre o QSS abaixo)
+## Tokens (webapp — fonte de verdade)
 
 Esta seção substitui a paleta anterior (fundo `#1E1E1E`, painéis sólidos em
 degradê de cinza, acento azul `#3B82F6`). Essa paleta era "site com tema
@@ -82,14 +82,6 @@ desatualizado, não o código. Os valores abaixo são os reais de
   no Tailwind do webapp — não `rounded-lg`, que é um raio maior e destoa
   do resto). Miniaturas com gap de 8px e seleção por contorno de 2px no
   acento (`outline-acento`), não por overlay nem sombra.
-
-### Nota sobre o QSS (PySide6, em remoção)
-
-`fotoorganizer/ui/theme.py` ainda usa a paleta antiga (cinza sólido, azul
-`#3B82F6`) porque pertence à UI legada que está a caminho de sair inteira,
-não em pedaços — ver CLAUDE.md. Não portar os tokens novos para lá: seria
-esforço em código que vai ser removido, e as duas UIs divergindo já é o
-estado esperado até a remoção.
 
 ## O mapa do lugar (webapp, `components/Mapa.tsx`)
 
