@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from datetime import timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -74,8 +75,15 @@ def _asset_de(photo) -> ExternalAsset | None:
     uuid = getattr(photo, "uuid", None)
     if caminho is None and not uuid:
         return None
-    data = photo.date
+    data, data_utc = photo.date, None
     if data is not None and data.tzinfo is not None:
+        # O Apple Fotos guarda o fuso POR FOTO (ZTIMEZONEOFFSET/
+        # ZTIMEZONENAME) e o osxphotos entrega `date` já nele. São dois
+        # fatos numa string só: o instante absoluto e a hora que o relógio
+        # marcava ali. Ficar só com a hora de parede jogava fora o único
+        # fuso medido que este acervo tem — e fuso descartado não volta por
+        # inferência (D-038).
+        data_utc = data.astimezone(timezone.utc).replace(tzinfo=None)
         # Hora local da foto, naive — coerente com EXIF no resto do catálogo.
         data = data.replace(tzinfo=None)
     lat, lon = (photo.location or (None, None))
@@ -83,6 +91,7 @@ def _asset_de(photo) -> ExternalAsset | None:
         caminho=caminho,
         referencia=uuid,
         data_capturada=data,
+        data_capturada_utc=data_utc,
         gps_lat=lat, gps_lon=lon,
         titulo=(photo.title or None),
         descricao=(photo.description or None),

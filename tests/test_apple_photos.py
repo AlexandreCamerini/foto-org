@@ -1,6 +1,6 @@
 """Provider do Apple Fotos: conversão de PhotoInfo e falhas limpas."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -44,6 +44,38 @@ def test_original_so_no_icloud_vira_referencia():
     assert asset.referencia == "ABC-123"
     assert asset.gps_lat == 25.2
     assert asset.data_capturada == datetime(2025, 11, 1, 9, 30)
+
+
+def test_fuso_por_foto_do_apple_vira_o_segundo_instante():
+    """O Apple Fotos é o único lugar deste acervo que sabe o fuso de cada
+    foto (ZTIMEZONEOFFSET/ZTIMEZONENAME, entregue pelo osxphotos já aplicado
+    a `photo.date`). A hora de parede continua sendo a que o relógio marcava
+    ali — o que muda é que o instante absoluto para de ser jogado fora."""
+    roma = timezone(timedelta(hours=2))
+    asset = _asset_de(_photo(
+        date=datetime(2019, 7, 14, 14, 0, tzinfo=roma)
+    ))
+    # Hora de parede: 14h em Roma, sem fuso (sem regressão).
+    assert asset.data_capturada == datetime(2019, 7, 14, 14, 0)
+    # Mesmo instante, absoluto: 12h UTC.
+    assert asset.data_capturada_utc == datetime(2019, 7, 14, 12, 0)
+
+
+def test_sem_fuso_o_provider_nao_inventa_instante_absoluto():
+    """`photo.date` naive (ou ausente) não vira UTC por decreto: o provider
+    devolve `None` e quem grava iguala os dois — igualdade é como se diz
+    "fuso desconhecido", e vem sempre de quem grava, nunca de um palpite
+    daqui.
+
+    Contrato defensivo: o osxphotos chama `photos_datetime(default=True)`, e
+    em Photos 5+ isso nunca devolve `None` nem naive (foto sem data vira
+    1970-01-01+00:00). `_asset_de` é duck-typed e testado com fakes; a
+    garantia vale para qualquer coisa que se pareça com um `PhotoInfo`."""
+    naive = _asset_de(_photo(date=datetime(2019, 7, 14, 14, 0)))
+    assert naive.data_capturada == datetime(2019, 7, 14, 14, 0)
+    assert naive.data_capturada_utc is None
+
+    assert _asset_de(_photo(date=None)).data_capturada_utc is None
 
 
 def test_sem_arquivo_e_sem_uuid_nao_da_para_referenciar():

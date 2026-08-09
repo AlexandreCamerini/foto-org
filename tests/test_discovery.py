@@ -7,8 +7,10 @@ from tests.fixtures import make_jpeg
 EXTS = frozenset({".jpg", ".jpeg", ".png"})
 
 
-def _paths(root, config):
-    return sorted(str(p.relative_to(root)) for p in iter_media_files(root, config))
+def _paths(root, config, erros=None):
+    return sorted(
+        str(p.relative_to(root)) for p in iter_media_files(root, config, erros)
+    )
 
 
 def test_encontra_recursivo_com_unicode(tmp_path):
@@ -47,6 +49,54 @@ def test_padroes_ignorados(tmp_path):
     make_jpeg(tmp_path / "Viagens" / "v.jpg")
     config = DiscoveryConfig(extensoes=EXTS, padroes_ignorados=("Exportadas",))
     assert _paths(tmp_path, config) == ["Viagens/v.jpg"]
+
+
+def test_diretorio_com_erro_e_reportado_em_erros(tmp_path, monkeypatch):
+    """`iter_media_files` engolia `OSError` por diretório só com um
+    `log.warning` — quem chama não tinha como saber se o walk viu a árvore
+    inteira ou parou de produzir itens no meio em silêncio. O parâmetro
+    `erros` (opcional, por referência — como `ScanControl`) é o sinal que
+    faltava; sem passá-lo, o comportamento de sempre continua igual."""
+    import fotoorganizer.scanner.discovery as discovery_mod
+
+    make_jpeg(tmp_path / "boa.jpg")
+    ilegivel = tmp_path / "ilegivel"
+    make_jpeg(ilegivel / "dentro.jpg")
+
+    original_scandir = discovery_mod.os.scandir
+
+    def scandir_com_falha(path):
+        if os.path.samefile(path, ilegivel):
+            raise OSError(13, "Permission denied")
+        return original_scandir(path)
+
+    monkeypatch.setattr(discovery_mod.os, "scandir", scandir_com_falha)
+
+    erros: list = []
+    found = _paths(tmp_path, DiscoveryConfig(extensoes=EXTS), erros=erros)
+
+    assert found == ["boa.jpg"]  # a árvore boa continua sendo varrida
+    assert [p.name for p in erros] == ["ilegivel"]
+
+
+def test_sem_passar_erros_comportamento_e_igual_a_antes(tmp_path, monkeypatch):
+    """Default `None` preserva o comportamento anterior — só loga."""
+    import fotoorganizer.scanner.discovery as discovery_mod
+
+    ilegivel = tmp_path / "ilegivel"
+    make_jpeg(ilegivel / "dentro.jpg")
+    make_jpeg(tmp_path / "boa.jpg")
+
+    original_scandir = discovery_mod.os.scandir
+
+    def scandir_com_falha(path):
+        if os.path.samefile(path, ilegivel):
+            raise OSError(13, "Permission denied")
+        return original_scandir(path)
+
+    monkeypatch.setattr(discovery_mod.os, "scandir", scandir_com_falha)
+
+    assert _paths(tmp_path, DiscoveryConfig(extensoes=EXTS)) == ["boa.jpg"]
 
 
 def test_extensao_desconhecida_ignorada(tmp_path):

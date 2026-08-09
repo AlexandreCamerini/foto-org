@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api";
@@ -20,12 +20,21 @@ interface Props {
 export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
   const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
+  // Custa um `diskutil` por fonte fora de alcance — não é `disponivel`
+  // simples, então fica numa consulta própria em vez de inchar `/api/fontes`
+  // (que a grade inteira lê a cada render).
+  const { data: reapontamentos } = useQuery({
+    queryKey: ["reapontamentos"],
+    queryFn: api.reapontamentos,
+  });
   const [modal, setModal] = useState<"pasta" | "takeout" | "apple" | null>(null);
+  const [reapontarId, setReapontarId] = useState<number | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const total = status?.total ?? 0;
   const rotulos = rotulosDeFontes(fontes ?? []);
+  const mudouDeLugar = new Set((reapontamentos ?? []).map((r) => r.source_id));
 
   const executar = (acao: Promise<void>) => {
     setErro(null);
@@ -48,23 +57,36 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
           <span className="ml-1.5 text-texto-2">({total})</span>
         </button>
         {(fontes ?? []).map((fonte) => (
-          <button
+          <div
             key={fonte.id}
-            onClick={() => onSelecionar(fonte.id)}
-            title={fonte.caminho}
-            className={`block w-full truncate px-3 py-2 text-left hover:bg-cartao ${
+            className={`flex items-center px-3 py-2 hover:bg-cartao ${
               fonteAtual === fonte.id ? "border-l-2 border-acento bg-cartao" : ""
             }`}
           >
-            <span className="mr-1">{ICONE_TIPO[fonte.tipo] ?? "📁"}</span>
-            {rotulos.get(fonte.id) ?? fonte.caminho}
-            <span className="ml-1.5 text-texto-2">({fonte.fotos})</span>
-            {!fonte.disponivel && (
-              <span className="ml-1 text-atencao" title="indisponível">
-                ⚠
-              </span>
+            <button
+              onClick={() => onSelecionar(fonte.id)}
+              title={fonte.caminho}
+              className="min-w-0 flex-1 truncate text-left"
+            >
+              <span className="mr-1">{ICONE_TIPO[fonte.tipo] ?? "📁"}</span>
+              {rotulos.get(fonte.id) ?? fonte.caminho}
+              <span className="ml-1.5 text-texto-2">({fonte.fotos})</span>
+              {!fonte.disponivel && !mudouDeLugar.has(fonte.id) && (
+                <span className="ml-1 text-atencao" title="indisponível">
+                  ⚠
+                </span>
+              )}
+            </button>
+            {mudouDeLugar.has(fonte.id) && (
+              <button
+                onClick={() => setReapontarId(fonte.id)}
+                title="O volume voltou noutro ponto de montagem — reapontar o catálogo sem recatalogar"
+                className="ml-1 shrink-0 rounded-md border border-atencao px-1.5 py-0.5 text-atencao hover:bg-cartao"
+              >
+                ↦ mudou de lugar
+              </button>
             )}
-          </button>
+          </div>
         ))}
       </nav>
 
@@ -140,7 +162,99 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
           onCancelar={() => setModal(null)}
         />
       )}
+
+      {reapontarId !== null && (
+        <ModalReapontar
+          sourceId={reapontarId}
+          onFechar={() => setReapontarId(null)}
+        />
+      )}
     </aside>
+  );
+}
+
+/** O volume desta fonte remontou noutro ponto — reescreve `Source.caminho`
+ * e todos os `MediaFile.caminho` dela no catálogo, sem tocar em arquivo
+ * nenhum. Prévia sempre visível antes de confirmar (invariante 2). */
+function ModalReapontar({
+  sourceId,
+  onFechar,
+}: {
+  sourceId: number;
+  onFechar: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { data: previa, isLoading, error } = useQuery({
+    queryKey: ["reapontar-preview", sourceId],
+    queryFn: () => api.previaReapontamento(sourceId),
+  });
+  const confirmar = useMutation({
+    mutationFn: () => api.reapontarFonte(sourceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["fontes"] });
+      void queryClient.invalidateQueries({ queryKey: ["reapontamentos"] });
+      onFechar();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-[32rem] rounded-md border border-borda bg-painel p-4">
+        <div className="mb-2 font-semibold">Fonte mudou de lugar</div>
+        {isLoading && <p className="text-texto-2">Verificando…</p>}
+        {error && (
+          <p className="text-erro">{(error as Error).message}</p>
+        )}
+        {previa && (
+          <>
+            <p className="mb-3 text-texto-2">
+              O volume de <strong>{previa.apelido}</strong> voltou montado
+              noutro ponto. Isto reescreve só o catálogo — nenhum arquivo é
+              tocado no disco.
+            </p>
+            <div className="mb-3 space-y-1 truncate font-mono text-texto-2">
+              <div className="truncate" title={previa.prefixo_antigo}>
+                − {previa.prefixo_antigo}
+              </div>
+              <div className="truncate text-texto" title={previa.prefixo_novo}>
+                + {previa.prefixo_novo}
+              </div>
+            </div>
+            <p className="mb-3 text-texto-2">
+              {previa.total_media_files.toLocaleString("pt-BR")} arquivo(s)
+              de mídia serão reapontados.
+            </p>
+            {previa.total_ignoradas_sem_prefixo > 0 && (
+              <p className="mb-3 text-texto-3">
+                {previa.total_ignoradas_sem_prefixo.toLocaleString("pt-BR")}{" "}
+                referência(s) desta fonte (ex.: catálogo externo) não têm
+                esse prefixo e ficam intocadas.
+              </p>
+            )}
+            {confirmar.isError && (
+              <p className="mb-3 text-erro">
+                {(confirmar.error as Error).message}
+              </p>
+            )}
+          </>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onFechar}
+            className="rounded-md px-3 py-1 text-texto-2 hover:bg-cartao"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => confirmar.mutate()}
+            disabled={!previa || confirmar.isPending}
+            className="rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90 disabled:opacity-50"
+          >
+            {confirmar.isPending ? "Reapontando…" : "Reapontar"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -72,6 +72,14 @@ from fotoorganizer.repositories.suggestions import SuggestionFilters, Suggestion
 from fotoorganizer.security.paths import CaminhoInvalido, caminho_relativo_seguro
 from fotoorganizer.server.jobs import JobManager
 from fotoorganizer.sources.disponibilidade import verificar
+from fotoorganizer.sources.reapontar import (
+    ColisaoDeCaminho,
+    ReapontamentoInaplicavel,
+    ValidacaoFalhou,
+    aplicar as aplicar_reapontamento,
+    prefixos_do_estado,
+    previa as previa_reapontamento,
+)
 from fotoorganizer.thumbnails import ThumbnailCache
 from fotoorganizer.thumbnails.generator import generate_thumbnail
 
@@ -102,6 +110,13 @@ class ScanBody(BaseModel):
 class ImportBody(BaseModel):
     tipo: str  # apple_photos | google_takeout
     caminho: str | None = None
+
+
+class ReapontarBody(BaseModel):
+    # Confirmação explícita no corpo, não só o método POST — a mesma
+    # disciplina de `--confirmar` no CLI (invariante 2: aprovação explícita
+    # antes de qualquer escrita em massa).
+    confirmar: bool = False
 
 
 class AcaoSugestoesBody(BaseModel):
@@ -246,6 +261,11 @@ def _motivo_indisponivel(m: MediaFile, fontes_off: frozenset[int]) -> str | None
         return "sem arquivo neste Mac"
     if m.source_id in fontes_off:
         return "volume ou pasta fora de alcance"
+    # A fonte responde, mas ESTE arquivo sumiu de onde estava — apagado,
+    # movido para fora, renomeado por outro programa. "Sumiu" e não "não
+    # encontrado": a segunda soaria como erro do app, e o app não errou.
+    if m.arquivo_offline:
+        return "arquivo sumiu do disco"
     return None
 
 
@@ -463,6 +483,80 @@ def create_app(
             }
             for source, contagem in media_repo.fontes_com_contagem()
         ]
+
+    @app.get("/api/fontes/reapontamentos")
+    def fontes_reapontamentos() -> list[dict]:
+        """Fontes cujo volume voltou noutro ponto de montagem — a
+        affordance da sidebar aparece só para elas. Custa um `diskutil` por
+        fonte fora de alcance (mesmo custo de `verificar()` no boot), então
+        o cliente chama isto sob demanda, não a cada render."""
+        estados = [e for e in verificar(session_factory) if e.mudou_de_lugar]
+        resultado = []
+        for estado in estados:
+            try:
+                prefixo_antigo, prefixo_novo = prefixos_do_estado(estado)
+            except ReapontamentoInaplicavel:
+                continue
+            resultado.append({
+                "source_id": estado.source_id,
+                "apelido": estado.apelido,
+                "prefixo_antigo": prefixo_antigo,
+                "prefixo_novo": prefixo_novo,
+            })
+        return resultado
+
+    def _estado_para_reapontar(source_id: int):
+        estado = next(
+            (e for e in verificar(session_factory) if e.source_id == source_id),
+            None,
+        )
+        if estado is None:
+            raise HTTPException(404, "fonte não encontrada")
+        try:
+            return prefixos_do_estado(estado)
+        except ReapontamentoInaplicavel as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/fontes/{source_id}/reapontar/preview")
+    def reapontar_preview(source_id: int) -> dict:
+        prefixo_antigo, prefixo_novo = _estado_para_reapontar(source_id)
+        try:
+            p = previa_reapontamento(
+                session_factory, source_id, prefixo_antigo, prefixo_novo
+            )
+        except ReapontamentoInaplicavel as exc:
+            raise HTTPException(409, str(exc))
+        return {
+            "source_id": p.source_id,
+            "apelido": p.apelido,
+            "prefixo_antigo": p.prefixo_antigo,
+            "prefixo_novo": p.prefixo_novo,
+            "total_media_files": p.total_media_files,
+            "total_ignoradas_sem_prefixo": p.total_ignoradas_sem_prefixo,
+            "amostra": [
+                {"antigo": antigo, "novo": novo} for antigo, novo in p.amostra
+            ],
+        }
+
+    @app.post("/api/fontes/{source_id}/reapontar")
+    def reapontar(source_id: int, body: ReapontarBody) -> dict:
+        if not body.confirmar:
+            raise HTTPException(422, 'confirme com {"confirmar": true}')
+        prefixo_antigo, prefixo_novo = _estado_para_reapontar(source_id)
+        try:
+            r = aplicar_reapontamento(
+                session_factory, source_id, prefixo_antigo, prefixo_novo
+            )
+        except (ValidacaoFalhou, ReapontamentoInaplicavel,
+                ColisaoDeCaminho) as exc:
+            raise HTTPException(409, str(exc))
+        return {
+            "source_id": r.source_id,
+            "prefixo_antigo": r.prefixo_antigo,
+            "prefixo_novo": r.prefixo_novo,
+            "linhas_media_files": r.linhas_media_files,
+            "audit_log_id": r.audit_log_id,
+        }
 
     # -- mídia ---------------------------------------------------------------
     @app.get("/api/midia")
@@ -1024,6 +1118,16 @@ def create_app(
     @app.post("/api/duplicatas/detectar")
     def detectar_duplicatas() -> dict:
         if not jobs.iniciar_duplicatas():
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.post("/api/reconciliacao")
+    def iniciar_reconciliacao() -> dict:
+        """Uma passada da varredura de alcance: confere se arquivos
+        catalogados ainda existem, sem reler metadado nem hash. Auto-
+        limitada — termina sozinha dentro do orçamento e retoma na próxima
+        chamada de onde parou (checkpoint em `application_settings`)."""
+        if not jobs.iniciar_reconciliacao():
             raise HTTPException(409, "já existe um trabalho em andamento")
         return jobs.estado()
 

@@ -24,7 +24,7 @@ from pathlib import Path
 from threading import Event
 from typing import Callable
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import ScannerSettings
@@ -42,6 +42,10 @@ from fotoorganizer.scanner.discovery import (
     dentro_de_pacote,
     iter_media_files,
 )
+from fotoorganizer.scanner.elegibilidade import (
+    PADRAO_SQL_REFERENCIA_EXTERNA,
+    eh_caminho_de_filesystem,
+)
 from fotoorganizer.security.hashing import quick_signature
 from fotoorganizer.thumbnails import ThumbnailCache
 
@@ -55,6 +59,10 @@ _MTIME_TOLERANCE = 1e-6  # segundos
 # minutos. O que passar disto é tratado como erro de leitura — a foto entra
 # no catálogo sem metadado e a varredura segue, em vez de congelar a fila.
 _EXTRACAO_TIMEOUT_S = 120.0
+# Lote do UPDATE que marca sumiço em massa. `IN (...)` com todos os
+# caminhos faltantes de uma vez estourou o limite de variáveis do SQLite em
+# `repositories/inventario.py` (ver docstring de lá) — mesmo remédio aqui.
+_LOTE_SUMICO = 500
 
 
 @dataclass
@@ -201,6 +209,18 @@ class CatalogScanner:
             padroes_ignorados=tuple(source.padroes_ignorados or ()),
         )
         conhecidos = self._carregar_conhecidos(session, source.id)
+        # Todo caminho para o qual `stat()` teve sucesso nesta passada — ou
+        # seja, que ainda existe, tenha sido relido ou pulado por
+        # inalterado. No fim, o que estava em `conhecidos` e não entrou
+        # aqui é o candidato a "sumiu" (ver marcação abaixo).
+        vistos: set[str] = set()
+        # Diretórios que o walk não conseguiu ler (permissão, NAS caiu no
+        # meio). `iter_media_files` engole `OSError` por diretório e só
+        # PARA de produzir itens dali pra frente — sem isto o scan fecha
+        # como CONCLUIDO achando que viu a árvore inteira, e marcaria
+        # arquivo de verdade como sumido só porque uma pasta ficou
+        # ilegível durante esta passada.
+        diretorios_com_erro: list[Path] = []
         desde_commit = 0
         cancelado = False
         # Janela limitada de extrações em voo: paraleliza sem acumular
@@ -235,7 +255,9 @@ class CatalogScanner:
             max_workers=max(self._settings.workers, 1),
             thread_name_prefix="scan-extract",
         ) as pool:
-            for path in iter_media_files(Path(source.caminho), config):
+            for path in iter_media_files(
+                Path(source.caminho), config, diretorios_com_erro
+            ):
                 control.aguardar_se_pausado()
                 if control.cancelado:
                     cancelado = True
@@ -249,7 +271,11 @@ class CatalogScanner:
                     log.error("scan: erro em %s: %s", path, exc)
                     continue
 
-                assinatura = conhecidos.get(str(path))
+                caminho_str = str(path)
+                # `stat()` teve sucesso: o arquivo está aqui agora, tenha ou
+                # não mudado desde o último scan.
+                vistos.add(caminho_str)
+                assinatura = conhecidos.get(caminho_str)
                 if (not reprocessar and assinatura is not None
                         and self._unchanged_sig(assinatura, stat)):
                     metrics.pulados += 1
@@ -266,6 +292,43 @@ class CatalogScanner:
 
         scan.status = ScanStatus.PAUSADO if cancelado else ScanStatus.CONCLUIDO
         scan.finalizado_em = datetime.now(timezone.utc).replace(tzinfo=None)
+        # Só quando a passada terminou de verdade: um scan cancelado no meio
+        # (ex.: NAS caiu) viu poucos ou nenhum caminho, e a diferença entre
+        # `conhecidos` e `vistos` explodiria — marcaria sumiço em massa por
+        # causa da interrupção, não por causa de arquivo apagado de verdade.
+        if cancelado:
+            pass
+        elif diretorios_com_erro:
+            # Mesmo raciocínio do cancelamento, por outra porta: se algum
+            # diretório não pôde ser lido, o walk não viu a árvore inteira
+            # — mesmo sem cancelamento explícito. Melhor não marcar nada
+            # nesta passada do que marcar tudo errado; o laço de
+            # reconciliação (que CONFIRMA cada linha com `Path.exists()`,
+            # orçado e sem pressa) fecha essa lacuna depois.
+            log.warning(
+                "scan %s: %d diretório(s) falharam durante a passada — "
+                "sumiço não verificado nesta passada, a reconciliação "
+                "cobre isso depois",
+                source.caminho, len(diretorios_com_erro),
+            )
+        else:
+            candidatos = {
+                c for c in (conhecidos.keys() - vistos)
+                if eh_caminho_de_filesystem(c)
+            }
+            # Segunda confirmação: um caminho pode ter saído do walk por
+            # outro motivo que não "foi apagado" — `padroes_ignorados` ou a
+            # lista de extensões mudou entre duas passadas. Só marca quem
+            # de fato não existe mais no disco (não substitui a guarda de
+            # diretório com erro acima: sob pasta sem permissão de leitura,
+            # `Path.exists()` TAMBÉM devolve False — stat exige +x em toda
+            # a cadeia — então esta checagem sozinha não pegaria aquele
+            # caso).
+            faltantes = {c for c in candidatos if not Path(c).exists()}
+            if faltantes:
+                self._marcar_sumidos(session, source.id, faltantes)
+                log.info("scan %s: %d arquivo(s) sumiram desde o último scan",
+                         source.caminho, len(faltantes))
         self._checkpoint(session, scan, metrics, checkpoint_path=None)
         log.info(
             "scan %s: %s — vistos=%d indexados=%d pulados=%d erros=%d (%.1f arq/s)",
@@ -287,6 +350,33 @@ class CatalogScanner:
         if checkpoint_path is not None:
             scan.checkpoint = {"ultimo_caminho": checkpoint_path}
         session.commit()
+
+    @staticmethod
+    def _marcar_sumidos(
+        session: Session, source_id: int, faltantes: set[str]
+    ) -> None:
+        """UPDATE em massa, em lotes: `IN (...)` com milhares de caminhos de
+        uma vez estoura o limite de variáveis do SQLite (mesmo remédio de
+        `repositories/inventario.py`).
+
+        `arquivo_ausente.is_(False)` e o `NOT LIKE` do caminho são
+        redundantes com o filtro que `_run` já aplicou a `faltantes` — e de
+        propósito: esta é a última linha de defesa contra marcar uma
+        referência de catálogo externo como sumida, mesmo que uma chamada
+        futura a este método esqueça de filtrar antes.
+        """
+        lote = list(faltantes)
+        for i in range(0, len(lote), _LOTE_SUMICO):
+            session.execute(
+                update(MediaFile)
+                .where(
+                    MediaFile.source_id == source_id,
+                    MediaFile.caminho.in_(lote[i:i + _LOTE_SUMICO]),
+                    MediaFile.arquivo_ausente.is_(False),
+                    MediaFile.caminho.not_like(PADRAO_SQL_REFERENCIA_EXTERNA),
+                )
+                .values(arquivo_offline=True)
+            )
 
     def _carregar_conhecidos(
         self, session: Session, source_id: int
@@ -357,6 +447,20 @@ class CatalogScanner:
         media.mtime = _ts(stat.st_mtime)
         media.hash_rapido = assinatura
         media.data_capturada = meta.data_capturada
+        # Sem fuso vindo do arquivo — o caso de todo scan hoje — os dois
+        # instantes são iguais, e a igualdade é como se diz "não sei o fuso
+        # desta foto". O `or` já deixa o lugar pronto para quando o extrator
+        # souber ler `OffsetTimeOriginal` (D-038).
+        #
+        # Sem hora de parede não há instante absoluto, mesmo que o extrator
+        # mande um: é a mesma guarda de `sources/importer.py`, e o ponto de
+        # extensão criado para a fase 11 precisa dela tanto quanto. Um `.mov`
+        # cujo `QuickTime:CreateDate` venha só em UTC não pode virar linha
+        # que sabe quando a foto foi tirada sem saber que horas eram.
+        media.data_capturada_utc = (
+            None if meta.data_capturada is None
+            else (meta.data_capturada_utc or meta.data_capturada)
+        )
         media.make = meta.make
         media.model = meta.model
         media.lente = meta.lente
@@ -366,6 +470,10 @@ class CatalogScanner:
         media.gps_lat = meta.gps_lat
         media.gps_lon = meta.gps_lon
         media.erro_leitura = meta.erro
+        # Chegar aqui prova que o arquivo existe agora — inclusive quando
+        # ele tinha sumido numa passada anterior (ou pela reconciliação) e
+        # voltou.
+        media.arquivo_offline = False
         media.indexado_em = datetime.now(timezone.utc).replace(tzinfo=None)
         if existing is None:
             session.add(media)

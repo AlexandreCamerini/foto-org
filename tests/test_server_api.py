@@ -1052,6 +1052,104 @@ def test_media_diz_por_que_nao_da_para_abrir(client, migrated_engine):
     assert outras and outras[0]["motivo_indisponivel"] is None
 
 
+def test_media_diz_arquivo_sumiu_quando_offline(client, migrated_engine):
+    """Terceiro motivo (fase 12, item B): a fonte responde, mas ESTE
+    arquivo sumiu de onde estava."""
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).first()
+        media.arquivo_offline = True
+        media_id = media.id
+        session.commit()
+
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["motivo_indisponivel"] == "arquivo sumiu do disco"
+
+
+def test_motivo_indisponivel_prioriza_ausente_depois_fonte_depois_offline(
+    migrated_engine,
+):
+    """Quando mais de uma condição poderia se aplicar, a ordem é sempre a
+    mesma: referência de nuvem primeiro, fonte inteira fora de alcance
+    depois, arquivo sumido por último — a mais específica e mais rara
+    (uma fonte que responde mas perdeu UM arquivo) não deve mascarar as
+    duas mais graves, e também não deve ser mascarada por engano."""
+    from fotoorganizer.server.app import _motivo_indisponivel
+    from fotoorganizer.models import MediaFile, MediaRole, Source
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte_off = Source(caminho="/Volumes/gaveta", disponivel=False)
+        fonte_on = Source(caminho="/Users/eu/Pictures", disponivel=True)
+        session.add_all([fonte_off, fonte_on])
+        session.flush()
+
+        # 1) referência de nuvem — vence mesmo se a fonte também estiver
+        #    fora de alcance.
+        ref = MediaFile(
+            source_id=fonte_off.id, caminho="apple://UUID-1", pasta="",
+            nome="a.heic", extensao="heic", tamanho=1,
+            arquivo_ausente=True, papel=MediaRole.SINAL,
+        )
+        # 2) fonte fora de alcance — vence sobre arquivo_offline (que não
+        #    devia nem ter sido setado nesta condição em uso real, mas o
+        #    teste prova que a ordem do código protege mesmo assim).
+        na_fonte_off = MediaFile(
+            source_id=fonte_off.id, caminho="/Volumes/gaveta/b.jpg",
+            pasta="/Volumes/gaveta", nome="b.jpg", extensao="jpg",
+            tamanho=1, arquivo_offline=True,
+        )
+        # 3) só o terceiro motivo se aplica.
+        so_offline = MediaFile(
+            source_id=fonte_on.id, caminho="/Users/eu/Pictures/c.jpg",
+            pasta="/Users/eu/Pictures", nome="c.jpg", extensao="jpg",
+            tamanho=1, arquivo_offline=True,
+        )
+        session.add_all([ref, na_fonte_off, so_offline])
+        session.commit()
+
+        fontes_off = frozenset({fonte_off.id})
+        assert _motivo_indisponivel(ref, fontes_off) == "sem arquivo neste Mac"
+        assert (_motivo_indisponivel(na_fonte_off, fontes_off)
+                == "volume ou pasta fora de alcance")
+        assert (_motivo_indisponivel(so_offline, fontes_off)
+                == "arquivo sumiu do disco")
+
+
+def test_reconciliacao_em_background_marca_offline_e_reporta(
+    migrated_engine, tmp_path
+):
+    import time
+
+    fotos = tmp_path / "fotos"
+    alvo = make_jpeg(fotos / "some.jpg", seed=1)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    CatalogScanner(factory, PurePythonExtractor(), ScannerSettings()) \
+        .scan_source(fotos)
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+    alvo.unlink()
+    assert client.post("/api/reconciliacao").status_code == 200
+    for _ in range(100):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+    assert estado["resultado"]["marcados_offline"] == 1
+
+    from fotoorganizer.models import MediaFile
+
+    with factory() as session:
+        media = session.scalars(select(MediaFile)).first()
+        assert media.arquivo_offline is True
+
+
 def test_biblioteca_mostra_o_que_o_app_conhece(client, migrated_engine):
     """O dono mandou o app ler a biblioteca do Apple Fotos, ele leu 44.661
     fotos e a Biblioteca respondeu (0) — elas não têm arquivo local e ficavam

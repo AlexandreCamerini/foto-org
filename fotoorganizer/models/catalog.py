@@ -121,6 +121,12 @@ class MediaFile(Base):
         Index("ix_media_files_data_capturada", "data_capturada"),
         Index("ix_media_files_mtime_tamanho", "mtime", "tamanho"),
         Index("ix_media_files_papel", "papel"),
+        # Mesma razão de `ix_media_files_papel`: entra em `organizavel`, que
+        # é filtrado em SQL sobre o acervo inteiro (alcance=organizaveis/
+        # faltantes na Biblioteca). Coluna booleana é barata de indexar e a
+        # consulta de "faltantes" — a tela que este campo existe para servir
+        # — filtra exatamente por ela.
+        Index("ix_media_files_arquivo_offline", "arquivo_offline"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -130,6 +136,20 @@ class MediaFile(Base):
     # arquivo no disco. Ela doa horário e GPS para a correlação e fica fora
     # de grade, miniatura, duplicata e plano de cópia — não há o que copiar.
     arquivo_ausente: Mapped[bool] = mapped_column(default=False)
+    # O terceiro estado de alcance (o outro é `Source.disponivel`, abaixo):
+    # a FONTE está montada e este arquivo específico sumiu de onde estava —
+    # apagado, movido para fora, renomeado por outro programa. Diferente de
+    # `arquivo_ausente` (nunca teve arquivo local, é referência de nuvem) e
+    # de `Source.disponivel` (a fonte INTEIRA fora de alcance): aqui é UM
+    # registro, e a fonte continua respondendo. Sem isto, um arquivo apagado
+    # ficava indistinguível de "sempre esteve lá" — ninguém verificava de
+    # novo. Mantido por dois mecanismos complementares: o scan normal marca
+    # quem não apareceu no walk desta passada (`scanner/scanner.py`), e o
+    # laço de reconciliação confere periodicamente sem esperar um scan
+    # manual (`scanner/reconciliacao.py`). Nunca apaga o registro nem seus
+    # metadados (invariante 8) — volta a `False` sozinho se o arquivo
+    # reaparecer.
+    arquivo_offline: Mapped[bool] = mapped_column(default=False)
     # Acervo ou testemunha. Ortogonal a `arquivo_ausente`: uma miniatura do
     # pacote do Apple Fotos existe no disco e mesmo assim não é acervo.
     papel: Mapped[MediaRole] = mapped_column(
@@ -143,7 +163,42 @@ class MediaFile(Base):
     inode: Mapped[int | None]
     ctime: Mapped[datetime | None]
     mtime: Mapped[datetime | None]
+    # A hora de PAREDE da captura: a que o relógio marcava no lugar onde a
+    # foto foi tirada, sem fuso. É esta que ordena a grade e agrupa evento e
+    # viagem — 8 da manhã em Roma e 8 da manhã no Rio são a mesma manhã para
+    # quem viveu as duas. Todos os extratores já entregam assim; o EXIF não
+    # tem fuso, e `sources/apple_photos.py` descarta de propósito o do Apple
+    # Fotos ("coerente com EXIF no resto do catálogo").
     data_capturada: Mapped[datetime | None]
+    # O MESMO instante, absoluto (UTC), gravado naive como todo datetime
+    # deste catálogo. Dois instantes e nenhuma coluna de offset: o offset é a
+    # DIFERENÇA entre os dois. Guardá-lo em coluna própria criaria um terceiro
+    # lugar para a mesma verdade, livre para discordar dos outros dois em
+    # silêncio — foi assim que o Immich resolveu e é a parte do desenho deles
+    # que vale copiar (`docs/referencia-immich/03-modelo-de-dados.md` §3).
+    #
+    # Hoje os dois são iguais na maioria das linhas: **sem fuso conhecido, os
+    # dois instantes são iguais**, e é justamente a igualdade que diz "não sei
+    # o fuso desta foto" — nunca "esta foto foi tirada em UTC". Quem derivar o
+    # offset precisa ler zero como desconhecido, não como Greenwich.
+    #
+    # O preço disso, dito em voz alta: fuso REAL de +00:00 fica indistinguível
+    # de desconhecido — Londres e Lisboa no inverno, Islândia, Marrocos. É
+    # limitação inerente ao padrão (o `keepLocalTime` do Immich tem a mesma) e
+    # está aceita. A saída não é uma terceira coluna de offset: é `tz_estimado`
+    # — quando a fase 11 existir, o sinal de "fuso conhecido" é
+    # `tz_estimado IS NOT NULL`, nunca a diferença entre estas duas datas.
+    #
+    # Quem hoje sabe o fuso de verdade: o Apple Fotos, que guarda offset e
+    # nome de zona POR FOTO e chega via osxphotos em `photo.date`. O EXIF
+    # (`OffsetTimeOriginal`) e o QuickTime também trazem, às vezes, e ainda
+    # não são lidos — fica para a fase 11, que já mexe em fuso (D-038).
+    #
+    # Sem índice de propósito: ordenação, recorte por mês/ano e agrupamento
+    # usam a hora local (`ix_media_files_data_capturada`), e não há consulta
+    # que filtre por esta coluna. Índice sem consumidor é custo de escrita em
+    # 101 mil linhas em troca de nada.
+    data_capturada_utc: Mapped[datetime | None]
     tz_estimado: Mapped[str | None]
     make: Mapped[str | None]
     model: Mapped[str | None]
@@ -190,14 +245,19 @@ class MediaFile(Base):
         """Entra na grade, na revisão e no plano de cópia.
 
         Uma referência sem arquivo não tem o que copiar; uma miniatura tem
-        arquivo e ainda assim não é acervo. As duas ficam de fora.
+        arquivo e ainda assim não é acervo; um arquivo que sumiu não tem o
+        que copiar AGORA, mesmo que volte depois. As três ficam de fora.
 
         É `hybrid` para valer nos dois lados: em memória ao percorrer mídias,
         e em SQL dentro de um WHERE. Filtrar por lista de ids em Python
         estourou o limite de variáveis do SQLite num acervo real — a
         condição precisa poder descer para o banco.
         """
-        return self.papel == MediaRole.ACERVO and not self.arquivo_ausente
+        return (
+            self.papel == MediaRole.ACERVO
+            and not self.arquivo_ausente
+            and not self.arquivo_offline
+        )
 
     @organizavel.inplace.expression
     @classmethod
@@ -205,6 +265,7 @@ class MediaFile(Base):
         return and_(
             cls.papel == MediaRole.ACERVO,
             cls.arquivo_ausente.is_(False),
+            cls.arquivo_offline.is_(False),
         )
 
     @property

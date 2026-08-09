@@ -46,7 +46,13 @@ class ExternalAsset:
     caminho_original: Path | None = None
     nome: str | None = None
     tamanho: int | None = None
+    # Hora de parede da captura (naive), como o resto do catálogo.
     data_capturada: datetime | None = None
+    # O mesmo instante, absoluto, quando o catálogo externo souber o fuso —
+    # `None` quando não souber, e aí o importador iguala os dois (a forma de
+    # dizer "fuso desconhecido"). Só um catálogo externo pode preencher isto
+    # hoje: o arquivo em si não carrega fuso que o app leia (D-038).
+    data_capturada_utc: datetime | None = None
     gps_lat: float | None = None
     gps_lon: float | None = None
     titulo: str | None = None

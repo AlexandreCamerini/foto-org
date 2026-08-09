@@ -131,7 +131,18 @@ def _ignored(name: str, rel_path: str, patterns: tuple[str, ...]) -> bool:
     )
 
 
-def iter_media_files(root: Path, config: DiscoveryConfig) -> Iterator[Path]:
+def iter_media_files(
+    root: Path, config: DiscoveryConfig, erros: list[Path] | None = None
+) -> Iterator[Path]:
+    """`erros`, se passado, recebe cada diretório que falhou (permissão,
+    I/O) — por referência, do mesmo jeito que `ScanControl` coordena
+    cancelamento. Sem isto, quem chama não tem como saber se o walk viu a
+    árvore inteira ou parou de produzir itens no meio em silêncio: um NAS
+    que cai ou uma subpasta que perde permissão faz o generator só parar de
+    produzir dali pra frente, sem levantar exceção — e um scan que confia
+    cegamente nisso para decidir "o que sumiu" marcaria arquivo de verdade
+    como offline. Default `None` preserva o comportamento de sempre para
+    quem não passa nada."""
     root = root.expanduser()
     visited: set[tuple[int, int]] = set()
     stack = [root]
@@ -147,6 +158,8 @@ def iter_media_files(root: Path, config: DiscoveryConfig) -> Iterator[Path]:
             entries = sorted(os.scandir(directory), key=lambda e: e.name)
         except OSError as exc:
             log.warning("descoberta: pulando %s (%s)", directory, exc)
+            if erros is not None:
+                erros.append(directory)
             continue
 
         for entry in entries:
@@ -173,3 +186,5 @@ def iter_media_files(root: Path, config: DiscoveryConfig) -> Iterator[Path]:
                         yield Path(entry.path)
             except OSError as exc:
                 log.warning("descoberta: pulando %s (%s)", entry.path, exc)
+                if erros is not None:
+                    erros.append(Path(entry.path))

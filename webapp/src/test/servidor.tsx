@@ -89,6 +89,7 @@ export const ROTAS_BASE: Record<string, unknown> = {
       fotos: 8,
     },
   ],
+  "/api/fontes/reapontamentos": [],
   "/api/job": { status: "nenhum" },
   "/api/scan/interrompidos": [],
   "/api/midia": { total: 0, offset: 0, itens: [] },
