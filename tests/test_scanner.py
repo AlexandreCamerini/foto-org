@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -8,7 +9,7 @@ from sqlalchemy import select
 from fotoorganizer.config.settings import ScannerSettings
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.metadata import PurePythonExtractor
-from fotoorganizer.models import MediaFile, ScanStatus, Source
+from fotoorganizer.models import MediaFile, MediaRole, ScanStatus, Source
 from fotoorganizer.scanner import CatalogScanner, ScanControl
 from tests.fixtures import make_corrupt_jpeg, make_jpeg, make_png
 
@@ -260,6 +261,213 @@ def test_fonte_reutilizada_entre_scans(scanner_env, tmp_path):
     scanner.scan_source(tmp_path)
     with factory() as session:
         assert len(session.scalars(select(Source)).all()) == 1
+
+
+def test_arquivo_que_some_e_marcado_offline(scanner_env, tmp_path):
+    """O terceiro estado de alcance (fase 12, item B): a FONTE continua
+    montada, mas um arquivo específico sumiu de onde estava. Sem isto ele
+    fica indistinguível de "sempre esteve lá"."""
+    scanner, extractor, factory = scanner_env
+    alvo = make_jpeg(tmp_path / "some.jpg", seed=1)
+    make_jpeg(tmp_path / "fica.jpg", seed=2)
+    scanner.scan_source(tmp_path)
+
+    alvo.unlink()
+    scan, metrics = scanner.scan_source(tmp_path)
+
+    assert scan.status == ScanStatus.CONCLUIDO
+    with factory() as session:
+        sumido = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "some.jpg")
+        )
+        fica = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "fica.jpg")
+        )
+        assert sumido.arquivo_offline is True
+        assert fica.arquivo_offline is False
+        # Metadado antigo continua no catálogo — nada foi apagado nem relido
+        # (não há mais arquivo para ler).
+        assert sumido.data_capturada is not None
+
+
+def test_arquivo_que_volta_e_marcado_online_de_novo(scanner_env, tmp_path):
+    scanner, extractor, factory = scanner_env
+    alvo = make_jpeg(tmp_path / "vai_e_volta.jpg", seed=1)
+    scanner.scan_source(tmp_path)
+
+    alvo.unlink()
+    scanner.scan_source(tmp_path)
+    with factory() as session:
+        antes = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "vai_e_volta.jpg")
+        )
+        assert antes.arquivo_offline is True
+
+    time.sleep(0.01)
+    make_jpeg(alvo, seed=3, size=(128, 96))  # "volta" com conteúdo novo
+    os.utime(alvo, (time.time(), time.time()))
+    scan, metrics = scanner.scan_source(tmp_path)
+
+    assert scan.status == ScanStatus.CONCLUIDO
+    with factory() as session:
+        depois = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "vai_e_volta.jpg")
+        )
+        assert depois.arquivo_offline is False
+
+
+def test_scan_cancelado_nao_marca_sumico_em_massa(scanner_env, tmp_path):
+    """O cenário do NAS caindo no meio do walk: se a varredura só viu um
+    punhado de arquivos antes de ser cancelada, a diferença entre
+    `conhecidos` e `vistos` seria quase o acervo inteiro — marcar sumiço
+    aqui confundiria interrupção com desaparecimento real."""
+    scanner, extractor, factory = scanner_env
+    _make_library(tmp_path, n=20)
+    scanner.scan_source(tmp_path)
+
+    control = ScanControl()
+
+    def cancela_no_meio(metrics, caminho):
+        if metrics.vistos >= 5:
+            control.cancelar()
+
+    scan, metrics = scanner.scan_source(
+        tmp_path, progress=cancela_no_meio, control=control
+    )
+    assert scan.status == ScanStatus.PAUSADO
+
+    with factory() as session:
+        arquivos = session.scalars(select(MediaFile)).all()
+        assert all(not a.arquivo_offline for a in arquivos)
+
+
+def test_referencia_externa_no_mesmo_source_nunca_vira_offline(
+    scanner_env, tmp_path
+):
+    """Achado 1 da revisão: o Google Takeout padrão (`ler_arquivos=False`)
+    grava `takeout://referencia` sob uma `Source` cujo caminho é uma pasta
+    comum (`sources/importer.py`). Se o usuário escanear essa mesma pasta
+    pela CLI/UI, `_get_or_create_source` reaproveita a fonte existente —
+    e, sem o filtro, toda referência dela virava `arquivo_offline=True`,
+    porque ela nunca aparece no walk (não é caminho de filesystem)."""
+    scanner, extractor, factory = scanner_env
+    make_jpeg(tmp_path / "real.jpg", seed=1)
+
+    with factory() as session:
+        fonte = Source(caminho=str(tmp_path.expanduser()))
+        session.add(fonte)
+        session.flush()
+        session.add(MediaFile(
+            source_id=fonte.id, caminho="takeout://ref-1", pasta="",
+            nome="IMG_1.jpg", extensao="jpg", tamanho=1,
+            arquivo_ausente=True, papel=MediaRole.SINAL,
+        ))
+        session.commit()
+
+    scan, metrics = scanner.scan_source(tmp_path)
+
+    assert scan.status == ScanStatus.CONCLUIDO
+    with factory() as session:
+        referencia = session.scalar(
+            select(MediaFile).where(MediaFile.caminho == "takeout://ref-1")
+        )
+        assert referencia.arquivo_offline is False
+        assert referencia.arquivo_ausente is True  # continua intocada
+
+
+def test_diretorio_ilegivel_no_meio_do_walk_nao_marca_sumico(
+    scanner_env, tmp_path, monkeypatch
+):
+    """Achado 2 da revisão, o mais grave: `iter_media_files` engole
+    `OSError` por diretório e só PARA de produzir itens dali pra frente —
+    sem levantar exceção nenhuma. O scan fechava como CONCLUIDO achando
+    que tinha visto a árvore inteira, e arquivos que continuavam no disco
+    (só não puderam ser enumerados) saíam marcados `arquivo_offline=True`.
+
+    Determinístico via mock de `os.scandir` — não depende de permissão de
+    filesystem específica do ambiente onde o teste roda (ver também
+    `test_subpasta_sem_permissao_real_nao_marca_sumico`, com `chmod` de
+    verdade, pulado quando não é seguro de reproduzir)."""
+    scanner, extractor, factory = scanner_env
+    _make_library(tmp_path, n=6)  # pasta_0 e pasta_1, 3 arquivos cada
+    scanner.scan_source(tmp_path)
+
+    import fotoorganizer.scanner.discovery as discovery_mod
+
+    pasta_com_falha = tmp_path / "pasta_0"
+    original_scandir = discovery_mod.os.scandir
+
+    def scandir_com_falha(path):
+        if Path(path) == pasta_com_falha:
+            raise OSError(13, "Permission denied")
+        return original_scandir(path)
+
+    monkeypatch.setattr(discovery_mod.os, "scandir", scandir_com_falha)
+
+    scan, metrics = scanner.scan_source(tmp_path)
+
+    # O scan fecha CONCLUIDO (não houve cancelamento) — é exatamente por
+    # isso que confiar só em `scan.status == CONCLUIDO` não bastava.
+    assert scan.status == ScanStatus.CONCLUIDO
+    with factory() as session:
+        arquivos = session.scalars(select(MediaFile)).all()
+        assert all(not a.arquivo_offline for a in arquivos)
+
+
+@pytest.mark.skipif(
+    hasattr(os, "getuid") and os.getuid() == 0,
+    reason="root ignora permissão de diretório — chmod não bloqueia stat/scandir",
+)
+def test_subpasta_sem_permissao_real_nao_marca_sumico(scanner_env, tmp_path):
+    """A mesma guarda do teste acima, mas com uma permissão de verdade
+    (o cenário que a revisão reproduziu originalmente com `chmod 000`)."""
+    scanner, extractor, factory = scanner_env
+    protegida = tmp_path / "protegida"
+    make_jpeg(protegida / "dentro.jpg", seed=1)
+    make_jpeg(tmp_path / "fora.jpg", seed=2)
+    scanner.scan_source(tmp_path)
+
+    os.chmod(protegida, 0)
+    try:
+        scan, metrics = scanner.scan_source(tmp_path)
+    finally:
+        os.chmod(protegida, 0o755)
+
+    assert scan.status == ScanStatus.CONCLUIDO
+    with factory() as session:
+        arquivos = session.scalars(select(MediaFile)).all()
+        assert all(not a.arquivo_offline for a in arquivos)
+
+
+def test_padrao_ignorado_novo_nao_marca_arquivo_existente_como_sumido(
+    scanner_env, tmp_path
+):
+    """Guarda 2 (confirmação por `Path.exists()` antes de marcar): um
+    arquivo pode sair do walk sem ter sido apagado — o usuário mudou
+    `padroes_ignorados` (ou a extensão suportada) entre duas passadas. Sem
+    esta guarda, mudar um filtro de scan marcaria acervo real como
+    sumido."""
+    scanner, extractor, factory = scanner_env
+    fica_fora_do_walk = make_jpeg(
+        tmp_path / "pasta_ignorada" / "still_here.jpg", seed=1
+    )
+    make_jpeg(tmp_path / "outra.jpg", seed=2)
+    scanner.scan_source(tmp_path)
+
+    with factory() as session:
+        source = session.scalars(select(Source)).one()
+        source.padroes_ignorados = ["pasta_ignorada/*"]
+        session.commit()
+
+    scan, metrics = scanner.scan_source(tmp_path)
+
+    assert scan.status == ScanStatus.CONCLUIDO
+    assert fica_fora_do_walk.exists()  # nunca foi apagado de verdade
+    with factory() as session:
+        arquivo = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "still_here.jpg")
+        )
+        assert arquivo.arquivo_offline is False
 
 
 def test_reprocessar_relê_arquivo_inalterado(migrated_engine, tmp_path):

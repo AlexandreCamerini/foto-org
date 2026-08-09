@@ -186,6 +186,27 @@ def test_organizavel_conta_foto_e_nao_linha(migrated_engine):
     assert inv.organizaveis == 1
 
 
+def test_arquivo_offline_nao_conta_como_alcancavel(migrated_engine):
+    """A fonte responde (disponivel=True), mas ESTE arquivo sumiu de onde
+    estava. `Source.disponivel` sozinho não é suficiente para "alcançável"
+    — precisa também que o arquivo específico não tenha sumido (fase 12,
+    item B)."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        f = _fonte(session, "/Users/eu/Pictures", "Pictures")
+        _arquivo(session, f, "/Users/eu/Pictures", "ok.jpg")
+        _arquivo(session, f, "/Users/eu/Pictures", "sumiu.jpg",
+                 arquivo_offline=True)
+        session.commit()
+
+    inv = levantar(factory)
+    assert inv.fotos == 2
+    assert inv.alcancaveis == 1
+    (lugar,) = inv.lugares
+    assert lugar.fotos == 2
+    assert lugar.alcancaveis == 1
+
+
 def test_testemunha_nao_conta_como_organizavel(migrated_engine):
     """Rebaixar a SINAL tira da contagem sem tirar do banco (invariante 8)."""
     factory = create_session_factory(migrated_engine)

@@ -121,6 +121,12 @@ class MediaFile(Base):
         Index("ix_media_files_data_capturada", "data_capturada"),
         Index("ix_media_files_mtime_tamanho", "mtime", "tamanho"),
         Index("ix_media_files_papel", "papel"),
+        # Mesma razão de `ix_media_files_papel`: entra em `organizavel`, que
+        # é filtrado em SQL sobre o acervo inteiro (alcance=organizaveis/
+        # faltantes na Biblioteca). Coluna booleana é barata de indexar e a
+        # consulta de "faltantes" — a tela que este campo existe para servir
+        # — filtra exatamente por ela.
+        Index("ix_media_files_arquivo_offline", "arquivo_offline"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -130,6 +136,20 @@ class MediaFile(Base):
     # arquivo no disco. Ela doa horário e GPS para a correlação e fica fora
     # de grade, miniatura, duplicata e plano de cópia — não há o que copiar.
     arquivo_ausente: Mapped[bool] = mapped_column(default=False)
+    # O terceiro estado de alcance (o outro é `Source.disponivel`, abaixo):
+    # a FONTE está montada e este arquivo específico sumiu de onde estava —
+    # apagado, movido para fora, renomeado por outro programa. Diferente de
+    # `arquivo_ausente` (nunca teve arquivo local, é referência de nuvem) e
+    # de `Source.disponivel` (a fonte INTEIRA fora de alcance): aqui é UM
+    # registro, e a fonte continua respondendo. Sem isto, um arquivo apagado
+    # ficava indistinguível de "sempre esteve lá" — ninguém verificava de
+    # novo. Mantido por dois mecanismos complementares: o scan normal marca
+    # quem não apareceu no walk desta passada (`scanner/scanner.py`), e o
+    # laço de reconciliação confere periodicamente sem esperar um scan
+    # manual (`scanner/reconciliacao.py`). Nunca apaga o registro nem seus
+    # metadados (invariante 8) — volta a `False` sozinho se o arquivo
+    # reaparecer.
+    arquivo_offline: Mapped[bool] = mapped_column(default=False)
     # Acervo ou testemunha. Ortogonal a `arquivo_ausente`: uma miniatura do
     # pacote do Apple Fotos existe no disco e mesmo assim não é acervo.
     papel: Mapped[MediaRole] = mapped_column(
@@ -190,14 +210,19 @@ class MediaFile(Base):
         """Entra na grade, na revisão e no plano de cópia.
 
         Uma referência sem arquivo não tem o que copiar; uma miniatura tem
-        arquivo e ainda assim não é acervo. As duas ficam de fora.
+        arquivo e ainda assim não é acervo; um arquivo que sumiu não tem o
+        que copiar AGORA, mesmo que volte depois. As três ficam de fora.
 
         É `hybrid` para valer nos dois lados: em memória ao percorrer mídias,
         e em SQL dentro de um WHERE. Filtrar por lista de ids em Python
         estourou o limite de variáveis do SQLite num acervo real — a
         condição precisa poder descer para o banco.
         """
-        return self.papel == MediaRole.ACERVO and not self.arquivo_ausente
+        return (
+            self.papel == MediaRole.ACERVO
+            and not self.arquivo_ausente
+            and not self.arquivo_offline
+        )
 
     @organizavel.inplace.expression
     @classmethod
@@ -205,6 +230,7 @@ class MediaFile(Base):
         return and_(
             cls.papel == MediaRole.ACERVO,
             cls.arquivo_ausente.is_(False),
+            cls.arquivo_offline.is_(False),
         )
 
     @property

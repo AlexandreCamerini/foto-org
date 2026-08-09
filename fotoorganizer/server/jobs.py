@@ -111,6 +111,15 @@ class JobManager:
             "duplicatas", "catálogo inteiro", self._rodar_duplicatas
         )
 
+    def iniciar_reconciliacao(self) -> bool:
+        """Uma passada da varredura de alcance (fase 12, item B): confere se
+        arquivos catalogados ainda existem, sem reler metadado nem hash.
+        Auto-limitada por tempo/percentual — o job termina sozinho dentro
+        do orçamento, não varre o catálogo inteiro de uma vez."""
+        return self._iniciar(
+            "reconciliacao", "catálogo inteiro", self._rodar_reconciliacao
+        )
+
     def iniciar_execucao(self, plan_id: int) -> bool:
         """Executa um plano aprovado. O controle nasce aqui, na thread do
         pedido, para que um cancelamento imediato não se perca."""
@@ -247,6 +256,25 @@ class JobManager:
             )
         except Exception as exc:
             log.exception("job duplicatas falhou")
+            self._atualizar(status="erro", mensagem=str(exc))
+
+    def _rodar_reconciliacao(self) -> None:
+        try:
+            from fotoorganizer.scanner.reconciliacao import reconciliar
+
+            resultado = reconciliar(self._factory)
+            self._atualizar(
+                status="concluido",
+                processados=resultado.verificados,
+                resultado={
+                    "verificados": resultado.verificados,
+                    "marcados_offline": resultado.marcados_offline,
+                    "marcados_online": resultado.marcados_online,
+                    "ciclo_concluido": resultado.ciclo_concluido,
+                },
+            )
+        except Exception as exc:
+            log.exception("job reconciliação falhou")
             self._atualizar(status="erro", mensagem=str(exc))
 
     def _advisor(self):

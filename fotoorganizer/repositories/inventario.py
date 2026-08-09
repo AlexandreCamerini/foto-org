@@ -153,8 +153,17 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
     sem_caminho = 0
 
     # Um inteiro por linha, para o `max` do agrupamento poder decidir.
+    # Alcançável exige as três coisas: não é referência sem arquivo, a
+    # FONTE responde agora, e este arquivo específico não sumiu dela.
     _alcancavel = case(
-        (and_(MediaFile.arquivo_ausente.is_(False), Source.disponivel.is_(True)), 1),
+        (
+            and_(
+                MediaFile.arquivo_ausente.is_(False),
+                Source.disponivel.is_(True),
+                MediaFile.arquivo_offline.is_(False),
+            ),
+            1,
+        ),
         else_=0,
     )
     _organizavel = case((MediaFile.organizavel, 1), else_=0)

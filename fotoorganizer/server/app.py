@@ -261,6 +261,11 @@ def _motivo_indisponivel(m: MediaFile, fontes_off: frozenset[int]) -> str | None
         return "sem arquivo neste Mac"
     if m.source_id in fontes_off:
         return "volume ou pasta fora de alcance"
+    # A fonte responde, mas ESTE arquivo sumiu de onde estava — apagado,
+    # movido para fora, renomeado por outro programa. "Sumiu" e não "não
+    # encontrado": a segunda soaria como erro do app, e o app não errou.
+    if m.arquivo_offline:
+        return "arquivo sumiu do disco"
     return None
 
 
@@ -1113,6 +1118,16 @@ def create_app(
     @app.post("/api/duplicatas/detectar")
     def detectar_duplicatas() -> dict:
         if not jobs.iniciar_duplicatas():
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.post("/api/reconciliacao")
+    def iniciar_reconciliacao() -> dict:
+        """Uma passada da varredura de alcance: confere se arquivos
+        catalogados ainda existem, sem reler metadado nem hash. Auto-
+        limitada — termina sozinha dentro do orçamento e retoma na próxima
+        chamada de onde parou (checkpoint em `application_settings`)."""
+        if not jobs.iniciar_reconciliacao():
             raise HTTPException(409, "já existe um trabalho em andamento")
         return jobs.estado()
 

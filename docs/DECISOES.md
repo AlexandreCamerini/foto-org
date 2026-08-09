@@ -816,3 +816,44 @@ fosse caminho de arquivo
   justifica o passo por medição, não por princípio: sem ele, a fatia teria
   sido commitada corrompendo referência de nuvem na primeira vez que um
   HD do Lightroom remontasse noutro ponto.
+
+## D-037 — "não visto no walk" quase virou sinônimo de "arquivo apagado"
+
+- Fase: `docs/prompts/fase-12-alcance-e-tempo.md`, item B (terceiro estado
+  de alcance + laço de reconciliação), implementação inicial em 2026-08-09.
+- Classe: A (dois bugs pegos e corrigidos antes do commit — registro do
+  achado e da correção).
+- Contexto: a primeira versão de `arquivo_offline` marcava sumiço por
+  diferença de conjunto — `conhecidos - vistos` no fim do walk do scan
+  (`scanner/scanner.py`). Uma revisão com contexto isolado (Opus) achou
+  dois jeitos dessa diferença mentir:
+  1. Referência de catálogo externo (`apple://uuid`, `takeout://id`) nunca
+     entra em `vistos` (não é caminho de filesystem) — se a `Source` de um
+     import do Google Takeout ou Apple Fotos for reaproveitada por um scan
+     de pasta comum (`_get_or_create_source` funde as duas), toda
+     referência daquela fonte virava `arquivo_offline=True` em massa.
+     Repro do revisor confirmou.
+  2. `iter_media_files` (`scanner/discovery.py`) engole `OSError` por
+     diretório com só um `log.warning` — um NAS que cai ou uma subpasta
+     que perde permissão NO MEIO do walk faz o generator simplesmente
+     parar de produzir itens dali pra frente, sem exceção. O scan fechava
+     `CONCLUIDO` (não `cancelado`) achando que viu a árvore inteira, e
+     marcava arquivo de verdade como sumido. Repro com `chmod 000` numa
+     subpasta confirmou: arquivos existentes saíram marcados offline.
+- Escolhida: fonte única de verdade para "isto é caminho de filesystem?"
+  em `scanner/elegibilidade.py`, importada tanto pelo scan quanto pela
+  reconciliação (item 1). E duas guardas independentes antes de marcar
+  sumiço no scan (item 2): se algum diretório falhou durante a passada,
+  não marca nada nesta passada (loga aviso, deixa a reconciliação
+  orçada/paciente fechar a lacuna depois); e mesmo sem erro de diretório,
+  confirma cada candidato com `Path.exists()` antes de marcar — cobre o
+  caso mais sutil de `padroes_ignorados`/extensão mudando entre passadas.
+  As duas guardas são complementares: `Path.exists()` sozinho NÃO detecta
+  o caso do NAS/permissão (stat exige +x em toda a cadeia de diretórios,
+  então também devolve `False` ali) — testado, não é suposição.
+- Consequência para o método: a mesma lição de D-036 se repete numa forma
+  diferente — "não vi" não é "não existe", em qualquer código que infere
+  ausência por omissão em vez de confirmar por medição direta. Melhor não
+  marcar nada numa passada duvidosa do que marcar tudo errado; o laço
+  orçado que já existia para outro motivo (item B) acabou sendo também a
+  rede de segurança certa para este caso.

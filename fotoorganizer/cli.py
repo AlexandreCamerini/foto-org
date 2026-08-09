@@ -7,6 +7,7 @@ Uso:
     python -m fotoorganizer plano <raiz-destino> [--nome N]
     python -m fotoorganizer dry-run <plano-id>
     python -m fotoorganizer executar <plano-id> --confirmar
+    python -m fotoorganizer verificar-arquivos [--segundos N]
     python -m fotoorganizer bench [-n QUANTIDADE]
 
 `executar` exige `--confirmar` porque é a única operação que escreve fora
@@ -243,6 +244,31 @@ def cmd_reapontar(args: argparse.Namespace) -> int:
     print(f"\n{r.linhas_media_files} linha(s) reapontada(s) "
           f"(audit_log {r.audit_log_id} — use --desfazer {r.audit_log_id} "
           "para reverter).")
+    return 0
+
+
+def cmd_verificar_arquivos(args: argparse.Namespace) -> int:
+    """Uma passada da reconciliação de alcance (fase 12, item B): confere se
+    arquivos já catalogados ainda existem no disco, sem reler metadado nem
+    recalcular hash — barato o bastante para rodar sem esperar por um scan
+    completo. Auto-limitada por tempo/percentual; retoma da próxima chamada
+    de onde esta parou (checkpoint em `application_settings`, não em
+    `ScanSession` — não é um scan de pasta)."""
+    from fotoorganizer.scanner.reconciliacao import reconciliar
+
+    _, factory = _abrir_catalogo(args)
+    kwargs = {}
+    if args.segundos is not None:
+        kwargs["orcamento_segundos"] = args.segundos
+    resultado = reconciliar(factory, **kwargs)
+    print(f"{resultado.verificados} verificado(s) nesta passada: "
+          f"{resultado.marcados_offline} ficaram offline, "
+          f"{resultado.marcados_online} voltaram online.")
+    print(
+        "Ciclo completo — a próxima passada recomeça do início."
+        if resultado.ciclo_concluido else
+        "Orçamento consumido — a próxima passada retoma daqui."
+    )
     return 0
 
 
@@ -566,6 +592,17 @@ def main(argv: list[str] | None = None) -> int:
              "trocados) — recuperação, não fluxo normal",
     )
     p_reap.set_defaults(func=cmd_reapontar)
+
+    p_verif = sub.add_parser(
+        "verificar-arquivos",
+        help="confere se arquivos catalogados ainda existem no disco "
+             "(uma passada, auto-limitada — read-only)",
+    )
+    p_verif.add_argument(
+        "--segundos", type=float, default=None,
+        help="orçamento de tempo desta passada (padrão: interno do módulo)",
+    )
+    p_verif.set_defaults(func=cmd_verificar_arquivos)
 
     p_imp.add_argument("fonte", choices=["apple", "takeout", "lightroom"])
     p_imp.add_argument(

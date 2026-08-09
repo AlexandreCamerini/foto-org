@@ -30,6 +30,29 @@ def _apontar_catalogo(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(cli, "load_settings", lambda: settings)
 
 
+def test_verificar_arquivos_reporta_offline_e_online(monkeypatch, tmp_path, capsys):
+    """`fotoorganizer verificar-arquivos` — a superfície de CLI da Parte 2
+    (fase 12, item B): uma passada da reconciliação, sem depender de scan.
+
+    Um arquivo só no catálogo: o orçamento por percentual padrão da
+    reconciliação (uma fração do acervo elegível) sempre cobre 100% dele,
+    sem depender da ordem em que o scan indexou vários arquivos.
+    """
+    _apontar_catalogo(monkeypatch, tmp_path)
+    fotos = tmp_path / "fotos"
+    alvo = make_jpeg(fotos / "some.jpg", seed=1)
+    assert main(["scan", str(fotos)]) == 0
+    capsys.readouterr()
+
+    alvo.unlink()
+    assert main(["verificar-arquivos"]) == 0
+    saida = capsys.readouterr().out
+    assert "1 verificado" in saida
+    assert "1 ficaram offline" in saida
+    assert "0 voltaram online" in saida
+    assert "Ciclo completo" in saida
+
+
 def test_importar_takeout_traz_gps_do_sidecar(monkeypatch, tmp_path, capsys):
     _apontar_catalogo(monkeypatch, tmp_path)
     takeout = _takeout_sintetico(tmp_path / "export")
