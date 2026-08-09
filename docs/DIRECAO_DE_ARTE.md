@@ -16,11 +16,11 @@ valores abaixo.
 
 ```
 ┌──────────┬──────────────────────────────┬───────────────┐
-│ Sidebar  │  Grade de miniaturas          │  Inspetor     │
-│ Fontes   │  (virtualizada, slider de     │  Preview      │
-│ Filtros  │   tamanho no rodapé)          │  Metadados    │
-│ Álbuns/  │                               │  Sugestão +   │
-│ Sugestões│                               │  evidências   │
+│ Sidebar  │  Barra da Biblioteca: alcance,│  Inspetor     │
+│ Fontes   │  busca, ordenação, slider de  │  Preview      │
+│ Filtros  │  tamanho — só nesta aba       │  Metadados    │
+│ Álbuns/  │  Grade de miniaturas          │  Sugestão +   │
+│ Sugestões│  (virtualizada)               │  evidências   │
 ├──────────┴──────────────────────────────┴───────────────┤
 │ Barra de status: scan, arquivos/s, erros, itens fila     │
 └──────────────────────────────────────────────────────────┘
@@ -33,6 +33,13 @@ valores abaixo.
   (compare) no lugar da grade.
 - O inspetor descreve a foto selecionada: existe na Biblioteca, não nas
   telas que não têm grade.
+- O slider de tamanho das miniaturas vive na barra de controles da
+  Biblioteca (`webapp/src/App.tsx`), ao lado de alcance/busca/ordenação —
+  não no rodapé. Ele só faz sentido com a grade na tela, e some junto com
+  o resto da barra quando o grupo aberto troca para a visão de Mapa. A
+  barra de status, ao contrário, é a mesma em todas as seis abas; um
+  controle que só age numa delas ali seria o mesmo defeito que a barra
+  lateral já teve quando aparecia clicável e inerte fora da Biblioteca.
 - A barra de status atravessa a janela inteira, abaixo dos três painéis, e
   é a mesma em todas as abas — o trabalho em background continua rodando
   quando o usuário troca de tela, e o progresso precisa continuar visível.
