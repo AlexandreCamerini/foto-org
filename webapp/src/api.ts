@@ -9,6 +9,29 @@ export interface Fonte {
   fotos: number;
 }
 
+/** O volume desta fonte voltou montado noutro ponto (`/Volumes/photo` →
+ *  `/Volumes/photo 1`) — dá para reapontar o catálogo em vez de recatalogar. */
+export interface Reapontamento {
+  source_id: number;
+  apelido: string;
+  prefixo_antigo: string;
+  prefixo_novo: string;
+}
+
+export interface PreviaReapontamento {
+  source_id: number;
+  apelido: string;
+  prefixo_antigo: string;
+  prefixo_novo: string;
+  /** Só as linhas que de fato começam com `prefixo_antigo` — não o total
+   *  de mídia da fonte. */
+  total_media_files: number;
+  /** Referências sem esse prefixo (ex. `apple://uuid`, `lightroom://uuid`)
+   *  que ficam intocadas — a fonte tem mais mídia do que o que vai mudar. */
+  total_ignoradas_sem_prefixo: number;
+  amostra: { antigo: string; novo: string }[];
+}
+
 export interface Media {
   id: number;
   nome: string;
@@ -397,6 +420,20 @@ export const api = {
       "/api/status",
     ),
   fontes: () => json<Fonte[]>("/api/fontes"),
+  /** Fontes fora de alcance porque o volume remontou noutro ponto — a
+   *  affordance "reapontar" aparece só para elas. Custa um `diskutil` por
+   *  fonte, então a sidebar chama isto sob demanda, não a cada render. */
+  reapontamentos: () => json<Reapontamento[]>("/api/fontes/reapontamentos"),
+  previaReapontamento: (sourceId: number) =>
+    post<PreviaReapontamento>(`/api/fontes/${sourceId}/reapontar/preview`),
+  reapontarFonte: (sourceId: number) =>
+    post<{
+      source_id: number;
+      prefixo_antigo: string;
+      prefixo_novo: string;
+      linhas_media_files: number;
+      audit_log_id: number;
+    }>(`/api/fontes/${sourceId}/reapontar`, { confirmar: true }),
   midia: (filtros: FiltrosMidia, offset: number, limit: number) => {
     const params = new URLSearchParams();
     for (const [chave, valor] of Object.entries(filtros)) {

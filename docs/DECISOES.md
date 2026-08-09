@@ -784,3 +784,35 @@ item 5 do ROADMAP nasce sem o dado que o sustentava
   sozinho não traz as miniaturas de volta; precisaria de uma fonte nova.
 - Status: registrado por medição; reordenação do ROADMAP aplicada nesta
   mesma sessão
+
+## D-036 — Reapontar fonte quase reescreveu referência de nuvem como se
+fosse caminho de arquivo
+
+- Fase: `docs/prompts/fase-12-alcance-e-tempo.md`, item A (reapontar fonte
+  que mudou de lugar), implementação inicial em 2026-08-09.
+- Classe: A (bug pego e corrigido antes do commit — registro do achado e
+  da correção, não uma escolha em aberto).
+- Contexto: `MediaFile.caminho` nem sempre é caminho de filesystem —
+  `sources/importer.py` grava `"apple://<uuid>"` e `"lightroom://<uuid>"`
+  para referências de catálogo externo sem arquivo local (44.661 e 54.086
+  linhas no acervo real, D-028). A primeira versão de
+  `fotoorganizer/sources/reapontar.py` fatiava `caminho[len(prefixo):]`
+  sem checar `startswith` — contra uma fonte mista (arquivo + referência),
+  reescrevia a referência para dentro do prefixo novo do volume,
+  destruindo em silêncio a única testemunha de lugar/data daquela foto
+  (violação direta do invariante 8 do CLAUDE.md). Achado por uma revisão
+  com contexto isolado (Opus, olhos frescos sobre o diff) antes do
+  primeiro commit da fatia, com repro contra o catálogo real do usuário
+  em modo somente-leitura.
+- Escolhida: `previa`/`aplicar` agora filtram por
+  `caminho.startswith(prefixo_antigo)` antes de contar, amostrar ou
+  reescrever qualquer linha; o que não bate fica bit-a-bit intocado.
+  `PreviaReapontamento.total_ignoradas_sem_prefixo` deixa isso visível ao
+  usuário no dry-run. Colisão de caminho (duas linhas caindo no mesmo
+  valor pós-reescrita) virou exceção própria (`ColisaoDeCaminho`),
+  detectada proativamente e como rede de segurança sobre `IntegrityError`.
+- Consequência para o método: fatia-vertical já pedia revisão com olhos
+  frescos antes do commit (`SKILL.md` passo 7) — este é o caso que
+  justifica o passo por medição, não por princípio: sem ele, a fatia teria
+  sido commitada corrompendo referência de nuvem na primeira vez que um
+  HD do Lightroom remontasse noutro ponto.

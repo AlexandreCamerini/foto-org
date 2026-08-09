@@ -155,7 +155,94 @@ def cmd_volumes(args: argparse.Namespace) -> int:
         print(f"\n{len(fora)} de {len(estados)} fontes fora de alcance.")
         if any(e.mudou_de_lugar for e in fora):
             print("Alguma voltou noutro ponto de montagem — veja as marcadas "
-                  "com →. Reaponte a fonte para o caminho novo antes de varrer.")
+                  "com →. `fotoorganizer reapontar <fonte>` mostra o "
+                  "dry-run; com --confirmar, reescreve o catálogo.")
+    return 0
+
+
+def cmd_reapontar(args: argparse.Namespace) -> int:
+    """Reaponta uma fonte que remontou noutro ponto — reescreve o catálogo
+    (`Source.caminho` + `MediaFile.caminho`), nunca toca em arquivo.
+
+    Sem `--confirmar`, só mostra o dry-run (padrão de `cmd_dry_run`); com
+    `--confirmar`, valida uma amostra dos caminhos novos no disco e escreve
+    numa transação só, tudo ou nada. `--desfazer <audit_log_id>` reverte um
+    reapontamento anterior lendo a entrada de auditoria que ele criou.
+    """
+    from fotoorganizer.sources.disponibilidade import verificar
+    from fotoorganizer.sources.reapontar import (
+        ColisaoDeCaminho,
+        ReapontamentoInaplicavel,
+        ValidacaoFalhou,
+        aplicar,
+        desfazer_por_auditoria,
+        prefixos_do_estado,
+        previa,
+        resolver_fonte,
+    )
+
+    _, factory = _abrir_catalogo(args)
+
+    if args.desfazer is not None:
+        try:
+            r = desfazer_por_auditoria(factory, args.desfazer)
+        except (ReapontamentoInaplicavel, ValidacaoFalhou,
+                 ColisaoDeCaminho) as exc:
+            print(exc)
+            return 1
+        print(f"Desfeito a partir do audit_log {args.desfazer}: "
+              f"{r.prefixo_antigo} → {r.prefixo_novo} "
+              f"({r.linhas_media_files} linha(s), novo audit_log "
+              f"{r.audit_log_id}).")
+        return 0
+
+    if not args.fonte:
+        print("Informe a fonte (id ou apelido), ou --desfazer <audit_log_id>.")
+        return 1
+
+    try:
+        source_id = resolver_fonte(factory, args.fonte)
+    except ReapontamentoInaplicavel as exc:
+        print(exc)
+        return 1
+
+    estado = next(
+        (e for e in verificar(factory) if e.source_id == source_id), None
+    )
+    if estado is None:
+        print(f"fonte não encontrada: {args.fonte}")
+        return 1
+
+    try:
+        prefixo_antigo, prefixo_novo = prefixos_do_estado(estado)
+    except ReapontamentoInaplicavel as exc:
+        print(exc)
+        return 1
+
+    p = previa(factory, source_id, prefixo_antigo, prefixo_novo)
+    print(f"Fonte {p.apelido!r}:")
+    print(f"  {p.prefixo_antigo}")
+    print(f"  → {p.prefixo_novo}")
+    print(f"{p.total_media_files} arquivo(s) de mídia seriam reapontados.")
+    if p.total_ignoradas_sem_prefixo:
+        print(f"{p.total_ignoradas_sem_prefixo} referência(s) sem esse "
+              "prefixo (ex.: apple://…, lightroom://…) ficam intocadas.")
+    for antigo, novo in p.amostra:
+        print(f"  {antigo}\n    → {novo}")
+
+    if not args.confirmar:
+        print("\nDry-run só. Repita com --confirmar para escrever no "
+              "catálogo (nenhum arquivo no disco é tocado).")
+        return 0
+
+    try:
+        r = aplicar(factory, source_id, prefixo_antigo, prefixo_novo)
+    except (ValidacaoFalhou, ColisaoDeCaminho) as exc:
+        print(f"\n{exc}")
+        return 1
+    print(f"\n{r.linhas_media_files} linha(s) reapontada(s) "
+          f"(audit_log {r.audit_log_id} — use --desfazer {r.audit_log_id} "
+          "para reverter).")
     return 0
 
 
@@ -458,6 +545,27 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "inventario", help="o que existe e onde, inclusive fora de alcance"
     ).set_defaults(func=cmd_inventario)
+
+    p_reap = sub.add_parser(
+        "reapontar",
+        help="reescreve o catálogo para onde um volume remontado voltou "
+             "(nunca toca em arquivo)",
+    )
+    p_reap.add_argument(
+        "fonte", nargs="?",
+        help="id numérico ou apelido da fonte (omitir com --desfazer)",
+    )
+    p_reap.add_argument(
+        "--confirmar", action="store_true",
+        help="aprovação explícita — sem ela só mostra o dry-run",
+    )
+    p_reap.add_argument(
+        "--desfazer", type=int, metavar="AUDIT_LOG_ID",
+        help="desfaz um reapontamento anterior, lendo os prefixos da "
+             "entrada de auditoria que ele criou (reaponta com eles "
+             "trocados) — recuperação, não fluxo normal",
+    )
+    p_reap.set_defaults(func=cmd_reapontar)
 
     p_imp.add_argument("fonte", choices=["apple", "takeout", "lightroom"])
     p_imp.add_argument(
