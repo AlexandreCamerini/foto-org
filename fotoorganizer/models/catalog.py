@@ -76,7 +76,6 @@ class Source(Base):
         Enum(SourceType, native_enum=False), default=SourceType.PASTA
     )
     apelido: Mapped[str | None]
-    ativo: Mapped[bool] = mapped_column(default=True)
     # Alcançável AGORA. Um HD na gaveta é indisponível, não perdido — e a
     # diferença muda o que a interface deve dizer ao usuário.
     disponivel: Mapped[bool] = mapped_column(default=True)
