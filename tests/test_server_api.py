@@ -1534,3 +1534,98 @@ def test_acao_sem_ids_e_sem_destino_e_422(client):
     assert client.post(
         "/api/sugestoes/acao", json={"acao": "aprovar"}
     ).status_code == 422
+
+
+# --- facetas que funcionam sem pixel (B5) ---------------------------------
+
+def _midia_com_faceta(session, id_, **kw):
+    from fotoorganizer.models import MediaFile
+
+    campos = dict(
+        source_id=1, caminho=f"/fotos/{id_}.jpg", pasta="/fotos",
+        nome=f"{id_}.jpg", extensao="jpg", tamanho=100,
+    )
+    campos.update(kw)
+    media = MediaFile(id=id_, **campos)
+    session.add(media)
+    return media
+
+
+def test_filtro_por_camera_casa_make_e_model_juntos(migrated_engine):
+    """O dono pensa 'a 5D', não 'Canon' + 'Canon EOS 5D Mark III'."""
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.models import Source, SourceType
+    from fotoorganizer.repositories import MediaRepository
+    from fotoorganizer.repositories.media import MediaFilters
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        session.add(Source(id=1, caminho="/fotos", tipo=SourceType.PASTA))
+        _midia_com_faceta(session, 1, make="Canon", model="Canon EOS 5D Mark III")
+        _midia_com_faceta(session, 2, make="NIKON", model="D750")
+        # Só o model preenchido: `NULL || texto` seria NULL sem o coalesce.
+        _midia_com_faceta(session, 3, make=None, model="iPhone 15 Pro")
+        session.commit()
+
+    repo = MediaRepository(factory)
+    assert repo.contar(MediaFilters(camera="5D")) == 1
+    assert repo.contar(MediaFilters(camera="nikon")) == 1
+    assert repo.contar(MediaFilters(camera="iPhone")) == 1
+
+
+def test_busca_textual_enxerga_a_curadoria(migrated_engine):
+    """Procurar 'Pantanal' e não achar a foto que alguém etiquetou assim é a
+    busca falhando onde o metadado é mais confiável que o nome de arquivo —
+    que na maioria do acervo é IMG_1234."""
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
+    from fotoorganizer.models import MetadataEntry, Source, SourceType
+    from fotoorganizer.repositories import MediaRepository
+    from fotoorganizer.repositories.media import MediaFilters
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        session.add(Source(id=1, caminho="/fotos", tipo=SourceType.PASTA))
+        _midia_com_faceta(session, 1, nome="IMG_1234.jpg")
+        _midia_com_faceta(session, 2, nome="IMG_5678.jpg")
+        session.flush()
+        session.add(MetadataEntry(
+            media_id=1, namespace=NAMESPACE_CURADORIA,
+            chave="palavra_chave", valor="Pantanal",
+        ))
+        session.commit()
+
+    repo = MediaRepository(factory)
+    assert repo.contar(MediaFilters(busca="Pantanal")) == 1
+    assert repo.contar(MediaFilters(palavra_chave="pantanal")) == 1
+    # O nome de arquivo continua funcionando.
+    assert repo.contar(MediaFilters(busca="IMG_5678")) == 1
+
+
+def test_facetas_listam_o_que_existe_com_contagem(migrated_engine):
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
+    from fotoorganizer.models import Location, MetadataEntry, Source, SourceType
+    from fotoorganizer.repositories import MediaRepository
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        session.add(Source(id=1, caminho="/fotos", tipo=SourceType.PASTA))
+        session.add(Location(id=1, pais="Brasil", cidade="Corumbá",
+                             fonte="offline"))
+        _midia_com_faceta(session, 1, make="Canon", model="R5", location_id=1)
+        _midia_com_faceta(session, 2, make="Canon", model="R5", location_id=1)
+        _midia_com_faceta(session, 3, make="NIKON", model="D750")
+        session.flush()
+        for media_id in (1, 2):
+            session.add(MetadataEntry(
+                media_id=media_id, namespace=NAMESPACE_CURADORIA,
+                chave="palavra_chave", valor="Selected",
+            ))
+        session.commit()
+
+    repo = MediaRepository(factory)
+    cameras = repo.cameras()
+    assert cameras[0]["quantidade"] == 2      # a mais usada primeiro
+    assert repo.paises() == [{"nome": "Brasil", "quantidade": 2}]
+    assert repo.palavras_chave() == [{"nome": "Selected", "quantidade": 2}]

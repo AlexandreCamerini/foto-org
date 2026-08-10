@@ -11,11 +11,14 @@ from dataclasses import dataclass
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, aliased, sessionmaker
 
+from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.models import (
     ConfidenceLevel,
+    Location,
     MediaFile,
     MediaRole,
+    MetadataEntry,
     Source,
     Suggestion,
 )
@@ -126,6 +129,19 @@ class MediaFilters:
     # registros paginados de 200 em 200, chegar em 2015 rolando exigiria
     # carregar tudo que veio antes.
     mes: str | None = None
+    # --- facetas que funcionam sem pixel ------------------------------------
+    # Este acervo tem ~95% de registros sem arquivo legível (D-028): busca
+    # semântica e reconhecimento alcançam a minoria. O que alcança TUDO é o
+    # metadado — câmera, lugar e o que alguém escreveu sobre a foto.
+    #
+    # `camera` casa contra make e model juntos, não contra uma coluna: o dono
+    # pensa "a 5D", não "Canon" + "Canon EOS 5D Mark III".
+    camera: str | None = None
+    pais: str | None = None
+    cidade: str | None = None
+    # Palavra-chave do namespace unificado — a mesma que o `.lrcat` e o `.xmp`
+    # alimentam sem duplicar (`metadata/base.py:NAMESPACE_CURADORIA`).
+    palavra_chave: str | None = None
 
 
 class MediaRepository:
@@ -143,9 +159,20 @@ class MediaRepository:
             stmt = select(MediaFile)
         if filters.busca:
             like = f"%{filters.busca}%"
-            stmt = stmt.where(
-                or_(MediaFile.nome.ilike(like), MediaFile.caminho.ilike(like))
-            )
+            # Nome, caminho — e a curadoria. Procurar "Pantanal" e não achar
+            # a foto que alguém etiquetou como Pantanal é a busca falhando
+            # justamente onde o metadado é mais confiável que o nome de
+            # arquivo, que na maioria do acervo é `IMG_1234`.
+            stmt = stmt.where(or_(
+                MediaFile.nome.ilike(like),
+                MediaFile.caminho.ilike(like),
+                MediaFile.id.in_(
+                    select(MetadataEntry.media_id).where(
+                        MetadataEntry.namespace == NAMESPACE_CURADORIA,
+                        MetadataEntry.valor.ilike(like),
+                    )
+                ),
+            ))
         if filters.extensao:
             stmt = stmt.where(MediaFile.extensao == filters.extensao)
         if filters.mes:
@@ -162,6 +189,30 @@ class MediaRepository:
             stmt = stmt.where(MediaFile.trip_id == filters.trip_id)
         if filters.event_id is not None:
             stmt = stmt.where(MediaFile.event_id == filters.event_id)
+        if filters.camera:
+            # Contra make e model juntos: o dono pensa "a 5D", não "Canon" +
+            # "Canon EOS 5D Mark III". `coalesce` porque metade do acervo tem
+            # um dos dois nulo, e `NULL || 'texto'` em SQL é NULL — o mesmo
+            # defeito que apagava o caminho do Lightroom.
+            alvo = func.coalesce(MediaFile.make, "") + " " + func.coalesce(
+                MediaFile.model, ""
+            )
+            stmt = stmt.where(alvo.ilike(f"%{filters.camera}%"))
+        if filters.pais or filters.cidade:
+            lugar = select(Location.id)
+            if filters.pais:
+                lugar = lugar.where(Location.pais.ilike(f"%{filters.pais}%"))
+            if filters.cidade:
+                lugar = lugar.where(Location.cidade.ilike(f"%{filters.cidade}%"))
+            stmt = stmt.where(MediaFile.location_id.in_(lugar))
+        if filters.palavra_chave:
+            stmt = stmt.where(MediaFile.id.in_(
+                select(MetadataEntry.media_id).where(
+                    MetadataEntry.namespace == NAMESPACE_CURADORIA,
+                    MetadataEntry.chave == "palavra_chave",
+                    MetadataEntry.valor.ilike(f"%{filters.palavra_chave}%"),
+                )
+            ))
         if filters.lacuna:
             condicao = _condicao_lacuna(filters.lacuna)
             if condicao is not None:
@@ -200,6 +251,69 @@ class MediaRepository:
                 .order_by(expr.desc())
             )
             return [int(ano) for ano in session.scalars(stmt)]
+
+    def cameras(self, limite: int = 60) -> list[dict]:
+        """Câmeras do acervo, da mais usada para a menos.
+
+        Com contagem porque a lista sozinha não ajuda a escolher: num acervo
+        de doze câmeras, três respondem por 90% das fotos e as outras nove são
+        celulares de outras pessoas que mandaram foto por mensagem.
+        """
+        with self._factory() as session:
+            linhas = session.execute(
+                select(MediaFile.make, MediaFile.model, func.count())
+                .where(or_(
+                    MediaFile.make.is_not(None), MediaFile.model.is_not(None)
+                ))
+                .group_by(MediaFile.make, MediaFile.model)
+                .order_by(func.count().desc())
+                .limit(limite)
+            )
+            saida = []
+            for make, model, quantidade in linhas:
+                nome = nome_da_camera(make, model)
+                if nome:
+                    saida.append({"nome": nome, "quantidade": quantidade})
+            return saida
+
+    def paises(self) -> list[dict]:
+        with self._factory() as session:
+            linhas = session.execute(
+                select(Location.pais, func.count(MediaFile.id))
+                .join(MediaFile, MediaFile.location_id == Location.id)
+                .where(Location.pais.is_not(None))
+                .group_by(Location.pais)
+                .order_by(func.count(MediaFile.id).desc())
+            )
+            return [{"nome": p, "quantidade": n} for p, n in linhas]
+
+    def palavras_chave(self, limite: int = 80) -> list[dict]:
+        """O que alguém escreveu sobre as fotos, do mais frequente ao menos.
+
+        Vem do namespace unificado, então "Selected" aparece uma vez mesmo
+        chegando pelo `.lrcat` e pelo `.xmp` ao mesmo tempo.
+
+        Os níveis intermediários de hierarquia entram junto do caminho
+        completo ("Viagens|2019|Patagônia" e "Patagônia"), o que é
+        proposital: quem filtra procura o termo, quem lê a lista quer ver a
+        organização que existia.
+        """
+        with self._factory() as session:
+            linhas = session.execute(
+                select(MetadataEntry.valor, func.count(func.distinct(
+                    MetadataEntry.media_id
+                )))
+                .where(
+                    MetadataEntry.namespace == NAMESPACE_CURADORIA,
+                    MetadataEntry.chave == "palavra_chave",
+                )
+                .group_by(MetadataEntry.valor)
+                .order_by(func.count(func.distinct(
+                    MetadataEntry.media_id
+                )).desc())
+                .limit(limite)
+            )
+            return [{"nome": v, "quantidade": n} for v, n in linhas]
 
     def linha_do_tempo(self, filters: MediaFilters) -> list[dict]:
         """Quantas fotos por mês, no recorte atual e na ordem da grade.

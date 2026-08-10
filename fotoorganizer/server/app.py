@@ -574,6 +574,10 @@ def create_app(
         ordenacao: str = "data_desc",
         alcance: str = "tudo",
         mes: str | None = None,
+        camera: str | None = None,
+        pais: str | None = None,
+        cidade: str | None = None,
+        palavra_chave: str | None = None,
         offset: int = 0,
         limit: int = 200,
     ) -> dict:
@@ -585,6 +589,8 @@ def create_app(
             busca=busca, extensao=extensao, source_id=source_id,
             ano=ano, trip_id=trip_id, event_id=event_id, lacuna=lacuna,
             ordenacao=ordenacao, alcance=alcance, mes=mes,
+            camera=camera, pais=pais, cidade=cidade,
+            palavra_chave=palavra_chave,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
@@ -601,7 +607,15 @@ def create_app(
 
     @app.get("/api/midia/filtros")
     def filtros_midia() -> dict:
-        return {"extensoes": media_repo.extensoes(), "anos": media_repo.anos()}
+        """Os valores que existem no acervo, para a UI oferecer em vez de
+        pedir que o usuário adivinhe o que digitar."""
+        return {
+            "extensoes": media_repo.extensoes(),
+            "anos": media_repo.anos(),
+            "cameras": media_repo.cameras(),
+            "paises": media_repo.paises(),
+            "palavras_chave": media_repo.palavras_chave(),
+        }
 
     @app.get("/api/midia/linha-do-tempo")
     def linha_do_tempo(
