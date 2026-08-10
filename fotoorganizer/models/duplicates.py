@@ -16,6 +16,13 @@ class DuplicateLevel(enum.StrEnum):
     # Frames da mesma câmera a segundos de distância: rajada/variações de
     # uma cena, não cópias — o usuário escolhe o melhor, não "remove dups".
     SEQUENCIA = "sequencia"
+    # RAW e JPEG do MESMO clique: `IMG_1234.CR3` ao lado de `IMG_1234.JPG`.
+    # Têm o mesmo phash, então caíam em CONTEUDO ou VISUAL e apareciam como
+    # cópia a resolver — e resolver ali significa escolher uma, o que num par
+    # de revelação é decisão errada por construção: o RAW é o negativo e o
+    # JPEG é a cópia de trabalho, os dois valem, e o dono quase sempre quer
+    # os dois. Mesmo motivo pelo qual SEQUENCIA existe.
+    VARIANTE = "variante"
 
 
 class DuplicateRole(enum.StrEnum):

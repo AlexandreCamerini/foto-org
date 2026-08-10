@@ -571,3 +571,64 @@ def test_principal_herda_o_metadado_que_so_a_versao_tinha(migrated_engine):
             select(MetadataEntry).where(MetadataEntry.media_id == 2)
         ).all()
         assert len(restantes) == 3
+
+
+def _midia_variante(id_, nome, *, data=None, make="Canon", model="R5"):
+    media = _midia_solta(id_, nome, "/fotos")
+    media.extensao = nome.rsplit(".", 1)[-1].lower()
+    media.data_capturada = data or datetime(2020, 5, 1, 10, 0, 0)
+    media.make, media.model = make, model
+    return media
+
+
+def test_raw_e_jpeg_do_mesmo_clique_sao_variante_nao_duplicata():
+    """O RAW é o negativo e o JPEG é a cópia de trabalho: o dono quase sempre
+    quer os dois. Apresentar como duplicata pede uma escolha que está errada
+    por construção — mesmo motivo pelo qual SEQUENCIA existe."""
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    par = [_midia_variante(1, "IMG_1234.CR3"),
+           _midia_variante(2, "IMG_1234.JPG")]
+    assert _eh_variante_de_revelacao(par) is True
+
+
+def test_duas_copias_do_mesmo_raw_nao_sao_variante():
+    """Mesma extensão em pastas diferentes é cópia, não variante — continua
+    caindo em CONTEUDO, que é onde deve cair."""
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    copias = [_midia_variante(1, "IMG_1234.CR3"),
+              _midia_variante(2, "IMG_1234.CR3")]
+    assert _eh_variante_de_revelacao(copias) is False
+
+
+def test_jpeg_e_png_sem_raw_nao_e_variante():
+    """Sem RAW no grupo não há par de revelação: são dois exports."""
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    exports = [_midia_variante(1, "IMG_1234.JPG"),
+               _midia_variante(2, "IMG_1234.PNG")]
+    assert _eh_variante_de_revelacao(exports) is False
+
+
+def test_nomes_base_diferentes_nao_sao_variante():
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    outros = [_midia_variante(1, "IMG_1234.CR3"),
+              _midia_variante(2, "IMG_9999.JPG")]
+    assert _eh_variante_de_revelacao(outros) is False
+
+
+def test_variante_vence_rajada_na_classificacao():
+    """Um par RAW+JPEG é sempre da mesma câmera no mesmo segundo, então
+    casaria como rajada também — e 'rajada' convida a escolher o melhor
+    frame, que aqui não é a pergunta."""
+    from fotoorganizer.duplicates.detector import (
+        _eh_rajada,
+        _eh_variante_de_revelacao,
+    )
+
+    par = [_midia_variante(1, "IMG_1234.CR3"),
+           _midia_variante(2, "IMG_1234.JPG")]
+    assert _eh_rajada(par) is True            # casaria nos dois
+    assert _eh_variante_de_revelacao(par) is True

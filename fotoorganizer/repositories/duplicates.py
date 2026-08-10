@@ -22,6 +22,7 @@ _NIVEL_ROTULO = {
     DuplicateLevel.CONTEUDO: "Mesmo conteúdo",
     DuplicateLevel.VISUAL: "Parecidos",
     DuplicateLevel.SEQUENCIA: "Sequência (rajada)",
+    DuplicateLevel.VARIANTE: "RAW + JPEG do mesmo clique",
 }
 
 
