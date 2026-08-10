@@ -34,6 +34,51 @@
   --color-erro: #a8615a;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
     sans-serif;
+
+  /* --- Escala tipográfica ------------------------------------------------
+     Três degraus, e são os três que a interface já usa: `text-[11px]` aparece
+     12 vezes, `text-[15px]` 4, e 13px é o corpo definido no <html> abaixo.
+     Valor arbitrário entre colchetes é decisão tomada de novo a cada uso —
+     nomear é o que impede o quarto tamanho de entrar sem ninguém decidir.
+
+     Nomes próprios em vez de `sm`/`base`/`lg` de propósito: `--text-base` é
+     um token do próprio Tailwind (1rem = 16px), e redefini-lo mudaria o
+     significado de `text-base` em todo lugar. Estes três criam utilitários
+     novos e não mexem com os que já existem. */
+  --text-micro: 11px;
+  --text-corpo: 13px;
+  --text-realce: 15px;
+
+  /* --- Raio ---------------------------------------------------------------
+     Hoje há quatro valores sem regra (`rounded-md` 61×, `rounded` 21×,
+     `rounded-sm`, e 6px/5px/4px soltos no CSS). Dois bastam para o que o app
+     desenha: controle e superfície. Pill continua sendo `rounded-full`.
+
+     6px é o raio dominante da referência de arte (docs/REFERENCIAS_DESIGN.md)
+     e o do controle padrão do macOS — a mesma medida por dois caminhos. */
+  --radius-controle: 6px;
+  --radius-painel: 8px;
+
+  /* Easing de saída. `--ease-*` é namespace de tema: vira `ease-saida` e só
+     é emitido quando alguma classe o usar. */
+  --ease-saida: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Motion ---------------------------------------------------------------
+   Fora do @theme de propósito. O Tailwind 4 remove do CSS final todo token do
+   @theme sem consumidor — medido: destes tokens novos, só sobrou o que casou
+   com um valor que ele já emitia. Isso é ótimo para `--text-*` e `--radius-*`,
+   que voltam sozinhos quando uma classe os usar, e é fatal para quem é lido
+   por `var()`: `duration-[var(--dur-micro)]` compila, e em runtime a variável
+   não existe. Duração não tem namespace de tema no Tailwind 4, então o lugar
+   dela é aqui.
+
+   Os degraus são os medidos na referência: 150ms é o padrão, e a assimetria é
+   deliberada — aparecer é evento (250ms), desaparecer é sair do caminho. */
+:root {
+  --dur-micro: 100ms;
+  --dur-padrao: 150ms;
+  --dur-entrada: 250ms;
 }
 
 html,
