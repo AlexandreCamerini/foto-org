@@ -245,6 +245,74 @@ B5–B10), e toda a faixa C.
 
 ---
 
+---
+
+# Resultado da execução (2026-08-10)
+
+Todos os blocos foram executados. `685 passed` (Python), `102 passed`
+(webapp), `tsc` limpo. Onze commits em `refactor/design-port`.
+
+| Bloco | Situação | Commit |
+|---|---|---|
+| 1 — tokens | feito | `83a6012` |
+| 2 — primitivo | feito, **1 primitivo em vez de 3** | `4f81329` |
+| 3 — migrar controles | feito, **37 de 59**, o resto não é controle | `a692755` |
+| 4 — A1 + A2 | feito, **sem flag** (ver abaixo) | `8b7135d` |
+| 5 — A8 + A9 | feito | `99b2eab` |
+| 6 — A3 + A4 + unificação | feito | `89e056e` |
+| 7 — A7 | feito, sem migração | `639f7da` |
+| 7 — B4 | feito, sem migração | `b87fdcb` |
+| 7 — **B2** | **não feito: já existia** | — |
+
+Antes disso, quatro defeitos de fonte corrigidos (`a18ce85`, `d0325ba`).
+
+## Onde o plano errou, e o que o código disse
+
+**B2 já estava implementado.** O plano o listava como trabalho a fazer, com
+migração e risco R6 (quebrar `RetomarScan`). A leitura do código mostrou o
+mecanismo inteiro em pé:
+
+- `ScanSession` persiste status, checkpoint, contadores e versão do scanner;
+- `scanner.py:123` carimba como `INTERROMPIDO` toda sessão `RODANDO` sem
+  processo por trás, no boot;
+- o scanner pula arquivo inalterado comparando a assinatura lida **do banco** —
+  isso já é "estado do pipeline no catálogo", só distribuído em colunas
+  (`hash_perceptual`, `hash_sha256`, `indexado_em`) em vez de concentrado numa
+  tabela;
+- `scanner/reconciliacao.py` confere sem esperar scan manual;
+- a UI consome por `/api/scan/interrompidos`.
+
+O que o Immich concentra em `asset_job_status` está aqui distribuído. Concentrar
+seria refactor sem ganho funcional, pagando o risco R6 por nada.
+
+**O risco R1 não se materializou**, e por motivo estrutural: nem o subsegundo
+nem o fuso tocam a hora de parede, que é o que ordena a grade e agrupa evento e
+viagem. Por isso A1+A2 saíram sem flag e sem mecanismo de reabertura de
+sugestões. A decisão do dono (reabrir, não congelar) fica registrada para a
+próxima mudança que de fato desloque a hora.
+
+**`GPSDateTime` ficou fora da precedência de data**, contra o que o inventário
+sugeria ao copiar a ordem do Immich: ela é UTC, e na coluna de hora de parede
+reintroduziria o defeito do Takeout corrigido em `a18ce85`. O Immich pode usá-la
+porque tem coluna de zona.
+
+**Nenhuma migração de schema foi necessária.** A7 e B4 foram desenhados para
+caber no que existe — identidade de captura na base bruta, nível novo numa
+coluna sem CHECK.
+
+## O que ficou de fora, e continua de fora
+
+Faixa B não selecionada (B1, B3, B5–B10) e faixa C inteira. Do que foi
+selecionado, nada ficou pendente.
+
+Dívida declarada e não paga, como previsto na §3.2: modal, tabela, menu e toast
+seguem ad-hoc; não há teste que falhe se alguém escrever `bg-erro` sem `/10`; a
+escala de tipografia legalizou o `15px` herdado de Linear; e `tz_estimado`
+continua pendente — A2 não resolve fuso `+00:00` real, que segue
+indistinguível de desconhecido.
+
+---
+
 ## O que acontece na Fase 4
 
 Ao aprovar: bloco por bloco, diff impresso, checkpoint entre blocos, sem
