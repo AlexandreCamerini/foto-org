@@ -486,3 +486,42 @@ def test_referencia_doa_gps_para_foto_de_camera(importer, tmp_path):
     assert resultado["herancas_gps"] >= 1
     # Só a foto de câmera vira sugestão; referência não tem destino.
     assert resultado["sugestoes"] == 1
+
+
+def test_curadoria_do_catalogo_externo_nao_duplica_a_do_arquivo(importer):
+    """O ponto onde a leitura do Lightroom deixa de contar duas vezes.
+
+    O mesmo "Selected" chega pelo `.lrcat` importado como fonte e pelo `.xmp`
+    que o mesmo Aftershoot gravou ao lado do arquivo. São a mesma afirmação da
+    mesma origem; somar as duas inflaria a confiança de uma decisão que tem
+    uma fonte só."""
+    from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
+
+    factory, imp = importer
+    with factory() as session:
+        session.add(Source(id=1, caminho="/lr", tipo=SourceType.LIGHTROOM))
+        media = MediaFile(
+            id=1, source_id=1, caminho="lightroom://U-1", pasta="", nome="a.cr3",
+            extensao="cr3", tamanho=0,
+        )
+        session.add(media)
+        # O que o extrator já gravou ao ler o `.xmp` ao lado do arquivo.
+        session.add(MetadataEntry(
+            media_id=1, namespace=NAMESPACE_CURADORIA,
+            chave="palavra_chave", valor="Selected",
+        ))
+        session.commit()
+
+        from fotoorganizer.sources.importer import _unificar_curadoria
+
+        _unificar_curadoria(session, media, ("Selected", "Patagônia"))
+        session.commit()
+
+        curadoria = [
+            e.valor for e in session.scalars(
+                select(MetadataEntry).where(
+                    MetadataEntry.namespace == NAMESPACE_CURADORIA
+                )
+            )
+        ]
+    assert sorted(curadoria) == ["Patagônia", "Selected"]  # "Selected" uma vez

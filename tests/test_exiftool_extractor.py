@@ -307,3 +307,83 @@ def test_offset_invalido_e_ignorado(bruto):
     from fotoorganizer.metadata.exiftool import _offset
 
     assert _offset(bruto) is None
+
+
+# --- sidecar .xmp (A3) e palavras-chave unificadas (A4) --------------------
+
+def test_sidecar_e_encontrado_nos_dois_padroes(tmp_path):
+    from fotoorganizer.metadata.exiftool import _sidecar_de
+
+    foto = tmp_path / "IMG_1.jpg"
+    foto.write_bytes(b"x")
+    assert _sidecar_de(foto) is None
+
+    adobe = tmp_path / "IMG_1.jpg.xmp"
+    adobe.write_text("<x/>")
+    assert _sidecar_de(foto) == adobe
+
+    adobe.unlink()
+    darktable = tmp_path / "IMG_1.xmp"
+    darktable.write_text("<x/>")
+    assert _sidecar_de(foto) == darktable
+
+
+def test_sidecar_vence_o_arquivo_e_leva_a_data_junto():
+    """Se o sidecar declara data, TODAS as datas do original saem — inclusive
+    o offset. Casar a data que o editor gravou com o fuso que a câmera gravou
+    produz um instante que nunca existiu, e o erro seria invisível."""
+    from fotoorganizer.metadata.exiftool import _fundir_sidecar
+
+    fundido = _fundir_sidecar(
+        {
+            "EXIF:DateTimeOriginal": "2019:07:14 14:00:00",
+            "EXIF:OffsetTimeOriginal": "+02:00",
+            "EXIF:Model": "Canon R5",
+        },
+        {"XMP:DateCreated": "2020-01-01T09:00:00", "XMP:Rating": "5"},
+    )
+    assert "EXIF:DateTimeOriginal" not in fundido
+    assert "EXIF:OffsetTimeOriginal" not in fundido
+    assert fundido["EXIF:Model"] == "Canon R5"       # o resto do original fica
+    assert fundido["XMPSidecar:Rating"] == "5"       # origem preservada
+    meta = ExifToolExtractor._converter(fundido)
+    assert meta.data_capturada == datetime(2020, 1, 1, 9, 0)
+    assert meta.data_capturada_utc is None           # o fuso saiu junto
+
+
+def test_sidecar_sem_data_nao_apaga_a_do_arquivo():
+    from fotoorganizer.metadata.exiftool import _fundir_sidecar
+
+    fundido = _fundir_sidecar(
+        {"EXIF:DateTimeOriginal": "2019:07:14 14:00:00"},
+        {"XMP:Rating": "4"},
+    )
+    assert fundido["EXIF:DateTimeOriginal"] == "2019:07:14 14:00:00"
+
+
+def test_palavras_chave_dos_quatro_formatos_sem_repetir():
+    """A mesma curadoria chega pelos quatro formatos quando o arquivo passou
+    por mais de um programa. Contar quatro vezes somaria confiança sobre uma
+    afirmação só — o que docs/CONFIANCA.md proíbe."""
+    meta = ExifToolExtractor._converter({
+        "XMP:TagsList": ["Viagens|2019|Patagônia"],
+        "XMP:HierarchicalSubject": ["Viagens|2019|Patagônia"],
+        "XMP:Subject": ["Patagônia", "Selected"],
+        "IPTC:Keywords": ["Patagônia"],
+    })
+    assert meta.palavras_chave == (
+        "Viagens|2019|Patagônia", "Viagens", "2019", "Patagônia", "Selected",
+    )
+
+
+def test_hierarquia_entra_inteira_e_por_nivel():
+    """O caminho completo responde 'onde isto estava organizado?'; cada nível
+    isolado é o termo que a classificação procura."""
+    meta = ExifToolExtractor._converter(
+        {"XMP:HierarchicalSubject": "Eventos|Casamento"}
+    )
+    assert meta.palavras_chave == ("Eventos|Casamento", "Eventos", "Casamento")
+
+
+def test_sem_palavra_chave_o_campo_fica_vazio():
+    assert ExifToolExtractor._converter({}).palavras_chave == ()

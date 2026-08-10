@@ -55,6 +55,11 @@ _GRUPOS = {
     "ICC_Profile": "icc",
     "QuickTime": "quicktime",
     "PNG": "png",
+    # Curadoria que veio do arquivo `.xmp` ao lado, não de dentro da foto.
+    # Namespace próprio para a pergunta "de onde veio?" continuar tendo
+    # resposta: nota escrita pelo Aftershoot num sidecar e nota gravada
+    # dentro do JPEG são fatos diferentes, com confiança diferente.
+    "XMPSidecar": "xmp_sidecar",
 }
 
 # `MakerNotes` fica FORA da base bruta de propósito (D-027). São ~259 campos
@@ -134,6 +139,131 @@ def _offset(bruto: str | None) -> timedelta | None:
         return None
     delta = timedelta(hours=horas, minutes=minutos)
     return -delta if sinal == "-" else delta
+
+
+# Tags de data do arquivo original. Quando o sidecar traz data, TODAS estas
+# saem: misturar a data que o editor gravou com o fuso que a câmera gravou
+# produz um instante que não existiu. É a mesma regra do Immich, e o motivo
+# é o mesmo.
+_TAGS_DE_DATA_DO_ORIGINAL = (
+    "EXIF:DateTimeOriginal", "EXIF:CreateDate", "EXIF:ModifyDate",
+    "Composite:SubSecDateTimeOriginal", "Composite:SubSecCreateDate",
+    "QuickTime:CreateDate", "IPTC:DateCreated",
+    "EXIF:OffsetTimeOriginal", "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime",
+)
+
+# Chaves de data que o sidecar pode trazer, na ordem em que o XMP as declara.
+_TAGS_DE_DATA_DO_SIDECAR = (
+    "XMP:DateTimeOriginal", "XMP:DateCreated", "XMP:CreateDate",
+)
+
+
+def _sidecar_de(caminho: Path) -> Path | None:
+    """O `.xmp` irmão, nos dois padrões que os editores usam.
+
+    605 destes existem no acervo e 599 carregam curadoria
+    (`docs/INVENTARIO_DE_SINAIS.md`) — nota, rótulo de cor e palavras-chave
+    hierárquicas escritas pelo Aftershoot. Nenhum era lido: o scanner enxerga
+    arquivo de imagem, e o `.xmp` fica ao lado sem nunca ser abrido junto.
+
+    `foto.jpg.xmp` é o padrão do Adobe; `foto.xmp` o do darktable e de parte
+    do fluxo do Lightroom. O primeiro que existir vence — procurar os dois e
+    fundir arriscaria juntar curadoria de dois editores diferentes.
+    """
+    candidatos = (
+        caminho.with_name(caminho.name + ".xmp"),
+        caminho.with_suffix(".xmp"),
+    )
+    for candidato in candidatos:
+        try:
+            if candidato.is_file():
+                return candidato
+        except OSError:
+            continue
+    return None
+
+
+def _fundir_sidecar(original: dict, sidecar: dict) -> dict:
+    """Tags do arquivo + tags do `.xmp`, com o sidecar vencendo.
+
+    O sidecar é mais novo por construção: ele existe porque alguém editou a
+    foto depois de ela sair da câmera, e não pôde (ou não quis) reescrever o
+    original. Onde os dois falam, quem fala por último tem razão.
+
+    A exceção que exige cuidado é a data. Se o sidecar declara QUALQUER data,
+    todas as datas do original saem junto — inclusive o offset de fuso. Casar
+    a data que o editor gravou com o fuso que a câmera gravou produziria um
+    instante que nunca existiu, e o erro seria invisível: as duas colunas
+    continuariam preenchidas e plausíveis.
+
+    As tags do sidecar entram na base bruta com grupo `XMPSidecar`, que o mapa
+    de namespaces manda para `xmp_sidecar` — sem isso, uma nota escrita pelo
+    Aftershoot ficaria indistinguível de uma escrita dentro do arquivo, e a
+    pergunta "de onde veio?" perderia a resposta.
+    """
+    fundido = dict(original)
+    tem_data = any(sidecar.get(t) for t in _TAGS_DE_DATA_DO_SIDECAR)
+    if tem_data:
+        for tag in _TAGS_DE_DATA_DO_ORIGINAL:
+            fundido.pop(tag, None)
+    for chave, valor in sidecar.items():
+        grupo, _, nome = chave.partition(":")
+        if grupo in ("SourceFile", "ExifTool", "File"):
+            continue
+        fundido[f"XMPSidecar:{nome}"] = valor
+        # O sidecar também responde pelas chaves XMP normais: é assim que a
+        # precedência chega em `_converter` sem ele precisar saber que existe
+        # um arquivo ao lado.
+        if grupo == "XMP":
+            fundido[chave] = valor
+    return fundido
+
+
+# Os quatro formatos de palavra-chave, em ordem de precedência. Os dois
+# primeiros carregam HIERARQUIA ("Viagens|2019|Patagônia"); os dois últimos
+# são lista plana. A ordem é a mesma do Immich, e por um motivo verificável:
+# quem escreve hierarquia escreve a lista plana junto, como redundância para
+# programas que não entendem hierarquia — então a hierarquia é o registro
+# completo e a lista plana é a versão degradada dele.
+_TAGS_DE_PALAVRA_CHAVE = (
+    "XMPSidecar:TagsList", "XMP:TagsList",
+    "XMPSidecar:HierarchicalSubject", "XMP:HierarchicalSubject",
+    "XMPSidecar:Subject", "XMP:Subject",
+    "IPTC:Keywords",
+)
+
+
+def _palavras_chave(dados: dict) -> tuple[str, ...]:
+    """Palavras-chave dos quatro formatos, unificadas e sem repetição.
+
+    A unificação é o ponto, não a leitura. O acervo tem catálogo do Lightroom
+    importado como fonte E os `.xmp` que o mesmo fluxo gravou no disco: o
+    mesmo "Selected" chega pelos dois caminhos. Somar os dois contaria duas
+    vezes a mesma afirmação de uma pessoa só, e confiança somada indevidamente
+    é o defeito que docs/CONFIANCA.md existe para impedir.
+
+    Cada nível da hierarquia entra separado além do caminho inteiro:
+    "Viagens|2019|Patagônia" também vale como "Patagônia", que é o termo que a
+    classificação procura. O caminho completo fica porque é o que responde
+    "onde isto estava organizado?".
+    """
+    vistas: dict[str, None] = {}
+    for tag in _TAGS_DE_PALAVRA_CHAVE:
+        bruto = dados.get(tag)
+        if not bruto:
+            continue
+        itens = bruto if isinstance(bruto, list) else [bruto]
+        for item in itens:
+            texto = str(item).strip()
+            if not texto:
+                continue
+            vistas.setdefault(texto, None)
+            if "|" in texto:
+                for parte in texto.split("|"):
+                    parte = parte.strip()
+                    if parte:
+                        vistas.setdefault(parte, None)
+    return tuple(vistas)
 
 
 def _numero(valor) -> float | None:
@@ -276,6 +406,18 @@ class ExifToolExtractor:
             log.warning("exiftool não respondeu por %s — usando fallback",
                         caminho.name)
             return self._fallback.extract(caminho)
+
+        sidecar = _sidecar_de(caminho)
+        if sidecar is not None:
+            try:
+                with self._lock:
+                    do_sidecar = self._conversar(sidecar)
+            except (OSError, ValueError) as exc:
+                log.warning("exiftool falhou no sidecar %s (%s) — ignorado",
+                            sidecar.name, exc)
+                self._proc, do_sidecar = None, None
+            if do_sidecar:
+                dados = _fundir_sidecar(dados, do_sidecar)
         return self._converter(dados)
 
     # -- conversão ----------------------------------------------------------
@@ -338,6 +480,7 @@ class ExifToolExtractor:
         # positiva e usá-la direto põe o Rio no hemisfério errado.
         meta.gps_lat = _numero(valor("Composite:GPSLatitude"))
         meta.gps_lon = _numero(valor("Composite:GPSLongitude"))
+        meta.palavras_chave = _palavras_chave(dados)
 
         for chave, bruto in dados.items():
             grupo, _, nome = chave.partition(":")

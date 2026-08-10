@@ -35,6 +35,23 @@ def data_plausivel(quando: datetime | None) -> bool:
     return quando <= datetime.now() + _FOLGA_DE_RELOGIO
 
 
+# Namespace unificado da curadoria humana: palavra-chave, nota e rótulo que
+# alguém escreveu sobre a foto, venha de onde vier.
+#
+# Existe porque a mesma afirmação chega por vários caminhos. "Selected" está
+# no `.lrcat` importado como fonte E no `.xmp` que o mesmo fluxo gravou ao
+# lado do arquivo; "Pantanal" pode estar no álbum do Apple Fotos e na
+# palavra-chave do IPTC. Gravar cada chegada no namespace da sua origem
+# preserva o "de onde veio" e faz a classificação contar a mesma coisa
+# duas vezes — confiança somada indevidamente, o defeito que
+# `docs/CONFIANCA.md` existe para impedir.
+#
+# A regra: o namespace de origem continua registrando o que aquela origem
+# disse; ESTE registra o conjunto, com cada termo uma vez só. Quem decide lê
+# daqui; quem pergunta "por quê?" lê de lá.
+NAMESPACE_CURADORIA = "curadoria"
+
+
 @dataclass(slots=True)
 class MediaMetadata:
     # Hora de parede da captura (naive) — o EXIF não tem fuso, e o pouco que
@@ -58,6 +75,16 @@ class MediaMetadata:
     gps_lon: float | None = None
     # Pares brutos relevantes (namespace, chave, valor) para metadata_entries.
     extras: list[tuple[str, str, str]] = field(default_factory=list)
+    # Palavras-chave que alguém escreveu sobre esta foto, de qualquer um dos
+    # quatro formatos que os editores usam, já unificadas e sem repetição.
+    #
+    # Existe para que a classificação não precise conhecer os quatro. O mesmo
+    # "Pantanal" pode chegar como `XMP:TagsList` (digiKam), como
+    # `XMP:HierarchicalSubject` (Lightroom), como `XMP:Subject` ou como
+    # `IPTC:Keywords` — e chega pelos quatro ao mesmo tempo quando o arquivo
+    # passou por mais de um programa. Contar isso como quatro sinais somaria
+    # confiança sobre uma afirmação só, que é o que docs/CONFIANCA.md proíbe.
+    palavras_chave: tuple[str, ...] = field(default=())
     erro: str | None = None
 
 

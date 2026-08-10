@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import ScannerSettings
 from fotoorganizer.metadata import MetadataExtractor
-from fotoorganizer.metadata.base import data_plausivel
+from fotoorganizer.metadata.base import NAMESPACE_CURADORIA, data_plausivel
 from fotoorganizer.models import MediaFile, MediaRole, MetadataEntry, Source
 from fotoorganizer.security.hashing import quick_signature
 from fotoorganizer.sources.base import ExternalAsset, ExternalCatalogProvider
@@ -357,6 +357,44 @@ class ExternalCatalogImporter:
                 media_id=media.id, namespace=namespace, chave=chave,
                 valor=valor,
             ))
+        _unificar_curadoria(session, media, asset.palavras_chave)
+
+
+def _unificar_curadoria(
+    session: Session, media: MediaFile, palavras: tuple[str, ...]
+) -> None:
+    """Junta a palavra-chave do catálogo externo à do arquivo, sem repetir.
+
+    Este é o ponto onde a leitura do Lightroom deixa de contar duas vezes. O
+    mesmo "Selected" chega por dois caminhos que nunca se encontraram: o
+    `.lrcat` importado como fonte, e o `.xmp` que o mesmo fluxo gravou ao lado
+    do arquivo e que o extrator passou a ler. São a mesma afirmação da mesma
+    origem — o Aftershoot rodou uma vez e escreveu nos dois lugares — e somar
+    as duas inflaria a confiança de uma decisão que tem uma fonte só.
+
+    O namespace da fonte continua guardando o que aquela fonte disse: é ele
+    que responde "de onde veio?". Aqui fica o conjunto, com cada termo uma vez,
+    que é o que a classificação lê.
+    """
+    if not palavras:
+        return
+    ja_tem = {
+        valor for (valor,) in session.execute(
+            select(MetadataEntry.valor).where(
+                MetadataEntry.media_id == media.id,
+                MetadataEntry.namespace == NAMESPACE_CURADORIA,
+                MetadataEntry.chave == "palavra_chave",
+            )
+        )
+    }
+    for palavra in palavras:
+        if palavra in ja_tem:
+            continue
+        ja_tem.add(palavra)
+        session.add(MetadataEntry(
+            media_id=media.id, namespace=NAMESPACE_CURADORIA,
+            chave="palavra_chave", valor=palavra,
+        ))
 
 
 def _com_o_fuso_do_catalogo(
