@@ -14,6 +14,7 @@ from fotoorganizer.models import (
     DuplicateMember,
     DuplicateRole,
     MediaFile,
+    MetadataEntry,
 )
 
 _NIVEL_ROTULO = {
@@ -56,6 +57,47 @@ class GroupRow:
         """Mesma foto presente em mais de uma fonte é vínculo entre
         catálogos (âncora de correlação), não só espaço a recuperar."""
         return len({m.source_id for m in self.membros})
+
+
+def _herdar_metadados(
+    session: Session, principal_id: int, versoes: list[int]
+) -> None:
+    """A principal absorve o metadado que só as versões tinham.
+
+    Escolher a principal não descarta as outras — o invariante 8 proíbe — mas
+    tira as versões da grade, da revisão e do plano. Se o que sai levasse
+    junto a única entrada de GPS ou de álbum do grupo, a escolha teria custado
+    informação, e é justamente a informação que este catálogo existe para
+    guardar. O Immich faz o mesmo ao resolver duplicata (álbum, favorito,
+    nota, descrição); aqui a regra é mais simples e mais geral: qualquer par
+    (namespace, chave) que a principal não tenha.
+
+    Só ACRESCENTA. Onde as duas sabem a mesma chave, a da principal fica —
+    ela é a referência de trabalho, e sobrescrever com o valor de quem está
+    saindo inverteria a decisão que o usuário acabou de tomar. As entradas
+    das versões continuam onde estão: nada é apagado.
+    """
+    if not versoes:
+        return
+    existentes = {
+        (ns, chave) for ns, chave in session.execute(
+            select(MetadataEntry.namespace, MetadataEntry.chave)
+            .where(MetadataEntry.media_id == principal_id)
+        )
+    }
+    for entrada in session.scalars(
+        select(MetadataEntry)
+        .where(MetadataEntry.media_id.in_(versoes))
+        .order_by(MetadataEntry.media_id, MetadataEntry.id)
+    ):
+        chave = (entrada.namespace, entrada.chave)
+        if chave in existentes:
+            continue
+        existentes.add(chave)
+        session.add(MetadataEntry(
+            media_id=principal_id, namespace=entrada.namespace,
+            chave=entrada.chave, valor=entrada.valor,
+        ))
 
 
 class DuplicateRepository:
@@ -112,13 +154,16 @@ class DuplicateRepository:
         """
         with self._factory() as session:
             self._marcar_decisao_humana(session, group_id)
+            versoes: list[int] = []
             for membro in session.scalars(
                 select(DuplicateMember).where(DuplicateMember.group_id == group_id)
             ):
-                membro.papel = (
-                    DuplicateRole.PRINCIPAL if membro.media_id == media_id
-                    else DuplicateRole.VERSAO
-                )
+                if membro.media_id == media_id:
+                    membro.papel = DuplicateRole.PRINCIPAL
+                else:
+                    membro.papel = DuplicateRole.VERSAO
+                    versoes.append(membro.media_id)
+            _herdar_metadados(session, media_id, versoes)
             session.commit()
 
     def ignorar_grupo(self, group_id: int) -> None:

@@ -25,7 +25,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Callable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from fotoorganizer.duplicates.phash import BKTree, calcular_phash
@@ -36,6 +36,7 @@ from fotoorganizer.models import (
     DuplicateMember,
     DuplicateRole,
     MediaFile,
+    MetadataEntry,
 )
 from fotoorganizer.security.hashing import sha256_full
 from fotoorganizer.thumbnails import ThumbnailCache
@@ -58,6 +59,23 @@ def _eh_rajada(membros) -> bool:
         return False
     datas.sort()
     return all(b - a <= GAP_RAJADA for a, b in zip(datas, datas[1:]))
+
+
+def _riqueza_de_metadados(session: Session, membros) -> dict[int, int]:
+    """`media_id` → quantas entradas de metadado o registro tem.
+
+    Uma consulta agregada para o grupo inteiro, não uma por membro: grupos
+    exatos são milhares num acervo grande, e N+1 aqui apareceria no relógio.
+    """
+    ids = [m.id for m in membros]
+    if not ids:
+        return {}
+    linhas = session.execute(
+        select(MetadataEntry.media_id, func.count())
+        .where(MetadataEntry.media_id.in_(ids))
+        .group_by(MetadataEntry.media_id)
+    )
+    return {media_id: n for media_id, n in linhas}
 
 
 class DuplicateDetector:
@@ -203,7 +221,9 @@ class DuplicateDetector:
         # (qual versão é a boa, qual frame é o melhor) e continuam INDEFINIDO
         # até um clique humano.
         principal = (
-            escolher_principal_automatico(membros)
+            escolher_principal_automatico(
+                membros, _riqueza_de_metadados(session, membros)
+            )
             if nivel == DuplicateLevel.EXATO else None
         )
         if principal is not None:

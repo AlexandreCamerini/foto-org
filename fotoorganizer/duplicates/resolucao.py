@@ -30,16 +30,38 @@ def _profundidade(pasta: str) -> int:
     return len([parte for parte in pasta.split("/") if parte])
 
 
-def _pontuacao(media: MediaFile) -> tuple[int, int, int, int]:
+def _pontuacao(
+    media: MediaFile, metadados: dict[int, int] | None = None
+) -> tuple[int, int, int, int, int]:
     fonte_externa = 0 if media.source.tipo == SourceType.PASTA else 1
+    # Quantidade de metadado conhecido, como penúltimo desempate. A ideia vem
+    # do Immich, que pré-seleciona a duplicata a manter por tamanho em bytes e
+    # por contagem de campos EXIF; o tamanho não serve aqui — num grupo EXATO
+    # os bytes são idênticos por definição — mas a contagem serve, e serve
+    # mais: neste acervo o metadado É o ativo, e a mesma foto vista por duas
+    # fontes pode ter chegado mais rica de um lado.
+    #
+    # Entra ANTES do `id` e depois de todo o resto de propósito: não muda
+    # nenhuma decisão que os critérios anteriores já resolviam bem, só troca
+    # um desempate arbitrário (o menor id, que é ordem de indexação) por um
+    # com significado.
+    riqueza = -(metadados or {}).get(media.id, 0)
     return (
         fonte_externa,
         -_profundidade(media.pasta),
         1 if _generico(media.nome) else 0,
+        riqueza,
         media.id,
     )
 
 
-def escolher_principal_automatico(membros: list[MediaFile]) -> MediaFile:
-    """O membro preferido do grupo — vira PRINCIPAL; os demais, VERSAO."""
-    return min(membros, key=_pontuacao)
+def escolher_principal_automatico(
+    membros: list[MediaFile], metadados: dict[int, int] | None = None
+) -> MediaFile:
+    """O membro preferido do grupo — vira PRINCIPAL; os demais, VERSAO.
+
+    `metadados` mapeia `media_id` → quantidade de entradas de metadado. É
+    opcional: sem ele a regra é exatamente a de antes, e quem chama sem contar
+    nada continua funcionando.
+    """
+    return min(membros, key=lambda m: _pontuacao(m, metadados))
