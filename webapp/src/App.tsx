@@ -67,6 +67,9 @@ export default function App() {
   // que estado isso está?", não "me mostre a grade".
   const [aba, setAba] = useState<Aba>("Panorama");
   const [fonte, setFonte] = useState<number | null>(null);
+  // Recorte pela árvore do disco. Ortogonal à fonte: uma fonte pode abranger
+  // vários volumes, e uma pasta pode ter chegado por mais de uma fonte.
+  const [pasta, setPasta] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState("data_desc");
   const [zoom, setZoom] = useState(160);
@@ -102,6 +105,7 @@ export default function App() {
     mes,
     ano: recorte?.ano,
     extensao: recorte?.extensao,
+    pasta: pasta ?? undefined,
     ordenacao,
   };
   const midia = useMidia(filtros);
@@ -210,7 +214,20 @@ export default function App() {
 
       <div className="flex min-h-0 flex-1">
         {sidebarVisivel && ABAS_COM_FONTE.includes(aba) && (
-          <Sidebar fonteAtual={fonte} onSelecionar={setFonte} job={job} />
+          <Sidebar
+            fonteAtual={fonte}
+            onSelecionar={setFonte}
+            pastaAtual={pasta}
+            onSelecionarPasta={(p) => {
+              setPasta(p);
+              // Escolher pasta é escolher um conjunto: manter a seleção de
+              // uma foto que pode não estar mais na grade deixaria o inspetor
+              // descrevendo algo que sumiu da tela.
+              setSelIndex(null);
+              if (p) setAba("Biblioteca");
+            }}
+            job={job}
+          />
         )}
 
         <main className="flex min-w-0 flex-1 flex-col">

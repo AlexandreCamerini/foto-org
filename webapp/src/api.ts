@@ -137,6 +137,26 @@ export interface FiltrosMidia {
   alcance?: string;
   /** "2026-05" — a âncora temporal salta filtrando, não rolando. */
   mes?: string;
+  /** Prefixo de pasta: a pasta exata e tudo abaixo dela. */
+  pasta?: string;
+  camera?: string;
+  pais?: string;
+  cidade?: string;
+  palavra_chave?: string;
+}
+
+/** Um nível da árvore de pastas do disco. */
+export interface NivelDePastas {
+  caminho: string;
+  /** Fotos soltas na própria pasta, fora das subpastas. */
+  aqui: number;
+  filhos: {
+    nome: string;
+    caminho: string;
+    /** Recursivo: inclui o que está nas subpastas. */
+    total: number;
+    alcancaveis: number;
+  }[];
 }
 
 export interface MesDaLinha {
@@ -451,7 +471,17 @@ export const api = {
       { tipo },
     ),
   opcoesFiltros: () =>
-    json<{ extensoes: string[]; anos: number[] }>("/api/midia/filtros"),
+    json<{
+      extensoes: string[];
+      anos: number[];
+      cameras: { nome: string; quantidade: number }[];
+      paises: { nome: string; quantidade: number }[];
+      palavras_chave: { nome: string; quantidade: number }[];
+    }>("/api/midia/filtros"),
+  pastas: (prefixo?: string) =>
+    json<NivelDePastas>(
+      `/api/pastas${prefixo ? `?prefixo=${encodeURIComponent(prefixo)}` : ""}`,
+    ),
   panorama: () => json<PanoramaDados>("/api/panorama"),
   inventario: () => json<Inventario>("/api/inventario"),
   linhaDoTempo: (filtros: FiltrosMidia) => {

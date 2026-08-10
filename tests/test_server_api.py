@@ -1629,3 +1629,105 @@ def test_facetas_listam_o_que_existe_com_contagem(migrated_engine):
     assert cameras[0]["quantidade"] == 2      # a mais usada primeiro
     assert repo.paises() == [{"nome": "Brasil", "quantidade": 2}]
     assert repo.palavras_chave() == [{"nome": "Selected", "quantidade": 2}]
+
+
+# --- árvore de pastas (B7) -------------------------------------------------
+
+def _acervo_em_pastas(migrated_engine):
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.models import MediaFile, Source, SourceType
+
+    factory = create_session_factory(migrated_engine)
+    pastas = [
+        ("/Volumes/photo/2019/jan", 1),
+        ("/Volumes/photo/2019/fev", 2),
+        ("/Volumes/photo/2020", 3),
+        ("/Volumes/photo", 4),
+        # Vizinho perigoso: sem a barra no LIKE, casaria com /Volumes/photo.
+        ("/Volumes/photo-backup/2019", 5),
+        # Underscore é curinga em SQL — pasta assim é regra neste acervo.
+        ("/fotos/2025_05_24", 6),
+        ("/fotos/2025X05X24", 7),
+    ]
+    with factory() as session:
+        session.add(Source(id=1, caminho="/", tipo=SourceType.PASTA))
+        for pasta, id_ in pastas:
+            session.add(MediaFile(
+                id=id_, source_id=1, caminho=f"{pasta}/f.jpg", pasta=pasta,
+                nome="f.jpg", extensao="jpg", tamanho=10,
+            ))
+        session.commit()
+    return factory
+
+
+def test_arvore_devolve_um_nivel_com_contagem_recursiva(migrated_engine):
+    """Contagem só do nível direto faria a pasta de ano aparecer com zero —
+    o tipo de número que faz o usuário achar que o app perdeu as fotos."""
+    from fotoorganizer.repositories import MediaRepository
+
+    repo = MediaRepository(_acervo_em_pastas(migrated_engine))
+    nivel = repo.arvore_de_pastas("/Volumes/photo")
+    por_nome = {f["nome"]: f for f in nivel["filhos"]}
+    assert por_nome["2019"]["total"] == 2      # jan + fev, recursivo
+    assert por_nome["2020"]["total"] == 1
+    assert nivel["aqui"] == 1                  # a foto solta na própria pasta
+    # O vizinho de nome parecido não entra.
+    assert "photo-backup" not in por_nome
+
+
+def test_prefixo_nao_vaza_para_pasta_de_nome_parecido(migrated_engine):
+    """Sem a barra explícita, `/Volumes/photo` casaria com
+    `/Volumes/photo-backup`, que é outro disco."""
+    from fotoorganizer.repositories import MediaRepository
+    from fotoorganizer.repositories.media import MediaFilters
+
+    repo = MediaRepository(_acervo_em_pastas(migrated_engine))
+    assert repo.contar(MediaFilters(pasta="/Volumes/photo")) == 4
+    assert repo.contar(MediaFilters(pasta="/Volumes/photo-backup")) == 1
+
+
+def test_underscore_da_pasta_nao_vira_curinga(migrated_engine):
+    """`_` é curinga de um caractere em SQL: sem escapar, `2025_05_24`
+    casaria com `2025X05X24`."""
+    from fotoorganizer.repositories import MediaRepository
+    from fotoorganizer.repositories.media import MediaFilters
+
+    repo = MediaRepository(_acervo_em_pastas(migrated_engine))
+    assert repo.contar(MediaFilters(pasta="/fotos/2025_05_24")) == 1
+
+
+def test_alcancavel_conta_a_fonte_desmontada(migrated_engine):
+    """Uma pasta em volume desligado aparecia com 225 mil 'alcançáveis' ao
+    lado do Panorama dizendo 'fora de alcance — volume não montado'. Dois
+    números contraditórios na mesma tela é pior que número nenhum."""
+    from fotoorganizer.database import create_session_factory
+    from fotoorganizer.models import MediaFile, Source, SourceType
+    from fotoorganizer.repositories import MediaRepository
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        session.add(Source(id=1, caminho="/Volumes/photo",
+                           tipo=SourceType.PASTA, disponivel=False))
+        session.add(MediaFile(
+            id=1, source_id=1, caminho="/Volumes/photo/2019/a.jpg",
+            pasta="/Volumes/photo/2019", nome="a.jpg", extensao="jpg",
+            tamanho=10,
+        ))
+        session.commit()
+
+    nivel = MediaRepository(factory).arvore_de_pastas("/Volumes")
+    (photo,) = nivel["filhos"]
+    assert photo["total"] == 1
+    assert photo["alcancaveis"] == 0
+
+
+def test_raiz_da_arvore_lista_os_volumes(migrated_engine):
+    from fotoorganizer.repositories import MediaRepository
+
+    repo = MediaRepository(_acervo_em_pastas(migrated_engine))
+    raizes = repo.arvore_de_pastas()["filhos"]
+    por_nome = {f["nome"]: f for f in raizes}
+    assert {"Volumes", "fotos"} <= set(por_nome)
+    # O caminho devolvido tem de ser absoluto, senão o nível seguinte não casa.
+    assert por_nome["Volumes"]["caminho"] == "/Volumes"
+    assert por_nome["Volumes"]["total"] == 5

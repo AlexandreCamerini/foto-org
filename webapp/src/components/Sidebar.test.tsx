@@ -32,6 +32,8 @@ describe("Sidebar — importar Apple Fotos", () => {
     montar(
       <Sidebar
         fonteAtual={null}
+      pastaAtual={null}
+      onSelecionarPasta={() => {}}
         onSelecionar={vi.fn()}
         job={jobParado({ importarApple })}
       />,
@@ -56,6 +58,8 @@ describe("Sidebar — importar Apple Fotos", () => {
     montar(
       <Sidebar
         fonteAtual={null}
+      pastaAtual={null}
+      onSelecionarPasta={() => {}}
         onSelecionar={vi.fn()}
         job={jobParado({ importarApple })}
       />,
@@ -99,7 +103,9 @@ describe("Sidebar — reapontar fonte que mudou de lugar", () => {
 
   it("sem fonte movida, nenhuma affordance aparece", async () => {
     servirApi(ROTAS_BASE);
-    montar(<Sidebar fonteAtual={null} onSelecionar={vi.fn()} job={jobParado()} />);
+    montar(<Sidebar fonteAtual={null}
+      pastaAtual={null}
+      onSelecionarPasta={() => {}} onSelecionar={vi.fn()} job={jobParado()} />);
 
     await screen.findByText("Todas as fotos");
     expect(screen.queryByText(/mudou de lugar/)).not.toBeInTheDocument();
@@ -113,7 +119,9 @@ describe("Sidebar — reapontar fonte que mudou de lugar", () => {
       "/api/fontes/1/reapontar/preview": PREVIA,
     });
     const usuario = userEvent.setup();
-    montar(<Sidebar fonteAtual={null} onSelecionar={vi.fn()} job={jobParado()} />);
+    montar(<Sidebar fonteAtual={null}
+      pastaAtual={null}
+      onSelecionarPasta={() => {}} onSelecionar={vi.fn()} job={jobParado()} />);
 
     await usuario.click(await screen.findByText(/mudou de lugar/));
 
@@ -137,7 +145,9 @@ describe("Sidebar — reapontar fonte que mudou de lugar", () => {
       },
     });
     const usuario = userEvent.setup();
-    montar(<Sidebar fonteAtual={null} onSelecionar={vi.fn()} job={jobParado()} />);
+    montar(<Sidebar fonteAtual={null}
+      pastaAtual={null}
+      onSelecionarPasta={() => {}} onSelecionar={vi.fn()} job={jobParado()} />);
 
     await usuario.click(await screen.findByText(/mudou de lugar/));
     await screen.findByText(/45\.397 arquivo\(s\)/);
@@ -158,7 +168,9 @@ describe("Sidebar — reapontar fonte que mudou de lugar", () => {
       "/api/fontes/1/reapontar/preview": PREVIA,
     });
     const usuario = userEvent.setup();
-    montar(<Sidebar fonteAtual={null} onSelecionar={vi.fn()} job={jobParado()} />);
+    montar(<Sidebar fonteAtual={null}
+      pastaAtual={null}
+      onSelecionarPasta={() => {}} onSelecionar={vi.fn()} job={jobParado()} />);
 
     await usuario.click(await screen.findByText(/mudou de lugar/));
     await screen.findByText(/45\.397 arquivo\(s\)/);

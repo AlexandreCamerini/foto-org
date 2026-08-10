@@ -574,6 +574,7 @@ def create_app(
         ordenacao: str = "data_desc",
         alcance: str = "tudo",
         mes: str | None = None,
+        pasta: str | None = None,
         camera: str | None = None,
         pais: str | None = None,
         cidade: str | None = None,
@@ -590,7 +591,7 @@ def create_app(
             ano=ano, trip_id=trip_id, event_id=event_id, lacuna=lacuna,
             ordenacao=ordenacao, alcance=alcance, mes=mes,
             camera=camera, pais=pais, cidade=cidade,
-            palavra_chave=palavra_chave,
+            palavra_chave=palavra_chave, pasta=pasta,
         )
         limit = max(1, min(limit, 500))
         itens = media_repo.listar(filters, limit=limit, offset=offset)
@@ -600,6 +601,16 @@ def create_app(
             "offset": offset,
             "itens": [_media_json(m, fora) for m in itens],
         }
+
+    @app.get("/api/pastas")
+    def arvore_de_pastas(prefixo: str | None = None) -> dict:
+        """Um nível da árvore de pastas do disco.
+
+        Sem `prefixo`, devolve as raízes. Um nível por chamada — a árvore
+        inteira de 371 mil registros na rede seria o erro que a grade
+        virtualizada existe para evitar.
+        """
+        return media_repo.arvore_de_pastas(prefixo)
 
     @app.get("/api/midia/alcances")
     def alcances() -> list[dict]:
