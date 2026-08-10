@@ -110,6 +110,24 @@ def _condicao_lacuna(chave: str):
     return condicoes.get(chave)
 
 
+def _sob_a_pasta(prefixo: str):
+    """A pasta exata e tudo abaixo dela.
+
+    `like` com `%` só no fim, e a barra explícita no segundo termo: sem ela
+    `/Volumes/photo` casaria com `/Volumes/photo-backup`, que é outro disco.
+
+    `escape` porque `_` é curinga de um caractere em SQL e pasta com
+    underscore é regra, não exceção neste acervo (`2025_05_24`) — sem escapar,
+    `/fotos/2025_05_24` casaria também com `/fotos/2025X05X24`.
+    """
+    limpo = prefixo.rstrip("/")
+    seguro = limpo.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return or_(
+        MediaFile.pasta == limpo,
+        MediaFile.pasta.like(f"{seguro}/%", escape="\\"),
+    )
+
+
 @dataclass(frozen=True)
 class MediaFilters:
     busca: str | None = None
@@ -142,6 +160,10 @@ class MediaFilters:
     # Palavra-chave do namespace unificado — a mesma que o `.lrcat` e o `.xmp`
     # alimentam sem duplicar (`metadata/base.py:NAMESPACE_CURADORIA`).
     palavra_chave: str | None = None
+    # Prefixo de pasta: recorta a grade pela árvore do disco. Casa a pasta
+    # exata e tudo abaixo dela — clicar em `/Volumes/photo/2019` mostra o
+    # conteúdo direto e o dos meses dentro.
+    pasta: str | None = None
 
 
 class MediaRepository:
@@ -213,6 +235,8 @@ class MediaRepository:
                     MetadataEntry.valor.ilike(f"%{filters.palavra_chave}%"),
                 )
             ))
+        if filters.pasta:
+            stmt = stmt.where(_sob_a_pasta(filters.pasta))
         if filters.lacuna:
             condicao = _condicao_lacuna(filters.lacuna)
             if condicao is not None:
@@ -314,6 +338,85 @@ class MediaRepository:
                 .limit(limite)
             )
             return [{"nome": v, "quantidade": n} for v, n in linhas]
+
+    def arvore_de_pastas(
+        self, prefixo: str | None = None, limite: int = 400
+    ) -> dict:
+        """Um nível da árvore de pastas: os filhos diretos de `prefixo`.
+
+        Existe porque este acervo responde melhor à pergunta "onde isso
+        estava?" do que a "quando isso foi tirado?". São 225.914 registros num
+        volume que não está montado — para eles a pasta de origem é a única
+        pista de lugar que sobrou, e é ela que o `.lrcat` guarda mesmo com o
+        disco na gaveta.
+
+        Um nível por chamada, não a árvore inteira: 371 mil registros geram
+        dezenas de milhares de pastas, e mandar tudo de uma vez para a
+        interface montar a árvore seria repetir na rede o erro que a grade
+        virtualizada existe para evitar.
+
+        As contagens são recursivas — a pasta mostra quantas fotos há nela e
+        abaixo dela. Contagem só do nível direto faria uma pasta de ano
+        aparecer com zero, que é o tipo de número que faz o usuário achar que
+        o app perdeu as fotos dele.
+        """
+        raiz = (prefixo or "").rstrip("/")
+        with self._factory() as session:
+            if raiz:
+                condicao = _sob_a_pasta(raiz)
+                # O nome do filho direto é o que vem até a próxima barra
+                # depois do prefixo. Resolvido em SQL para não trazer 371 mil
+                # caminhos à memória só para cortar string.
+                resto = func.substr(MediaFile.pasta, len(raiz) + 2)
+            else:
+                condicao = MediaFile.pasta.is_not(None)
+                # Na raiz, o caminho absoluto começa com "/" e o primeiro
+                # segmento sairia vazio. Pular a barra inicial só quando ela
+                # existe: nem toda `pasta` do catálogo é absoluta — uma
+                # referência de catálogo externo pode ter caminho relativo.
+                resto = func.substr(
+                    MediaFile.pasta,
+                    func.iif(func.substr(MediaFile.pasta, 1, 1) == "/", 2, 1),
+                )
+            fim = func.instr(resto, "/")
+            nome = func.substr(
+                resto, 1, func.iif(fim > 0, fim - 1, func.length(resto))
+            )
+            # "Alcançável" tem TRÊS condições, não duas. Faltava a fonte
+            # estar montada: sem ela, uma pasta em volume desligado aparecia
+            # com 225 mil "alcançáveis" ao lado do Panorama dizendo "fora de
+            # alcance — volume não montado". Dois números contraditórios na
+            # mesma tela é pior que número nenhum.
+            fontes_fora = select(Source.id).where(Source.disponivel.is_(False))
+            linhas = session.execute(
+                select(nome, func.count(), func.count(MediaFile.id).filter(
+                    MediaFile.arquivo_offline.is_(False),
+                    MediaFile.arquivo_ausente.is_(False),
+                    MediaFile.source_id.not_in(fontes_fora),
+                ))
+                .where(condicao, MediaFile.pasta != "")
+                .group_by(nome)
+                .order_by(nome)
+                .limit(limite)
+            )
+            filhos = []
+            for nome_filho, total, alcancaveis in linhas:
+                if not nome_filho:
+                    continue
+                filhos.append({
+                    "nome": nome_filho,
+                    # Na raiz o "/" foi pulado para o segmento não sair vazio;
+                    # o caminho devolvido tem de voltar a ser absoluto, senão
+                    # o próximo nível não casa com nada.
+                    "caminho": f"{raiz}/{nome_filho}" if raiz else f"/{nome_filho}",
+                    "total": total,
+                    "alcancaveis": alcancaveis,
+                })
+            aqui = session.scalar(
+                select(func.count()).select_from(MediaFile)
+                .where(MediaFile.pasta == raiz)
+            ) if raiz else 0
+            return {"caminho": raiz, "aqui": aqui or 0, "filhos": filhos}
 
     def linha_do_tempo(self, filters: MediaFilters) -> list[dict]:
         """Quantas fotos por mês, no recorte atual e na ordem da grade.

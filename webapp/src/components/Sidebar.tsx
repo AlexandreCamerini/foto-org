@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api";
 import { rotulosDeFontes } from "../fontes";
+import ArvoreDePastas from "./ArvoreDePastas";
 import type { Job } from "../hooks/useJob";
 import Botao from "../ui/Botao";
 
@@ -15,10 +16,18 @@ const ICONE_TIPO: Record<string, string> = {
 interface Props {
   fonteAtual: number | null;
   onSelecionar: (sourceId: number | null) => void;
+  pastaAtual: string | null;
+  onSelecionarPasta: (pasta: string | null) => void;
   job: Job;
 }
 
-export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
+export default function Sidebar({
+  fonteAtual,
+  onSelecionar,
+  pastaAtual,
+  onSelecionarPasta,
+  job,
+}: Props) {
   const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
   // Custa um `diskutil` por fonte fora de alcance — não é `disponivel`
@@ -89,6 +98,16 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
           </div>
         ))}
       </nav>
+
+      {/* A árvore do disco divide a lateral com as fontes em vez de virar
+          uma aba própria: as duas respondem "de onde vem isso?", e separá-las
+          faria o dono escolher entre duas perguntas que ele faz junto. */}
+      <div className="min-h-0 flex-[1.2] border-t border-borda">
+        <ArvoreDePastas
+          pastaAtual={pastaAtual}
+          onSelecionar={onSelecionarPasta}
+        />
+      </div>
 
       {/* ações */}
       <div className="space-y-2 border-t border-borda px-3 py-2">
