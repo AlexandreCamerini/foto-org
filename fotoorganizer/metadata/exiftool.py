@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fotoorganizer.metadata.base import (
@@ -106,6 +107,33 @@ def _data(valor: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _offset(bruto: str | None) -> timedelta | None:
+    """`OffsetTimeOriginal` ("+02:00", "-03:00") → deslocamento do fuso.
+
+    É o fuso da captura DECLARADO pela câmera — não estimado, não inferido.
+    Estava sendo capturado e ignorado em 1.527 fotos do acervo
+    (`docs/INVENTARIO_DE_SINAIS.md`), enquanto `grouping/correlacao.py`
+    gastava estatística para adivinhar a deriva entre relógios.
+
+    "+00:00" é aceito como fato: a foto foi tirada em Greenwich (ou Lisboa no
+    inverno). O catálogo não consegue distinguir isso de "fuso desconhecido"
+    depois de gravado — as duas colunas ficam iguais nos dois casos — e essa
+    limitação já está declarada em `models/catalog.py`. Descartar o valor aqui
+    não resolveria nada e perderia a informação de quem realmente estava lá.
+    """
+    if not bruto:
+        return None
+    texto = str(bruto).strip()
+    m = re.fullmatch(r"([+-])(\d{2}):?(\d{2})", texto)
+    if not m:
+        return None
+    sinal, horas, minutos = m.group(1), int(m.group(2)), int(m.group(3))
+    if horas > 14 or minutos > 59:
+        return None
+    delta = timedelta(hours=horas, minutes=minutos)
+    return -delta if sinal == "-" else delta
 
 
 def _numero(valor) -> float | None:
@@ -260,16 +288,42 @@ class ExifToolExtractor:
             return None
 
         meta = MediaMetadata()
+        # Ordem de precedência da hora de PAREDE. As duas primeiras carregam
+        # subsegundo e são as mesmas datas das seguintes com mais precisão —
+        # 1.524 fotos do acervo têm `SubSecTimeOriginal` e ele estava sendo
+        # descartado (`docs/INVENTARIO_DE_SINAIS.md`). Subsegundo não muda o
+        # dia nem a hora: ele desempata rajada, onde seis fotos dividem o
+        # mesmo segundo e a ordem entre elas era arbitrária.
+        #
         # IPTC:DateCreated é a data em que a foto foi FEITA (padrão IIM) e
         # costuma sobreviver à edição que apaga o EXIF. Entra antes do
         # ModifyDate, que fala da edição, não do clique.
+        #
+        # `Composite:GPSDateTime` NÃO entra nesta lista, apesar de ser a data
+        # mais confiável do arquivo (vem do satélite, imune a relógio errado):
+        # ela é UTC, e esta coluna é hora de parede. Colocá-la aqui repetiria
+        # exatamente o defeito que o Takeout tinha — gravar um instante
+        # absoluto na coluna da hora local e deslocar a foto pelo tamanho do
+        # fuso. Ela entra abaixo, no lado certo.
         quando = _data(
-            valor("EXIF:DateTimeOriginal", "EXIF:CreateDate",
+            valor("Composite:SubSecDateTimeOriginal", "EXIF:DateTimeOriginal",
+                  "Composite:SubSecCreateDate", "EXIF:CreateDate",
                   "QuickTime:CreateDate", "XMP:DateCreated",
                   "IPTC:DateCreated", "EXIF:ModifyDate")
         )
         # Data impossível não entra na coluna; o valor bruto segue nos extras.
         meta.data_capturada = quando if data_plausivel(quando) else None
+
+        # O instante absoluto, quando o arquivo DECLARA o fuso da captura.
+        # Sem isto, `data_capturada_utc` era sempre igual à parede — a forma
+        # de dizer "não sei o fuso" — mesmo nas 1.527 fotos que sabiam.
+        #
+        # `-` porque o offset diz quanto o relógio local está À FRENTE de UTC:
+        # 14h em +02:00 são 12h UTC.
+        offset = _offset(valor("EXIF:OffsetTimeOriginal",
+                               "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime"))
+        if meta.data_capturada is not None and offset is not None:
+            meta.data_capturada_utc = meta.data_capturada - offset
         meta.make = valor("EXIF:Make", "XMP:Make")
         meta.model = valor("EXIF:Model", "XMP:Model")
         meta.lente = valor("EXIF:LensModel", "MakerNotes:LensType",

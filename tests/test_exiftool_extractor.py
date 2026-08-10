@@ -251,3 +251,59 @@ def test_data_antiga_continua_valendo():
         {"EXIF:DateTimeOriginal": "1962:03:15 10:00:00"}
     )
     assert meta.data_capturada == datetime(1962, 3, 15, 10, 0)
+
+
+def test_subsegundo_desempata_rajada_sem_mudar_a_hora():
+    """`SubSecDateTimeOriginal` vence `DateTimeOriginal` porque é a MESMA
+    data com mais precisão. Seis fotos de uma rajada dividem o segundo; sem
+    o subsegundo a ordem entre elas era arbitrária."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2025:11:08 01:16:32",
+        "Composite:SubSecDateTimeOriginal": "2025:11:08 01:16:32.87",
+    })
+    assert meta.data_capturada == datetime(2025, 11, 8, 1, 16, 32)
+
+
+def test_gps_datetime_nao_entra_como_hora_de_parede():
+    """`GPSDateTime` é a data mais confiável do arquivo e é UTC. Usá-la como
+    hora de parede deslocaria a foto pelo tamanho do fuso — o mesmo defeito
+    que o Takeout tinha."""
+    meta = ExifToolExtractor._converter({
+        "Composite:GPSDateTime": "2019:07:14 12:00:00Z",
+    })
+    assert meta.data_capturada is None
+
+
+def test_offset_declarado_vira_instante_absoluto():
+    """1.527 fotos do acervo declaram `OffsetTimeOriginal` e ele era jogado
+    fora, enquanto a correlação gastava estatística para adivinhar o fuso."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2019:07:14 14:00:00",
+        "EXIF:OffsetTimeOriginal": "+02:00",
+    })
+    assert meta.data_capturada == datetime(2019, 7, 14, 14, 0)
+    assert meta.data_capturada_utc == datetime(2019, 7, 14, 12, 0)
+
+
+def test_offset_negativo_e_sem_dois_pontos():
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2020:01:01 09:00:00",
+        "EXIF:OffsetTime": "-0300",
+    })
+    assert meta.data_capturada_utc == datetime(2020, 1, 1, 12, 0)
+
+
+def test_sem_offset_o_extrator_nao_inventa_instante():
+    """Igualdade entre os dois instantes é dita por quem GRAVA, nunca por um
+    palpite daqui — mesma regra do provider do Apple Fotos."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2020:01:01 09:00:00",
+    })
+    assert meta.data_capturada_utc is None
+
+
+@pytest.mark.parametrize("bruto", ["", None, "meio-dia", "+25:00", "+02:99"])
+def test_offset_invalido_e_ignorado(bruto):
+    from fotoorganizer.metadata.exiftool import _offset
+
+    assert _offset(bruto) is None
