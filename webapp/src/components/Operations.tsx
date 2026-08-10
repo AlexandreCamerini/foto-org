@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Plano, RelatorioDryRun } from "../api";
 import type { Job } from "../hooks/useJob";
+import Botao from "../ui/Botao";
 import TemplateEditor from "./TemplateEditor";
 
 const CORES_STATUS: Record<string, string> = {
@@ -120,13 +121,12 @@ export default function Operations({ job }: { job: Job }) {
           placeholder="Pasta de destino da biblioteca organizada…"
           className="w-96 rounded-md border border-borda bg-cartao px-2.5 py-1 outline-none placeholder:text-texto-3 focus:border-acento"
         />
-        <button
+        <Botao
           onClick={() => criar.mutate()}
           disabled={!destino.trim() || criar.isPending}
-          className="rounded-md border border-borda bg-cartao px-3 py-1 hover:border-acento disabled:opacity-50"
         >
           Criar plano
-        </button>
+        </Botao>
         {erro && <span className="text-erro">{erro}</span>}
       </div>
 
@@ -183,14 +183,15 @@ export default function Operations({ job }: { job: Job }) {
           ) : (
             <>
               <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
-                <button
+                <Botao
                   onClick={() => dryRun.mutate()}
                   disabled={dryRun.isPending || job.rodando}
-                  className="shrink-0 whitespace-nowrap rounded-md border border-borda bg-cartao px-3 py-1 hover:border-acento disabled:opacity-50"
+                  className="whitespace-nowrap"
                 >
                   {dryRun.isPending ? "Simulando…" : "Rodar dry-run"}
-                </button>
-                <button
+                </Botao>
+                <Botao
+                  variante="solido"
                   onClick={() =>
                     job.executarPlano(plano.id).catch((e: Error) =>
                       setErro(e.message),
@@ -204,18 +205,15 @@ export default function Operations({ job }: { job: Job }) {
                         ? "O dry-run não encontrou nenhum arquivo copiável"
                         : "Copia os arquivos para o destino"
                   }
-                  className="shrink-0 whitespace-nowrap rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90 disabled:opacity-40"
+                  className="whitespace-nowrap"
                 >
                   Copiar {plano.prontos ?? plano.total_itens - plano.concluidos}{" "}
                   arquivos
-                </button>
+                </Botao>
                 {executando && (
-                  <button
-                    onClick={() => job.cancelar()}
-                    className="rounded-md border border-borda px-3 py-1 text-erro hover:bg-cartao"
-                  >
+                  <Botao tom="erro" onClick={() => job.cancelar()}>
                     Cancelar
-                  </button>
+                  </Botao>
                 )}
                 <div className="flex-1" />
                 <span

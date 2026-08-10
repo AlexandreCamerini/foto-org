@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api";
 import type { Job } from "../hooks/useJob";
+import Botao from "../ui/Botao";
 
 /** Varreduras que morreram com o processo (app fechado, Mac desligado).
  *
@@ -44,7 +45,8 @@ export default function RetomarScan({ job }: { job: Job }) {
             )}
             {" — dá para retomar de onde parou."}
           </span>
-          <button
+          <Botao
+            tamanho="sm"
             onClick={() => void job.escanear(scan.caminho)}
             disabled={job.rodando || !scan.disponivel}
             title={
@@ -52,19 +54,21 @@ export default function RetomarScan({ job }: { job: Job }) {
                 ? "Varre de novo; o que já foi indexado é pulado"
                 : "O volume desta fonte não está montado agora"
             }
-            className="shrink-0 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao disabled:opacity-50"
+            className="border-acento text-acento hover:bg-cartao"
           >
             Retomar
-          </button>
-          <button
+          </Botao>
+          <Botao
+            variante="fantasma"
+            tamanho="sm"
             onClick={() =>
               setDispensados((atual) => new Set([...atual, scan.source_id]))
             }
             title="Esconder por enquanto (volta se o app reabrir)"
-            className="shrink-0 rounded px-1 text-texto-3 hover:text-texto"
+            className="px-1 text-texto-3"
           >
             ✕
-          </button>
+          </Botao>
         </div>
       ))}
     </div>
