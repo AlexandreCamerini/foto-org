@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { rotulosDeFontes } from "../fontes";
 import type { Job } from "../hooks/useJob";
+import Botao from "../ui/Botao";
 
 const ICONE_TIPO: Record<string, string> = {
   pasta: "📁",
@@ -78,13 +79,12 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
               )}
             </button>
             {mudouDeLugar.has(fonte.id) && (
-              <button
+              <Botao tom="atencao" tamanho="sm"
                 onClick={() => setReapontarId(fonte.id)}
                 title="O volume voltou noutro ponto de montagem — reapontar o catálogo sem recatalogar"
-                className="ml-1 shrink-0 rounded-md border border-atencao px-1.5 py-0.5 text-atencao hover:bg-cartao"
-              >
+            className="ml-1">
                 ↦ mudou de lugar
-              </button>
+              </Botao>
             )}
           </div>
         ))}
@@ -92,21 +92,17 @@ export default function Sidebar({ fonteAtual, onSelecionar, job }: Props) {
 
       {/* ações */}
       <div className="space-y-2 border-t border-borda px-3 py-2">
-        <button
+        <Botao tamanho="sm" cheio
           onClick={() => setModal("pasta")}
-          disabled={job.rodando}
-          className="w-full rounded-md border border-borda bg-cartao px-2 py-1 hover:border-acento disabled:opacity-50"
-        >
+          disabled={job.rodando}>
           Adicionar pasta…
-        </button>
+        </Botao>
         <div className="relative">
-          <button
+          <Botao tamanho="sm" cheio
             onClick={() => setMenuAberto((v) => !v)}
-            disabled={job.rodando}
-            className="w-full rounded-md border border-borda bg-cartao px-2 py-1 hover:border-acento disabled:opacity-50"
-          >
+            disabled={job.rodando}>
             Importar catálogo…
-          </button>
+          </Botao>
           {menuAberto && (
             <div className="absolute bottom-full left-0 z-10 mb-1 w-full rounded-md border border-borda bg-cartao shadow-lg">
               <button
@@ -248,19 +244,15 @@ function ModalReapontar({
           </>
         )}
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onFechar}
-            className="rounded-md px-3 py-1 text-texto-2 hover:bg-cartao"
-          >
+          <Botao variante="fantasma"
+            onClick={onFechar}>
             Cancelar
-          </button>
-          <button
+          </Botao>
+          <Botao variante="solido"
             onClick={() => confirmar.mutate()}
-            disabled={!previa || confirmar.isPending}
-            className="rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90 disabled:opacity-50"
-          >
+            disabled={!previa || confirmar.isPending}>
             {confirmar.isPending ? "Reapontando…" : "Reapontar"}
-          </button>
+          </Botao>
         </div>
       </div>
     </div>
@@ -288,18 +280,14 @@ function ModalAvisoApple({
           Ajustes → Privacidade e Segurança → Acesso Total ao Disco.
         </p>
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancelar}
-            className="rounded-md px-3 py-1 text-texto-2 hover:bg-cartao"
-          >
+          <Botao variante="fantasma"
+            onClick={onCancelar}>
             Cancelar
-          </button>
-          <button
-            onClick={onConfirmar}
-            className="rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90"
-          >
+          </Botao>
+          <Botao variante="solido"
+            onClick={onConfirmar}>
             Continuar
-          </button>
+          </Botao>
         </div>
       </div>
     </div>
@@ -332,18 +320,14 @@ function ModalCaminho({
           className="mb-3 w-full rounded-md border border-borda bg-cartao px-3 py-2 outline-none placeholder:text-texto-3 focus:border-acento"
         />
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancelar}
-            className="rounded-md px-3 py-1 text-texto-2 hover:bg-cartao"
-          >
+          <Botao variante="fantasma"
+            onClick={onCancelar}>
             Cancelar
-          </button>
-          <button
-            onClick={() => valor.trim() && onConfirmar(valor.trim())}
-            className="rounded-md bg-acento px-3 py-1 text-texto-invertido hover:opacity-90"
-          >
+          </Botao>
+          <Botao variante="solido"
+            onClick={() => valor.trim() && onConfirmar(valor.trim())}>
             Confirmar
-          </button>
+          </Botao>
         </div>
       </div>
     </div>

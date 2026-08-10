@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api, type Media } from "../api";
+import Botao from "../ui/Botao";
 
 interface Props {
   itens: Media[];
@@ -43,13 +44,14 @@ export default function Loupe({ itens, index, onNavegar, onFechar }: Props) {
         <span className="text-texto-3">
           espaço/Esc fecha · ←→ navegam · clique = 100%
         </span>
-        <button
+        <Botao
+          variante="fantasma"
+          tamanho="sm"
           onClick={onFechar}
-          className="rounded-md px-2 py-0.5 hover:bg-cartao"
           aria-label="Fechar"
         >
           ✕
-        </button>
+        </Botao>
       </header>
 
       <div

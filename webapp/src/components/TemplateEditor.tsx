@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api";
 import type { Job } from "../hooks/useJob";
+import Botao from "../ui/Botao";
 
 const CHAVE_TEMPLATE = ["configuracoes", "template"] as const;
 
@@ -122,13 +123,12 @@ export default function TemplateEditor({ job }: { job: Job }) {
           />
 
           <div className="mb-3 flex items-center gap-2">
-            <button
+            <Botao
               onClick={() => salvar.mutate(valor)}
               disabled={salvar.isPending || valor.trim() === ""}
-              className="rounded-md border border-borda bg-cartao px-3 py-1 hover:border-acento disabled:opacity-50"
             >
               {salvar.isPending ? "Salvando…" : "Salvar"}
-            </button>
+            </Botao>
             {erroSalvar && <span className="text-erro">{erroSalvar}</span>}
           </div>
 
@@ -142,7 +142,7 @@ export default function TemplateEditor({ job }: { job: Job }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-borda pt-2">
-            <button
+            <Botao
               onClick={regenerar}
               disabled={!semEdicaoPendente || job.rodando}
               title={
@@ -150,10 +150,10 @@ export default function TemplateEditor({ job }: { job: Job }) {
                   ? "Recria as sugestões pendentes com este template"
                   : "Salve o template antes de regenerar"
               }
-              className="shrink-0 whitespace-nowrap rounded-md border border-borda bg-cartao px-3 py-1 hover:border-acento disabled:opacity-50"
+              className="whitespace-nowrap"
             >
               Regenerar sugestões pendentes
-            </button>
+            </Botao>
             <span className="text-texto-3">
               Só sugestões pendentes são recriadas — aprovadas, rejeitadas ou
               com destino editado à mão não mudam.

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import type { Faceta, Inventario } from "../api";
 import Funil from "./Funil";
+import Botao from "../ui/Botao";
 
 export interface Recorte {
   trip_id?: number;
@@ -176,18 +177,19 @@ export default function Panorama({
         </h3>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {data.lacunas.map((l) => (
-            <button
+            <Botao
               key={l.chave}
               onClick={() =>
                 aoRecortar({ lacuna: l.chave, nome: `${l.rotulo}` })
               }
               disabled={l.quantidade === 0}
-              className="rounded-md border border-borda bg-cartao px-3 py-2 text-left hover:border-acento disabled:opacity-40 disabled:hover:border-borda"
+              tamanho="lg"
+              className="text-left disabled:hover:border-borda"
             >
               <div className="text-[15px]">{l.quantidade}</div>
               <div className="truncate text-texto-2">{l.rotulo}</div>
               <Barra fracao={l.quantidade / data.total} />
-            </button>
+            </Botao>
           ))}
         </div>
       </section>

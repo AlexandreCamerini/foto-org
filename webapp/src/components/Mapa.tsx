@@ -10,6 +10,7 @@ import {
   type PontoMapa,
 } from "../api";
 import { Miniatura } from "./Miniatura";
+import Botao from "../ui/Botao";
 
 /** O mapa do lugar de um grupo — sem cartografia real (D-031).
  *
@@ -759,13 +760,15 @@ function PainelDoLugar({
     <aside className="w-[300px] shrink-0 overflow-y-auto border-l border-borda bg-painel p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="titulo-painel">Neste lugar</div>
-        <button
+        <Botao
+          variante="fantasma"
+          tamanho="sm"
           onClick={onFechar}
-          className="rounded px-1 text-texto-3 hover:text-texto"
+          className="px-1 text-texto-3"
           title="Fechar"
         >
           ✕
-        </button>
+        </Botao>
       </div>
 
       {/* A contagem é a resposta do painel: entra no tamanho de título de
