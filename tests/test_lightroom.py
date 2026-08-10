@@ -181,3 +181,74 @@ def test_referencia_importada_e_testemunha_no_catalogo(tmp_path, migrated_engine
         # A pasta de origem sobrevive: é o que responde "de que disco veio?"
         externa = next(m for m in refs if m.nome == "096A9198.DNG")
         assert externa.pasta == "/Volumes/photo/Portfolio/Patagonia Fev.20"
+
+
+def _lrcat_com_nulos(tmp_path: Path) -> Path:
+    """Catálogo com os três pedaços de caminho que faltam na vida real.
+
+    Regressão do defeito da concatenação em SQL: `a || b` é NULL se qualquer
+    parte for NULL, então uma extensão ausente apagava o caminho inteiro — e
+    a referência perdia a única pista de lugar que tinha, sem erro nem log.
+    """
+    caminho = tmp_path / "Nulos.lrcat"
+    con = sqlite3.connect(caminho)
+    con.executescript(_ESQUEMA)
+    con.execute("insert into AgLibraryRootFolder values (1,'/Volumes/Ext/','Ext')")
+    con.execute("insert into AgLibraryRootFolder values (2,NULL,'Sem raiz')")
+    con.executemany(
+        "insert into AgLibraryFolder values (?,?,?)",
+        [(1, 1, "2020/"), (2, 1, None), (3, 2, "2021/")],
+    )
+    con.executemany(
+        "insert into AgLibraryFile values (?,?,?,?,?)",
+        [
+            (1, "U-SEM-EXT", 1, "IMG_1", None),      # extensão ausente
+            (2, "U-NA-RAIZ", 2, "IMG_2", "jpg"),     # pathFromRoot ausente
+            (3, "U-SEM-RAIZ", 3, "IMG_3", "jpg"),    # absolutePath ausente
+            (4, "U-INTEIRA", 1, "IMG_4", "cr3"),     # completa
+        ],
+    )
+    con.executemany(
+        "insert into Adobe_images values (?,?,?,?,?)",
+        [(i, i, "2020-01-0%dT10:00:00" % i, 0, 0) for i in range(1, 5)],
+    )
+    con.commit()
+    con.close()
+    return caminho
+
+
+def test_extensao_ausente_nao_apaga_o_caminho(tmp_path):
+    achados = {
+        a.referencia: a
+        for a in LightroomProvider(_lrcat_com_nulos(tmp_path)).iter_assets()
+    }
+    assert len(achados) == 4  # nenhuma some
+
+    sem_ext = achados["U-SEM-EXT"]
+    assert sem_ext.nome == "IMG_1"
+    assert sem_ext.caminho_original == Path("/Volumes/Ext/2020/IMG_1")
+
+
+def test_foto_na_raiz_do_volume_mantem_o_caminho(tmp_path):
+    na_raiz = {
+        a.referencia: a
+        for a in LightroomProvider(_lrcat_com_nulos(tmp_path)).iter_assets()
+    }["U-NA-RAIZ"]
+    assert na_raiz.caminho_original == Path("/Volumes/Ext/IMG_2.jpg")
+
+
+def test_sem_volume_perde_o_lugar_mas_nao_o_nome(tmp_path):
+    """Sem `absolutePath` não há lugar — mas nome, data e GPS continuam
+    valendo para a correlação. Perder a linha inteira seria pior."""
+    sem_raiz = {
+        a.referencia: a
+        for a in LightroomProvider(_lrcat_com_nulos(tmp_path)).iter_assets()
+    }["U-SEM-RAIZ"]
+    assert sem_raiz.caminho_original is None
+    assert sem_raiz.nome == "IMG_3.jpg"
+
+
+def test_avisa_quantas_referencias_ficaram_sem_lugar(tmp_path, caplog):
+    with caplog.at_level("WARNING"):
+        list(LightroomProvider(_lrcat_com_nulos(tmp_path)).iter_assets())
+    assert "1 itens sem caminho reconstruível" in caplog.text
