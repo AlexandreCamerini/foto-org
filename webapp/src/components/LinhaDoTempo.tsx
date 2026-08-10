@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api, type FiltrosMidia } from "../api";
+import Botao from "../ui/Botao";
 
 const MESES = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -45,12 +46,13 @@ export function LinhaDoTempo({
   return (
     <div className="flex w-24 shrink-0 flex-col overflow-y-auto border-l border-borda">
       {mesAtivo && (
-        <button
+        <Botao
+          variante="fantasma"
           onClick={() => onEscolher(undefined)}
-          className="sticky top-0 z-10 border-b border-borda bg-painel px-2 py-1 text-acento hover:bg-cartao"
+          className="sticky top-0 z-10 rounded-none border-b border-borda bg-painel px-2 py-1 text-acento"
         >
           todo o período ✕
-        </button>
+        </Botao>
       )}
       {data.map(({ mes, quantidade }) => {
         const { ano, mes: nome } = rotulo(mes);

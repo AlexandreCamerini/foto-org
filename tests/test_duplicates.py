@@ -13,8 +13,10 @@ from fotoorganizer.metadata import PurePythonExtractor
 from fotoorganizer.models import (
     DuplicateGroup,
     DuplicateLevel,
+    DuplicateMember,
     DuplicateRole,
     MediaFile,
+    MetadataEntry,
     Source,
     SourceType,
 )
@@ -498,3 +500,135 @@ def test_bytes_recuperaveis(ambiente):
                  if g.nivel == DuplicateLevel.EXATO)
     tamanhos = sorted((m.tamanho for m in grupo.membros), reverse=True)
     assert grupo.bytes_recuperaveis == sum(tamanhos[1:]) > 0
+
+
+def test_resolucao_prefere_quem_sabe_mais_antes_de_cair_no_id():
+    """Num grupo EXATO os bytes são idênticos, então o tamanho não desempata
+    — mas a quantidade de metadado sim, e neste acervo o metadado é o ativo.
+    Entra antes do `id`, que é ordem de indexação e não significa nada."""
+    pobre = _midia_solta(3, "foto.jpg", "/fotos")
+    rica = _midia_solta(5, "foto.jpg", "/fotos")
+    metadados = {3: 4, 5: 57}
+    assert escolher_principal_automatico([pobre, rica], metadados) is rica
+    assert escolher_principal_automatico([rica, pobre], metadados) is rica
+    # Sem a contagem, a regra antiga vale e o menor id ganha.
+    assert escolher_principal_automatico([rica, pobre]) is pobre
+
+
+def test_riqueza_nao_atropela_os_criterios_anteriores():
+    """Fonte própria continua vencendo catálogo externo, por mais rico que
+    ele seja: o critério novo é desempate, não nova prioridade."""
+    propria = _midia_solta(1, "IMG_1.jpg", "/fotos", tipo=SourceType.PASTA)
+    externa = _midia_solta(2, "IMG_1.jpg", "/import",
+                           tipo=SourceType.APPLE_PHOTOS)
+    assert escolher_principal_automatico(
+        [propria, externa], {1: 2, 2: 400}
+    ) is propria
+
+
+def test_principal_herda_o_metadado_que_so_a_versao_tinha(migrated_engine):
+    """Escolher a principal tira as versões da grade. Se o que sai levasse
+    junto a única entrada de GPS do grupo, a escolha teria custado
+    informação — e é a informação que este catálogo existe para guardar."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        session.add(Source(id=1, caminho="/fotos", tipo=SourceType.PASTA))
+        for i in (1, 2):
+            session.add(MediaFile(
+                id=i, source_id=1, caminho=f"/fotos/{i}.jpg", pasta="/fotos",
+                nome=f"{i}.jpg", extensao="jpg", tamanho=100,
+            ))
+        grupo = DuplicateGroup(id=1, nivel=DuplicateLevel.EXATO)
+        session.add(grupo)
+        session.add(DuplicateMember(group_id=1, media_id=1))
+        session.add(DuplicateMember(group_id=1, media_id=2))
+        # A principal sabe a câmera; só a versão sabe o GPS e o álbum.
+        session.add(MetadataEntry(media_id=1, namespace="exif",
+                                  chave="Model", valor="Canon R5"))
+        session.add(MetadataEntry(media_id=2, namespace="apple",
+                                  chave="gps", valor="-22.95,-43.17"))
+        session.add(MetadataEntry(media_id=2, namespace="apple",
+                                  chave="album", valor="Pantanal"))
+        # Chave que as duas têm: a da principal não pode ser sobrescrita.
+        session.add(MetadataEntry(media_id=2, namespace="exif",
+                                  chave="Model", valor="iPhone"))
+        session.commit()
+
+    DuplicateRepository(factory).escolher_principal(1, 1)
+
+    with factory() as session:
+        entradas = {
+            (e.namespace, e.chave): e.valor
+            for e in session.scalars(
+                select(MetadataEntry).where(MetadataEntry.media_id == 1)
+            )
+        }
+        assert entradas[("apple", "gps")] == "-22.95,-43.17"
+        assert entradas[("apple", "album")] == "Pantanal"
+        assert entradas[("exif", "Model")] == "Canon R5"  # não sobrescreve
+        # Nada é apagado da versão (invariante 8).
+        restantes = session.scalars(
+            select(MetadataEntry).where(MetadataEntry.media_id == 2)
+        ).all()
+        assert len(restantes) == 3
+
+
+def _midia_variante(id_, nome, *, data=None, make="Canon", model="R5"):
+    media = _midia_solta(id_, nome, "/fotos")
+    media.extensao = nome.rsplit(".", 1)[-1].lower()
+    media.data_capturada = data or datetime(2020, 5, 1, 10, 0, 0)
+    media.make, media.model = make, model
+    return media
+
+
+def test_raw_e_jpeg_do_mesmo_clique_sao_variante_nao_duplicata():
+    """O RAW é o negativo e o JPEG é a cópia de trabalho: o dono quase sempre
+    quer os dois. Apresentar como duplicata pede uma escolha que está errada
+    por construção — mesmo motivo pelo qual SEQUENCIA existe."""
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    par = [_midia_variante(1, "IMG_1234.CR3"),
+           _midia_variante(2, "IMG_1234.JPG")]
+    assert _eh_variante_de_revelacao(par) is True
+
+
+def test_duas_copias_do_mesmo_raw_nao_sao_variante():
+    """Mesma extensão em pastas diferentes é cópia, não variante — continua
+    caindo em CONTEUDO, que é onde deve cair."""
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    copias = [_midia_variante(1, "IMG_1234.CR3"),
+              _midia_variante(2, "IMG_1234.CR3")]
+    assert _eh_variante_de_revelacao(copias) is False
+
+
+def test_jpeg_e_png_sem_raw_nao_e_variante():
+    """Sem RAW no grupo não há par de revelação: são dois exports."""
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    exports = [_midia_variante(1, "IMG_1234.JPG"),
+               _midia_variante(2, "IMG_1234.PNG")]
+    assert _eh_variante_de_revelacao(exports) is False
+
+
+def test_nomes_base_diferentes_nao_sao_variante():
+    from fotoorganizer.duplicates.detector import _eh_variante_de_revelacao
+
+    outros = [_midia_variante(1, "IMG_1234.CR3"),
+              _midia_variante(2, "IMG_9999.JPG")]
+    assert _eh_variante_de_revelacao(outros) is False
+
+
+def test_variante_vence_rajada_na_classificacao():
+    """Um par RAW+JPEG é sempre da mesma câmera no mesmo segundo, então
+    casaria como rajada também — e 'rajada' convida a escolher o melhor
+    frame, que aqui não é a pergunta."""
+    from fotoorganizer.duplicates.detector import (
+        _eh_rajada,
+        _eh_variante_de_revelacao,
+    )
+
+    par = [_midia_variante(1, "IMG_1234.CR3"),
+           _midia_variante(2, "IMG_1234.JPG")]
+    assert _eh_rajada(par) is True            # casaria nos dois
+    assert _eh_variante_de_revelacao(par) is True

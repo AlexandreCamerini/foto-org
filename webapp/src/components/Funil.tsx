@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api";
+import Botao from "../ui/Botao";
 
 const CHAVE_FUNIL = ["funil"] as const;
 
@@ -109,13 +110,15 @@ export default function Funil({
             </span>
           )}
           {d.aoClicar ? (
-            <button
+            <Botao
+              variante="fantasma"
+              tamanho="sm"
               onClick={d.aoClicar}
               title={d.titulo}
-              className="rounded px-1 hover:bg-cartao hover:text-texto"
+              className="px-1 py-0 text-texto hover:text-texto"
             >
               <Degrau {...d} compacto={compacto} />
-            </button>
+            </Botao>
           ) : (
             <span title={d.titulo} className="px-1">
               <Degrau {...d} compacto={compacto} />

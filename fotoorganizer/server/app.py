@@ -204,6 +204,9 @@ ROTULOS_NAMESPACE = {
     "apple": "Apple Fotos (catálogo importado)",
     "google": "Google Takeout (catálogo importado)",
     "lightroom": "Lightroom (catálogo importado)",
+    "xmp_sidecar": "XMP em arquivo ao lado (.xmp)",
+    "curadoria": "Curadoria (o que alguém escreveu sobre a foto)",
+    "derivado": "Derivado (calculado a partir do arquivo)",
 }
 
 _PREVIEW_SIZE = 2048

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import Funil from "./Funil";
 import type { Job } from "../hooks/useJob";
+import Botao from "../ui/Botao";
 
 const ROTULO_JOB: Record<string, string> = {
   scan: "Varrendo",
@@ -79,26 +80,32 @@ export default function StatusBar({
           </span>
           {podePausar &&
             (pausado ? (
-              <button
+              <Botao
+                variante="fantasma"
+                tamanho="sm"
                 onClick={() => void job.continuar()}
-                className="shrink-0 rounded px-1 text-texto-2 hover:text-acento"
+                className="px-1 hover:text-acento"
               >
                 Continuar
-              </button>
+              </Botao>
             ) : (
-              <button
+              <Botao
+                variante="fantasma"
+                tamanho="sm"
                 onClick={() => void job.pausar()}
-                className="shrink-0 rounded px-1 text-texto-2 hover:text-acento"
+                className="px-1 hover:text-acento"
               >
                 Pausar
-              </button>
+              </Botao>
             ))}
-          <button
+          <Botao
+            variante="fantasma"
+            tamanho="sm"
             onClick={() => void job.cancelar()}
-            className="shrink-0 rounded px-1 text-texto-2 hover:text-erro"
+            className="px-1 hover:text-erro"
           >
             cancelar
-          </button>
+          </Botao>
         </>
       )}
 
@@ -121,21 +128,24 @@ export default function StatusBar({
               sugestão porque o fluxo morria aqui, num scan mudo. */}
           {estado.status === "concluido" &&
             (estado.tipo === "scan" || estado.tipo === "import") && (
-              <button
+              <Botao
+                tamanho="sm"
                 onClick={() => void job.gerarSugestoes()}
                 title="Transforma o que a varredura achou em viagens, eventos e destinos para revisar"
-                className="shrink-0 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
+                className="border-acento text-acento hover:bg-cartao"
               >
                 Gerar sugestões
-              </button>
+              </Botao>
             )}
-          <button
+          <Botao
+            variante="fantasma"
+            tamanho="sm"
             onClick={job.limpar}
             title="Dispensar"
-            className="shrink-0 rounded px-1 text-texto-3 hover:text-texto"
+            className="px-1 text-texto-3"
           >
             ✕
-          </button>
+          </Botao>
         </>
       )}
 

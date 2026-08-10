@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api } from "../api";
 import type { Job } from "../hooks/useJob";
+import Botao from "../ui/Botao";
 
 const NIVEIS = [
   ["todos", "Todos"],
@@ -66,15 +67,14 @@ export default function Duplicates({ job }: { job: Job }) {
         <div className="border-b border-borda px-3 py-1.5 text-texto-2">
           {(grupos ?? []).length} grupos ·{" "}
           {tamanhoLegivel(recuperavel)} recuperáveis
-          <button
+          <Botao tamanho="sm"
             onClick={() => job.detectarDuplicatas()}
             disabled={job.rodando}
-            className="ml-2 rounded-md border border-borda bg-cartao px-2 py-0.5 hover:border-acento disabled:opacity-50"
-          >
+            className="ml-2">
             {job.rodando && job.estado.tipo === "duplicatas"
               ? "Detectando…"
               : "Detectar"}
-          </button>
+          </Botao>
         </div>
         <div className="flex-1 overflow-y-auto">
           {visiveis.map((g) => (
@@ -140,22 +140,20 @@ export default function Duplicates({ job }: { job: Job }) {
                   ? "Rajada da mesma câmera — marque o melhor frame como principal."
                   : "Marque a cópia a manter como principal."}
             </span>
-            <button
+            <Botao tamanho="sm"
               onClick={() =>
                 acao.mutate({ url: `/api/duplicatas/${grupo.id}/ignorar` })
               }
-              className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
-            >
+            className="bg-transparent text-texto-2 hover:bg-cartao">
               Ignorar grupo
-            </button>
-            <button
+            </Botao>
+            <Botao tamanho="sm"
               onClick={() =>
                 acao.mutate({ url: `/api/duplicatas/${grupo.id}/desfazer` })
               }
-              className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
-            >
+            className="bg-transparent text-texto-2 hover:bg-cartao">
               Desfazer
-            </button>
+            </Botao>
           </div>
           <div className="grid flex-1 auto-rows-min grid-cols-2 gap-4 overflow-y-auto p-4 xl:grid-cols-3">
             {grupo.membros.map((m) => (
@@ -184,19 +182,18 @@ export default function Duplicates({ job }: { job: Job }) {
                     {m.papel === "principal" ? (
                       <span className="text-ok">✓ principal</span>
                     ) : (
-                      <button
+                      <Botao tamanho="sm"
                         onClick={() =>
                           acao.mutate({
                             url: `/api/duplicatas/${grupo.id}/principal`,
                             body: { media_id: m.media_id },
                           })
                         }
-                        className="rounded-md border border-borda px-2 py-0.5 hover:border-ok hover:text-ok"
-                      >
+            className="bg-transparent hover:border-ok hover:text-ok">
                         {grupo.nivel === "sequencia"
                           ? "Melhor frame"
                           : "Manter esta"}
-                      </button>
+                      </Botao>
                     )}
                   </div>
                 </figcaption>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, type Media, type MediaDetalhe } from "../api";
 import { formatarData } from "../data";
 import { Confianca } from "./Confianca";
+import Botao from "../ui/Botao";
 
 /** Só o que NÃO é foto ganha rótulo: dizer "foto" em toda foto é ruído. */
 const ROTULOS_TIPO: Record<string, string> = {
@@ -164,20 +165,22 @@ function TipoDaImagem({
           foto. Confere?
         </div>
         <div className="mt-1.5 flex gap-1.5">
-          <button
+          <Botao
+            tamanho="sm"
             onClick={() => confirmar.mutate(tipo)}
             disabled={confirmar.isPending}
-            className="rounded-md border border-borda px-2 py-0.5 hover:border-ok hover:text-ok disabled:opacity-50"
+            className="bg-transparent hover:border-ok hover:text-ok"
           >
             Confere
-          </button>
-          <button
+          </Botao>
+          <Botao
+            tamanho="sm"
             onClick={() => confirmar.mutate("foto")}
             disabled={confirmar.isPending}
-            className="rounded-md border border-borda px-2 py-0.5 hover:border-borda-forte disabled:opacity-50"
+            className="bg-transparent hover:border-borda-forte"
           >
             Não, é foto
-          </button>
+          </Botao>
         </div>
       </div>
     );
@@ -188,13 +191,15 @@ function TipoDaImagem({
       <span>
         {rotulo} · <span className="text-texto-3">classificado por você</span>
       </span>
-      <button
+      <Botao
+        variante="fantasma"
+        tamanho="sm"
         onClick={() => confirmar.mutate(null)}
-        className="rounded px-1 text-texto-3 hover:text-texto"
+        className="px-1 text-texto-3"
         title="Devolver a decisão ao detector"
       >
         desfazer
-      </button>
+      </Botao>
     </div>
   );
 }

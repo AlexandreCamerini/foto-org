@@ -6,6 +6,7 @@ import { api, type Media, type Sugestao } from "../api";
 import { formatarData } from "../data";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
+import Botao from "../ui/Botao";
 
 const STATUS_ABAS = [
   ["pendente", "Pendentes"],
@@ -146,15 +147,14 @@ export default function Review({
           {totalNaFila.toLocaleString("pt-BR")} em {lista.length}{" "}
           {lista.length === 1 ? "grupo" : "grupos"}
         </span>
-        <button
+        <Botao
           onClick={() => job.gerarSugestoes()}
           disabled={job.rodando}
-          className="rounded-md border border-borda bg-cartao px-3 py-1 hover:border-borda-forte disabled:opacity-50"
-        >
+            className="hover:border-borda-forte">
           {job.rodando && job.estado.tipo === "sugestoes"
             ? "Gerando…"
             : "Gerar/atualizar sugestões"}
-        </button>
+        </Botao>
       </div>
 
       {lista.length === 0 ? (
@@ -220,15 +220,14 @@ export default function Review({
                   <Confianca nivel={grupo.nivel} />
                   <div className="flex-1" />
                   {status === "pendente" && (
-                    <button
+                    <Botao tamanho="sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         acaoNoGrupo.mutate({ destino, tipo: "aprovar" });
                       }}
-                      className="shrink-0 rounded-md border border-borda px-2 py-0.5 text-[11px] text-texto-2 hover:border-ok hover:text-ok"
-                    >
+            className="bg-transparent text-micro text-texto-2 hover:border-ok hover:text-ok">
                       Aprovar {grupo.total.toLocaleString("pt-BR")}
-                    </button>
+                    </Botao>
                   )}
                 </header>
 
@@ -270,19 +269,17 @@ export default function Review({
                             )}
                           </div>
                           <div className="flex shrink-0 gap-2">
-                            <button
+                            <Botao tamanho="sm"
                               onClick={() => salvarEdicao(s.id)}
                               disabled={editarDestino.isPending}
-                              className="rounded-md border border-borda px-2 py-0.5 text-ok hover:bg-cartao disabled:opacity-50"
-                            >
+            className="bg-transparent text-ok hover:bg-cartao">
                               Salvar
-                            </button>
-                            <button
+                            </Botao>
+                            <Botao tamanho="sm"
                               onClick={cancelarEdicao}
-                              className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
-                            >
+            className="bg-transparent text-texto-2 hover:bg-cartao">
                               Cancelar
-                            </button>
+                            </Botao>
                           </div>
                         </div>
                       ) : (
@@ -312,51 +309,46 @@ export default function Review({
                                 .join(" · ") || pastaCurta(s.pasta)}
                             </div>
                           </div>
-                          <button
+                          <Botao variante="fantasma" tamanho="sm"
                             onClick={() => iniciarEdicao(s)}
-                            className="shrink-0 rounded px-1 py-0.5 text-texto-3 hover:bg-cartao hover:text-texto"
                             title={`Editar destino de ${s.nome}`}
-                          >
+            className="px-1 text-texto-3">
                             ✎
-                          </button>
-                          <button
+                          </Botao>
+                          <Botao variante="fantasma" tamanho="sm"
                             onClick={() =>
                               setPorque((p) => (p === s.media_id ? null : s.media_id))
                             }
-                            className="shrink-0 rounded px-1 py-0.5 hover:bg-cartao"
                             aria-expanded={porque === s.media_id}
                             title={`Por que este destino para ${s.nome}?`}
-                          >
+            className="px-1">
                             <Confianca nivel={s.nivel} />
-                          </button>
+                          </Botao>
                           {status === "pendente" ? (
                             <div className="flex shrink-0 gap-2">
-                              <button
+                              <Botao tamanho="sm"
                                 onClick={() =>
                                   acao.mutate({ ids: [s.id], tipo: "aprovar" })
                                 }
-                                className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:border-ok hover:text-ok"
-                              >
+            className="bg-transparent text-texto-2 hover:border-ok hover:text-ok">
                                 Aprovar
-                              </button>
-                              <button
+                              </Botao>
+                              <Botao tamanho="sm"
                                 onClick={() =>
                                   acao.mutate({ ids: [s.id], tipo: "rejeitar" })
                                 }
-                                className="rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:border-erro hover:text-erro"
-                              >
+            className="bg-transparent text-texto-2 hover:border-erro hover:text-erro">
                                 Rejeitar
-                              </button>
+                              </Botao>
                             </div>
                           ) : (
-                            <button
+                            <Botao tamanho="sm"
                               onClick={() =>
                                 acao.mutate({ ids: [s.id], tipo: "desfazer" })
                               }
-                              className="shrink-0 rounded-md border border-borda px-2 py-0.5 text-texto-2 hover:bg-cartao"
-                            >
+            className="bg-transparent text-texto-2 hover:bg-cartao">
                               Desfazer
-                            </button>
+                            </Botao>
                           )}
                         </div>
                       )}

@@ -1,4 +1,4 @@
-"""Detecção de duplicatas em quatro níveis — somente leitura, nada é excluído.
+"""Detecção de duplicatas em cinco níveis — somente leitura, nada é excluído.
 
 1. EXATO     — mesmo SHA-256 (bytes idênticos), confirmado sob demanda a
                partir de candidatos por (tamanho, hash rápido).
@@ -9,6 +9,9 @@
 4. SEQUENCIA — grupo phash cujos membros são da MESMA câmera a segundos de
                distância: rajada/variações de uma cena. Não é duplicata —
                apresentar como tal induziria a descartar o melhor frame.
+5. VARIANTE  — RAW e JPEG do MESMO clique (`IMG_1.CR3` + `IMG_1.JPG`). Também
+               não é duplicata: o RAW é o negativo, o JPEG é a cópia de
+               trabalho, e escolher uma é decisão errada por construção.
 
 Grupos com decisão HUMANA (algum papel definido, fora da resolução
 automática) são preservados na redetecção; os demais — inclusive um grupo
@@ -25,17 +28,19 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Callable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from fotoorganizer.duplicates.phash import BKTree, calcular_phash
 from fotoorganizer.duplicates.resolucao import escolher_principal_automatico
+from fotoorganizer.metadata.purepython import RAW_EXTENSIONS
 from fotoorganizer.models import (
     DuplicateGroup,
     DuplicateLevel,
     DuplicateMember,
     DuplicateRole,
     MediaFile,
+    MetadataEntry,
 )
 from fotoorganizer.security.hashing import sha256_full
 from fotoorganizer.thumbnails import ThumbnailCache
@@ -58,6 +63,49 @@ def _eh_rajada(membros) -> bool:
         return False
     datas.sort()
     return all(b - a <= GAP_RAJADA for a, b in zip(datas, datas[1:]))
+
+
+def _eh_variante_de_revelacao(membros) -> bool:
+    """RAW e JPEG do mesmo clique — `IMG_1234.CR3` ao lado de `IMG_1234.JPG`.
+
+    O par tem phash idêntico e caía em CONTEUDO, onde a interface pede para
+    escolher uma e descartar as outras. Num par de revelação isso é decisão
+    errada por construção: o RAW é o negativo, o JPEG é a cópia de trabalho, e
+    o dono quase sempre quer os dois.
+
+    O critério é o nome base igual e pelo menos um RAW no grupo. Nome base é
+    o que a câmera atribui ao clique — as duas gravações do mesmo disparo
+    saem com o mesmo número de série do arquivo, e é por isso que casar por
+    nome funciona aqui e não funcionaria entre fotos quaisquer.
+
+    Extensões diferentes são exigidas: dois `.CR3` de nome igual em pastas
+    diferentes são cópia do mesmo arquivo, não variante — esses continuam
+    caindo em CONTEUDO, que é onde devem cair.
+    """
+    bases = {Path(m.nome).stem.lower() for m in membros}
+    if len(bases) != 1:
+        return False
+    extensoes = {f".{(m.extensao or '').lower()}" for m in membros}
+    if len(extensoes) < 2:
+        return False
+    return bool(extensoes & RAW_EXTENSIONS)
+
+
+def _riqueza_de_metadados(session: Session, membros) -> dict[int, int]:
+    """`media_id` → quantas entradas de metadado o registro tem.
+
+    Uma consulta agregada para o grupo inteiro, não uma por membro: grupos
+    exatos são milhares num acervo grande, e N+1 aqui apareceria no relógio.
+    """
+    ids = [m.id for m in membros]
+    if not ids:
+        return {}
+    linhas = session.execute(
+        select(MetadataEntry.media_id, func.count())
+        .where(MetadataEntry.media_id.in_(ids))
+        .group_by(MetadataEntry.media_id)
+    )
+    return {media_id: n for media_id, n in linhas}
 
 
 class DuplicateDetector:
@@ -92,7 +140,7 @@ class DuplicateDetector:
                 progress("Agrupando…")
             ja_agrupados = self._media_ids_em_grupos(session)
             stats = {"exato": 0, "conteudo": 0, "visual": 0, "sequencia": 0,
-                     "preservados": preservados}
+                     "variante": 0, "preservados": preservados}
 
             # Cada grupo exato mantém 1 representante elegível na passada de
             # phash: uma recompressão da mesma foto agrupa com ele em vez de
@@ -179,7 +227,13 @@ class DuplicateDetector:
                 # Rajada tem precedência sobre os dois níveis de phash:
                 # até phash idêntico (cena estática em burst) não é cópia
                 # se veio da mesma câmera em segundos.
-                if _eh_rajada(membros):
+                if _eh_variante_de_revelacao(membros):
+                    # Antes da rajada: um par RAW+JPEG é sempre da mesma
+                    # câmera no mesmo segundo, então casaria como rajada
+                    # também — e "rajada" convida a escolher o melhor frame,
+                    # que aqui não é a pergunta.
+                    nivel = DuplicateLevel.VARIANTE
+                elif _eh_rajada(membros):
                     nivel = DuplicateLevel.SEQUENCIA
                 elif identicos:
                     nivel = DuplicateLevel.CONTEUDO
@@ -203,7 +257,9 @@ class DuplicateDetector:
         # (qual versão é a boa, qual frame é o melhor) e continuam INDEFINIDO
         # até um clique humano.
         principal = (
-            escolher_principal_automatico(membros)
+            escolher_principal_automatico(
+                membros, _riqueza_de_metadados(session, membros)
+            )
             if nivel == DuplicateLevel.EXATO else None
         )
         if principal is not None:

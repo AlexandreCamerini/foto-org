@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fotoorganizer.metadata.base import (
@@ -54,6 +55,11 @@ _GRUPOS = {
     "ICC_Profile": "icc",
     "QuickTime": "quicktime",
     "PNG": "png",
+    # Curadoria que veio do arquivo `.xmp` ao lado, não de dentro da foto.
+    # Namespace próprio para a pergunta "de onde veio?" continuar tendo
+    # resposta: nota escrita pelo Aftershoot num sidecar e nota gravada
+    # dentro do JPEG são fatos diferentes, com confiança diferente.
+    "XMPSidecar": "xmp_sidecar",
 }
 
 # `MakerNotes` fica FORA da base bruta de propósito (D-027). São ~259 campos
@@ -106,6 +112,165 @@ def _data(valor: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _offset(bruto: str | None) -> timedelta | None:
+    """`OffsetTimeOriginal` ("+02:00", "-03:00") → deslocamento do fuso.
+
+    É o fuso da captura DECLARADO pela câmera — não estimado, não inferido.
+    Estava sendo capturado e ignorado em 1.527 fotos do acervo
+    (`docs/INVENTARIO_DE_SINAIS.md`), enquanto `grouping/correlacao.py`
+    gastava estatística para adivinhar a deriva entre relógios.
+
+    "+00:00" é aceito como fato: a foto foi tirada em Greenwich (ou Lisboa no
+    inverno). O catálogo não consegue distinguir isso de "fuso desconhecido"
+    depois de gravado — as duas colunas ficam iguais nos dois casos — e essa
+    limitação já está declarada em `models/catalog.py`. Descartar o valor aqui
+    não resolveria nada e perderia a informação de quem realmente estava lá.
+    """
+    if not bruto:
+        return None
+    texto = str(bruto).strip()
+    m = re.fullmatch(r"([+-])(\d{2}):?(\d{2})", texto)
+    if not m:
+        return None
+    sinal, horas, minutos = m.group(1), int(m.group(2)), int(m.group(3))
+    if horas > 14 or minutos > 59:
+        return None
+    delta = timedelta(hours=horas, minutes=minutos)
+    return -delta if sinal == "-" else delta
+
+
+# Tags de data do arquivo original. Quando o sidecar traz data, TODAS estas
+# saem: misturar a data que o editor gravou com o fuso que a câmera gravou
+# produz um instante que não existiu. É a mesma regra do Immich, e o motivo
+# é o mesmo.
+_TAGS_DE_DATA_DO_ORIGINAL = (
+    "EXIF:DateTimeOriginal", "EXIF:CreateDate", "EXIF:ModifyDate",
+    "Composite:SubSecDateTimeOriginal", "Composite:SubSecCreateDate",
+    "QuickTime:CreateDate", "IPTC:DateCreated",
+    "EXIF:OffsetTimeOriginal", "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime",
+)
+
+# Chaves de data que o sidecar pode trazer, na ordem em que o XMP as declara.
+_TAGS_DE_DATA_DO_SIDECAR = (
+    "XMP:DateTimeOriginal", "XMP:DateCreated", "XMP:CreateDate",
+)
+
+
+def _sidecar_de(caminho: Path) -> Path | None:
+    """O `.xmp` irmão, nos dois padrões que os editores usam.
+
+    605 destes existem no acervo e 599 carregam curadoria
+    (`docs/INVENTARIO_DE_SINAIS.md`) — nota, rótulo de cor e palavras-chave
+    hierárquicas escritas pelo Aftershoot. Nenhum era lido: o scanner enxerga
+    arquivo de imagem, e o `.xmp` fica ao lado sem nunca ser abrido junto.
+
+    `foto.jpg.xmp` é o padrão do Adobe; `foto.xmp` o do darktable e de parte
+    do fluxo do Lightroom. O primeiro que existir vence — procurar os dois e
+    fundir arriscaria juntar curadoria de dois editores diferentes.
+    """
+    candidatos = (
+        caminho.with_name(caminho.name + ".xmp"),
+        caminho.with_suffix(".xmp"),
+    )
+    for candidato in candidatos:
+        try:
+            if candidato.is_file():
+                return candidato
+        except OSError:
+            continue
+    return None
+
+
+def _fundir_sidecar(original: dict, sidecar: dict) -> dict:
+    """Tags do arquivo + tags do `.xmp`, com o sidecar vencendo.
+
+    O sidecar é mais novo por construção: ele existe porque alguém editou a
+    foto depois de ela sair da câmera, e não pôde (ou não quis) reescrever o
+    original. Onde os dois falam, quem fala por último tem razão.
+
+    A exceção que exige cuidado é a data. Se o sidecar declara QUALQUER data,
+    todas as datas do original saem junto — inclusive o offset de fuso. Casar
+    a data que o editor gravou com o fuso que a câmera gravou produziria um
+    instante que nunca existiu, e o erro seria invisível: as duas colunas
+    continuariam preenchidas e plausíveis.
+
+    As tags do sidecar entram na base bruta com grupo `XMPSidecar`, que o mapa
+    de namespaces manda para `xmp_sidecar` — sem isso, uma nota escrita pelo
+    Aftershoot ficaria indistinguível de uma escrita dentro do arquivo, e a
+    pergunta "de onde veio?" perderia a resposta.
+    """
+    fundido = dict(original)
+    tem_data = any(sidecar.get(t) for t in _TAGS_DE_DATA_DO_SIDECAR)
+    if tem_data:
+        for tag in _TAGS_DE_DATA_DO_ORIGINAL:
+            fundido.pop(tag, None)
+    for chave, valor in sidecar.items():
+        grupo, _, nome = chave.partition(":")
+        if grupo in ("SourceFile", "ExifTool", "File"):
+            continue
+        fundido[f"XMPSidecar:{nome}"] = valor
+        # O sidecar também responde pelas chaves XMP normais: é assim que a
+        # precedência chega em `_converter` sem ele precisar saber que existe
+        # um arquivo ao lado.
+        if grupo == "XMP":
+            fundido[chave] = valor
+    return fundido
+
+
+# Os quatro formatos de palavra-chave, em ordem de precedência. Os dois
+# primeiros carregam HIERARQUIA ("Viagens|2019|Patagônia"); os dois últimos
+# são lista plana. A ordem é a mesma do Immich, e por um motivo verificável:
+# quem escreve hierarquia escreve a lista plana junto, como redundância para
+# programas que não entendem hierarquia — então a hierarquia é o registro
+# completo e a lista plana é a versão degradada dele.
+_TAGS_DE_PALAVRA_CHAVE = (
+    "XMPSidecar:TagsList", "XMP:TagsList",
+    "XMPSidecar:HierarchicalSubject", "XMP:HierarchicalSubject",
+    "XMPSidecar:Subject", "XMP:Subject",
+    "IPTC:Keywords",
+)
+
+
+def _palavras_chave(dados: dict) -> tuple[str, ...]:
+    """Palavras-chave dos quatro formatos, unificadas e sem repetição.
+
+    A unificação é o ponto, não a leitura. O acervo tem catálogo do Lightroom
+    importado como fonte E os `.xmp` que o mesmo fluxo gravou no disco: o
+    mesmo "Selected" chega pelos dois caminhos. Somar os dois contaria duas
+    vezes a mesma afirmação de uma pessoa só, e confiança somada indevidamente
+    é o defeito que docs/CONFIANCA.md existe para impedir.
+
+    Cada nível da hierarquia entra separado além do caminho inteiro:
+    "Viagens|2019|Patagônia" também vale como "Patagônia", que é o termo que a
+    classificação procura. O caminho completo fica porque é o que responde
+    "onde isto estava organizado?".
+    """
+    vistas: dict[str, None] = {}
+    for tag in _TAGS_DE_PALAVRA_CHAVE:
+        bruto = dados.get(tag)
+        if not bruto:
+            continue
+        itens = bruto if isinstance(bruto, list) else [bruto]
+        for item in itens:
+            texto = str(item).strip()
+            if not texto:
+                continue
+            vistas.setdefault(texto, None)
+            if "|" in texto:
+                for parte in texto.split("|"):
+                    parte = parte.strip()
+                    if parte:
+                        vistas.setdefault(parte, None)
+    return tuple(vistas)
+
+
+def _texto(bruto) -> str | None:
+    if bruto is None:
+        return None
+    texto = str(bruto).strip()
+    return texto or None
 
 
 def _numero(valor) -> float | None:
@@ -248,6 +413,18 @@ class ExifToolExtractor:
             log.warning("exiftool não respondeu por %s — usando fallback",
                         caminho.name)
             return self._fallback.extract(caminho)
+
+        sidecar = _sidecar_de(caminho)
+        if sidecar is not None:
+            try:
+                with self._lock:
+                    do_sidecar = self._conversar(sidecar)
+            except (OSError, ValueError) as exc:
+                log.warning("exiftool falhou no sidecar %s (%s) — ignorado",
+                            sidecar.name, exc)
+                self._proc, do_sidecar = None, None
+            if do_sidecar:
+                dados = _fundir_sidecar(dados, do_sidecar)
         return self._converter(dados)
 
     # -- conversão ----------------------------------------------------------
@@ -260,16 +437,42 @@ class ExifToolExtractor:
             return None
 
         meta = MediaMetadata()
+        # Ordem de precedência da hora de PAREDE. As duas primeiras carregam
+        # subsegundo e são as mesmas datas das seguintes com mais precisão —
+        # 1.524 fotos do acervo têm `SubSecTimeOriginal` e ele estava sendo
+        # descartado (`docs/INVENTARIO_DE_SINAIS.md`). Subsegundo não muda o
+        # dia nem a hora: ele desempata rajada, onde seis fotos dividem o
+        # mesmo segundo e a ordem entre elas era arbitrária.
+        #
         # IPTC:DateCreated é a data em que a foto foi FEITA (padrão IIM) e
         # costuma sobreviver à edição que apaga o EXIF. Entra antes do
         # ModifyDate, que fala da edição, não do clique.
+        #
+        # `Composite:GPSDateTime` NÃO entra nesta lista, apesar de ser a data
+        # mais confiável do arquivo (vem do satélite, imune a relógio errado):
+        # ela é UTC, e esta coluna é hora de parede. Colocá-la aqui repetiria
+        # exatamente o defeito que o Takeout tinha — gravar um instante
+        # absoluto na coluna da hora local e deslocar a foto pelo tamanho do
+        # fuso. Ela entra abaixo, no lado certo.
         quando = _data(
-            valor("EXIF:DateTimeOriginal", "EXIF:CreateDate",
+            valor("Composite:SubSecDateTimeOriginal", "EXIF:DateTimeOriginal",
+                  "Composite:SubSecCreateDate", "EXIF:CreateDate",
                   "QuickTime:CreateDate", "XMP:DateCreated",
                   "IPTC:DateCreated", "EXIF:ModifyDate")
         )
         # Data impossível não entra na coluna; o valor bruto segue nos extras.
         meta.data_capturada = quando if data_plausivel(quando) else None
+
+        # O instante absoluto, quando o arquivo DECLARA o fuso da captura.
+        # Sem isto, `data_capturada_utc` era sempre igual à parede — a forma
+        # de dizer "não sei o fuso" — mesmo nas 1.527 fotos que sabiam.
+        #
+        # `-` porque o offset diz quanto o relógio local está À FRENTE de UTC:
+        # 14h em +02:00 são 12h UTC.
+        offset = _offset(valor("EXIF:OffsetTimeOriginal",
+                               "EXIF:OffsetTimeDigitized", "EXIF:OffsetTime"))
+        if meta.data_capturada is not None and offset is not None:
+            meta.data_capturada_utc = meta.data_capturada - offset
         meta.make = valor("EXIF:Make", "XMP:Make")
         meta.model = valor("EXIF:Model", "XMP:Model")
         meta.lente = valor("EXIF:LensModel", "MakerNotes:LensType",
@@ -284,6 +487,24 @@ class ExifToolExtractor:
         # positiva e usá-la direto põe o Rio no hemisfério errado.
         meta.gps_lat = _numero(valor("Composite:GPSLatitude"))
         meta.gps_lon = _numero(valor("Composite:GPSLongitude"))
+        meta.palavras_chave = _palavras_chave(dados)
+        # Live Photo: o iPhone grava a foto e o vídeo como dois arquivos e os
+        # amarra por um identificador comum. Sem ele, o par vira dois
+        # registros que se ignoram — a grade conta duas vezes o mesmo
+        # instante, e a rajada fica poluída por vídeos de 3 segundos.
+        #
+        # O ganho maior, porém, não é cosmético: o `.mov` costuma ter GPS
+        # quando o `.heic` ao lado não tem, e a correlação
+        # (`grouping/correlacao.py`) precisa saber que os dois são a MESMA
+        # captura para não tratar um como doador do outro a Δt zero — o que
+        # inflaria artificialmente a confiança da herança.
+        #
+        # `Apple:` vem do bloco do fabricante na foto; `QuickTime:` do
+        # contêiner do vídeo. Os dois carregam o mesmo UUID.
+        meta.identidade_de_captura = _texto(valor(
+            "Apple:ContentIdentifier", "QuickTime:ContentIdentifier",
+            "Keys:ContentIdentifier", "XMP:ContentIdentifier",
+        ))
 
         for chave, bruto in dados.items():
             grupo, _, nome = chave.partition(":")

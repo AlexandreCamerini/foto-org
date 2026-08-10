@@ -18,6 +18,15 @@
         "cd /Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/nostalgic-brattain-9d82b3 && .venv/bin/python -m fotoorganizer web --porta 8402"
       ],
       "port": 8402
+    },
+    {
+      "name": "foto-organizer-web-design-port",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/design-port-foto-organizer-68b245 && .venv/bin/python -m fotoorganizer web --porta 8403"
+      ],
+      "port": 8403
     }
   ]
 }

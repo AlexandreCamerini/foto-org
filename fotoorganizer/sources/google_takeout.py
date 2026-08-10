@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -30,9 +30,16 @@ from fotoorganizer.sources.base import ExternalAsset
 log = logging.getLogger(__name__)
 
 # Extensões de mídia que o Takeout costuma conter e o app cataloga.
+#
+# O vídeo entra pelo mesmo motivo que entra no Apple Fotos: ele tem sidecar
+# JSON como qualquer foto, e o `geoData` desse sidecar é coordenada real —
+# doador da correlação. Deixá-lo de fora descartava GPS de graça, ainda mais
+# numa exportação em que o vídeo costuma ser gravado pelo mesmo celular que
+# não gravou EXIF na foto ao lado.
 _MEDIA_EXTS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".bmp",
     ".heic", ".heif",
+    ".mp4", ".mov", ".m4v", ".avi", ".mkv", ".3gp", ".webm",
 }
 
 # Pastas de ano ("Photos from 2024" / "Fotos de 2024") não são álbuns.
@@ -69,17 +76,32 @@ def _gps(dados: dict) -> tuple[float | None, float | None]:
     return None, None
 
 
-def _data(dados: dict) -> datetime | None:
+def _data(dados: dict) -> tuple[datetime | None, datetime | None]:
+    """`photoTakenTime.timestamp` → (hora de parede, instante absoluto).
+
+    O epoch do Takeout **é** o instante absoluto da captura — a informação de
+    fuso mais confiável que esta fonte tem, e a única. Convertê-lo com
+    `datetime.fromtimestamp(n)` sem fuso era um defeito com duas faces: a hora
+    gravada passava a depender do fuso da MÁQUINA que rodou a importação (a
+    mesma foto virava 13h em São Paulo, 18h em Paris e 16h em UTC), e o
+    absoluto — que estava ali pronto — era descartado.
+
+    O que o Takeout **não** diz é a hora que o relógio marcava no lugar da
+    foto: para isso precisaria do fuso da captura, que o JSON não traz. Então
+    os dois instantes saem iguais, que é como este catálogo diz "não sei o
+    fuso" (`models/catalog.py`) — nunca "esta foto foi tirada em Greenwich".
+    Quando a fase 11 estimar fuso a partir do GPS, é ela que separa os dois.
+    """
     bruto = (dados.get("photoTakenTime") or {}).get("timestamp")
     if not bruto:
-        return None
+        return None, None
     try:
-        # Epoch UTC → hora local naive, coerente com o resto do catálogo
-        # (EXIF é hora local da câmera). Desvios entre fontes são tratados
-        # pela correlação temporal, não aqui.
-        return datetime.fromtimestamp(int(bruto))
-    except (ValueError, OSError):
-        return None
+        absoluto = datetime.fromtimestamp(
+            int(bruto), tz=timezone.utc
+        ).replace(tzinfo=None)
+    except (ValueError, OSError, OverflowError):
+        return None, None
+    return absoluto, absoluto
 
 
 class GoogleTakeoutProvider:
@@ -145,6 +167,7 @@ class GoogleTakeoutProvider:
             except OSError:
                 tamanho = None
 
+            parede, absoluto = _data(dados)
             yield ExternalAsset(
                 caminho=media if self._ler_arquivos else None,
                 referencia=(
@@ -153,7 +176,8 @@ class GoogleTakeoutProvider:
                 ),
                 nome=media.name,
                 tamanho=tamanho,
-                data_capturada=_data(dados),
+                data_capturada=parede,
+                data_capturada_utc=absoluto,
                 gps_lat=lat, gps_lon=lon,
                 descricao=(dados.get("description") or "").strip() or None,
                 favorito=bool(dados.get("favorited")),

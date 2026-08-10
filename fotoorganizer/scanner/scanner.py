@@ -28,7 +28,10 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import ScannerSettings
-from fotoorganizer.metadata.base import MetadataExtractor
+from fotoorganizer.metadata.base import (
+    NAMESPACE_CURADORIA,
+    MetadataExtractor,
+)
 from fotoorganizer.models import (
     MediaFile,
     MediaRole,
@@ -482,7 +485,25 @@ class CatalogScanner:
         # abre o IPTC de uma miniatura de cache: guardar isso custou 685 mil
         # linhas e 134 MB num acervo real, sem nada em troca. A testemunha
         # doa data, GPS e câmera — que ficam nas colunas acima.
-        if meta.extras and media.papel is not MediaRole.SINAL:
+        # A curadoria é a exceção à regra acima: ela vale mesmo para uma
+        # testemunha, porque não é base bruta para inspeção — é afirmação de
+        # gente sobre a foto, e o `namespace` unificado existe justamente para
+        # ser lido pela classificação (`docs/CONFIANCA.md`).
+        extras = list(meta.extras)
+        if media.papel is MediaRole.SINAL:
+            extras = []
+        extras += [
+            (NAMESPACE_CURADORIA, "palavra_chave", palavra)
+            for palavra in meta.palavras_chave
+        ]
+        if meta.identidade_de_captura:
+            # Vale para a testemunha também: é justamente a miniatura ou o
+            # `.mov` rebaixado que precisa dizer de que captura faz parte.
+            extras.append(
+                ("derivado", "identidade_de_captura",
+                 meta.identidade_de_captura)
+            )
+        if extras:
             session.flush()
             # Re-scan reescreve a base bruta do arquivo: sem isto, cada nova
             # leitura empilharia outra cópia das mesmas dezenas de tags.
@@ -490,10 +511,10 @@ class CatalogScanner:
                 session.execute(delete(MetadataEntry).where(
                     MetadataEntry.media_id == media.id,
                     MetadataEntry.namespace.in_(
-                        {ns for ns, _, _ in meta.extras}
+                        {ns for ns, _, _ in extras}
                     ),
                 ))
-            for namespace, chave, valor in meta.extras:
+            for namespace, chave, valor in extras:
                 session.add(
                     MetadataEntry(
                         media_id=media.id, namespace=namespace, chave=chave,

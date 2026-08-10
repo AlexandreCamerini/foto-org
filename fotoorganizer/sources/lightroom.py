@@ -35,12 +35,21 @@ class LightroomError(RuntimeError):
     """Falha que o usuário precisa ver com instrução do que fazer."""
 
 
+# Os pedaços do caminho vêm SEPARADOS de propósito. Concatenar em SQL
+# (`rf.absolutePath || fo.pathFromRoot || ...`) parecia mais direto e era um
+# defeito silencioso: em SQL, `a || b` é NULL se QUALQUER parte for NULL, e
+# uma extensão ausente apagava o caminho inteiro — a referência perdia a única
+# pista de LUGAR que tinha, que é justamente o valor desta fonte. Sem exceção
+# e sem log: a linha simplesmente vinha vazia.
+#
 # `pathFromRoot` já vem com barra ao final; `absolutePath` também.
 _CONSULTA = """
 select
     f.id_global,
-    rf.absolutePath || fo.pathFromRoot || f.baseName || '.' || f.extension,
-    f.baseName || '.' || f.extension,
+    rf.absolutePath,
+    fo.pathFromRoot,
+    f.baseName,
+    f.extension,
     i.captureTime,
     e.gpsLatitude,
     e.gpsLongitude,
@@ -89,6 +98,32 @@ def _data(valor: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _nome_e_caminho(
+    absoluto: str | None,
+    relativo: str | None,
+    base: str | None,
+    extensao: str | None,
+) -> tuple[str | None, Path | None]:
+    """Monta nome e caminho tolerando pedaço ausente.
+
+    Cada pedaço que falta custa uma coisa diferente, e nenhuma delas justifica
+    perder o resto:
+
+    - sem `baseName` não há arquivo que nomear — devolve nada;
+    - sem `extension` o nome é só a base (arquivo sem extensão existe, e o
+      Lightroom guarda alguns assim);
+    - sem `absolutePath` sabe-se o nome mas não o lugar — o caminho fica
+      `None` e a referência continua doando data, GPS e nome;
+    - sem `pathFromRoot` a foto está na raiz do volume.
+    """
+    if not base:
+        return None, None
+    nome = f"{base}.{extensao}" if extensao else str(base)
+    if not absoluto:
+        return nome, None
+    return nome, Path(f"{absoluto}{relativo or ''}{nome}")
 
 
 class LightroomProvider:
@@ -146,17 +181,23 @@ class LightroomProvider:
 
     def iter_assets(self) -> Iterator[ExternalAsset]:
         con = self._abrir()
+        sem_lugar = 0
         try:
             colecoes = self._agrupar(con, _COLECOES)
             palavras = self._agrupar(con, _PALAVRAS)
-            for (uuid, caminho, nome, captura, lat, lon,
+            for (uuid, absoluto, relativo, base, extensao, captura, lat, lon,
                  nota, pick) in con.execute(_CONSULTA):
                 if not uuid:
                     continue
+                nome, caminho = _nome_e_caminho(
+                    absoluto, relativo, base, extensao
+                )
+                if caminho is None:
+                    sem_lugar += 1
                 yield ExternalAsset(
                     caminho=None,                 # referência: nada é aberto
                     referencia=uuid,
-                    caminho_original=Path(caminho) if caminho else None,
+                    caminho_original=caminho,
                     nome=nome,
                     data_capturada=_data(captura),
                     gps_lat=lat, gps_lon=lon,
@@ -165,6 +206,14 @@ class LightroomProvider:
                     ),
                     albuns=colecoes.get(uuid, ()),
                     palavras_chave=palavras.get(uuid, ()),
+                )
+            if sem_lugar:
+                # Antes isto acontecia calado. Um acervo que perde o lugar de
+                # milhares de referências precisa dizer quantas.
+                log.warning(
+                    "lightroom: %d itens sem caminho reconstruível "
+                    "(campo ausente no catálogo) — entram sem lugar de origem",
+                    sem_lugar,
                 )
         finally:
             con.close()

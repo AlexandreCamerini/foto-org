@@ -100,6 +100,14 @@ def _asset_de(photo) -> ExternalAsset | None:
         pessoas=tuple(
             p for p in dict.fromkeys(photo.persons or ()) if p
         ),
+        # Palavra-chave do Apple Fotos é intenção declarada pelo dono, como
+        # álbum e pessoa — e estava sendo jogada fora enquanto o Lightroom já
+        # preenchia o mesmo campo. `getattr` porque o provider é duck-typed:
+        # os fakes dos testes não precisam conhecer todo o PhotoInfo.
+        palavras_chave=tuple(
+            k for k in dict.fromkeys(getattr(photo, "keywords", None) or ())
+            if k
+        ),
     )
 
 
@@ -141,7 +149,12 @@ class ApplePhotosProvider:
             ) from exc
 
         sem_identidade = referencias = 0
-        for photo in db.photos(movies=False):
+        # `movies=True` porque o vídeo não é ruído aqui: numa biblioteca de
+        # iPhone ele é metade de cada Live Photo, e carrega GPS e horário
+        # quando a foto ao lado não carrega — é doador da correlação como
+        # qualquer outra referência. Excluí-lo descartava sinal e quebrava o
+        # par foto+vídeo antes que houvesse chance de reconhecê-lo.
+        for photo in db.photos(movies=True):
             asset = _asset_de(photo)
             if asset is None:
                 sem_identidade += 1

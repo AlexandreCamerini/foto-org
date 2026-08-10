@@ -251,3 +251,155 @@ def test_data_antiga_continua_valendo():
         {"EXIF:DateTimeOriginal": "1962:03:15 10:00:00"}
     )
     assert meta.data_capturada == datetime(1962, 3, 15, 10, 0)
+
+
+def test_subsegundo_desempata_rajada_sem_mudar_a_hora():
+    """`SubSecDateTimeOriginal` vence `DateTimeOriginal` porque é a MESMA
+    data com mais precisão. Seis fotos de uma rajada dividem o segundo; sem
+    o subsegundo a ordem entre elas era arbitrária."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2025:11:08 01:16:32",
+        "Composite:SubSecDateTimeOriginal": "2025:11:08 01:16:32.87",
+    })
+    assert meta.data_capturada == datetime(2025, 11, 8, 1, 16, 32)
+
+
+def test_gps_datetime_nao_entra_como_hora_de_parede():
+    """`GPSDateTime` é a data mais confiável do arquivo e é UTC. Usá-la como
+    hora de parede deslocaria a foto pelo tamanho do fuso — o mesmo defeito
+    que o Takeout tinha."""
+    meta = ExifToolExtractor._converter({
+        "Composite:GPSDateTime": "2019:07:14 12:00:00Z",
+    })
+    assert meta.data_capturada is None
+
+
+def test_offset_declarado_vira_instante_absoluto():
+    """1.527 fotos do acervo declaram `OffsetTimeOriginal` e ele era jogado
+    fora, enquanto a correlação gastava estatística para adivinhar o fuso."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2019:07:14 14:00:00",
+        "EXIF:OffsetTimeOriginal": "+02:00",
+    })
+    assert meta.data_capturada == datetime(2019, 7, 14, 14, 0)
+    assert meta.data_capturada_utc == datetime(2019, 7, 14, 12, 0)
+
+
+def test_offset_negativo_e_sem_dois_pontos():
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2020:01:01 09:00:00",
+        "EXIF:OffsetTime": "-0300",
+    })
+    assert meta.data_capturada_utc == datetime(2020, 1, 1, 12, 0)
+
+
+def test_sem_offset_o_extrator_nao_inventa_instante():
+    """Igualdade entre os dois instantes é dita por quem GRAVA, nunca por um
+    palpite daqui — mesma regra do provider do Apple Fotos."""
+    meta = ExifToolExtractor._converter({
+        "EXIF:DateTimeOriginal": "2020:01:01 09:00:00",
+    })
+    assert meta.data_capturada_utc is None
+
+
+@pytest.mark.parametrize("bruto", ["", None, "meio-dia", "+25:00", "+02:99"])
+def test_offset_invalido_e_ignorado(bruto):
+    from fotoorganizer.metadata.exiftool import _offset
+
+    assert _offset(bruto) is None
+
+
+# --- sidecar .xmp (A3) e palavras-chave unificadas (A4) --------------------
+
+def test_sidecar_e_encontrado_nos_dois_padroes(tmp_path):
+    from fotoorganizer.metadata.exiftool import _sidecar_de
+
+    foto = tmp_path / "IMG_1.jpg"
+    foto.write_bytes(b"x")
+    assert _sidecar_de(foto) is None
+
+    adobe = tmp_path / "IMG_1.jpg.xmp"
+    adobe.write_text("<x/>")
+    assert _sidecar_de(foto) == adobe
+
+    adobe.unlink()
+    darktable = tmp_path / "IMG_1.xmp"
+    darktable.write_text("<x/>")
+    assert _sidecar_de(foto) == darktable
+
+
+def test_sidecar_vence_o_arquivo_e_leva_a_data_junto():
+    """Se o sidecar declara data, TODAS as datas do original saem — inclusive
+    o offset. Casar a data que o editor gravou com o fuso que a câmera gravou
+    produz um instante que nunca existiu, e o erro seria invisível."""
+    from fotoorganizer.metadata.exiftool import _fundir_sidecar
+
+    fundido = _fundir_sidecar(
+        {
+            "EXIF:DateTimeOriginal": "2019:07:14 14:00:00",
+            "EXIF:OffsetTimeOriginal": "+02:00",
+            "EXIF:Model": "Canon R5",
+        },
+        {"XMP:DateCreated": "2020-01-01T09:00:00", "XMP:Rating": "5"},
+    )
+    assert "EXIF:DateTimeOriginal" not in fundido
+    assert "EXIF:OffsetTimeOriginal" not in fundido
+    assert fundido["EXIF:Model"] == "Canon R5"       # o resto do original fica
+    assert fundido["XMPSidecar:Rating"] == "5"       # origem preservada
+    meta = ExifToolExtractor._converter(fundido)
+    assert meta.data_capturada == datetime(2020, 1, 1, 9, 0)
+    assert meta.data_capturada_utc is None           # o fuso saiu junto
+
+
+def test_sidecar_sem_data_nao_apaga_a_do_arquivo():
+    from fotoorganizer.metadata.exiftool import _fundir_sidecar
+
+    fundido = _fundir_sidecar(
+        {"EXIF:DateTimeOriginal": "2019:07:14 14:00:00"},
+        {"XMP:Rating": "4"},
+    )
+    assert fundido["EXIF:DateTimeOriginal"] == "2019:07:14 14:00:00"
+
+
+def test_palavras_chave_dos_quatro_formatos_sem_repetir():
+    """A mesma curadoria chega pelos quatro formatos quando o arquivo passou
+    por mais de um programa. Contar quatro vezes somaria confiança sobre uma
+    afirmação só — o que docs/CONFIANCA.md proíbe."""
+    meta = ExifToolExtractor._converter({
+        "XMP:TagsList": ["Viagens|2019|Patagônia"],
+        "XMP:HierarchicalSubject": ["Viagens|2019|Patagônia"],
+        "XMP:Subject": ["Patagônia", "Selected"],
+        "IPTC:Keywords": ["Patagônia"],
+    })
+    assert meta.palavras_chave == (
+        "Viagens|2019|Patagônia", "Viagens", "2019", "Patagônia", "Selected",
+    )
+
+
+def test_hierarquia_entra_inteira_e_por_nivel():
+    """O caminho completo responde 'onde isto estava organizado?'; cada nível
+    isolado é o termo que a classificação procura."""
+    meta = ExifToolExtractor._converter(
+        {"XMP:HierarchicalSubject": "Eventos|Casamento"}
+    )
+    assert meta.palavras_chave == ("Eventos|Casamento", "Eventos", "Casamento")
+
+
+def test_sem_palavra_chave_o_campo_fica_vazio():
+    assert ExifToolExtractor._converter({}).palavras_chave == ()
+
+
+def test_identidade_de_captura_amarra_foto_e_video_da_live_photo():
+    """O iPhone grava a Live Photo como dois arquivos com o mesmo UUID. Sem
+    ele o par vira dois registros que se ignoram — e a correlação trataria um
+    como doador de GPS do outro a Δt zero, inflando a confiança da herança."""
+    uuid = "8F1A2B3C-4D5E-6F70-8192-A3B4C5D6E7F8"
+    foto = ExifToolExtractor._converter({"Apple:ContentIdentifier": uuid})
+    video = ExifToolExtractor._converter({"QuickTime:ContentIdentifier": uuid})
+    assert foto.identidade_de_captura == video.identidade_de_captura == uuid
+
+
+def test_sem_live_photo_nao_ha_identidade():
+    assert ExifToolExtractor._converter(
+        {"EXIF:Model": "Canon R5"}
+    ).identidade_de_captura is None
