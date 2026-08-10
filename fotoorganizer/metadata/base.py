@@ -85,6 +85,14 @@ class MediaMetadata:
     # passou por mais de um programa. Contar isso como quatro sinais somaria
     # confiança sobre uma afirmação só, que é o que docs/CONFIANCA.md proíbe.
     palavras_chave: tuple[str, ...] = field(default=())
+    # Identificador que amarra os dois arquivos de uma Live Photo (o `.heic` e
+    # o `.mov` que o iPhone grava juntos). Mesmo valor nos dois.
+    #
+    # Não é coluna: entra na base bruta como qualquer outra tag, sob a chave
+    # `identidade_de_captura`. Coluna nova exigiria migração e o par já é
+    # consultável assim — quando o agrupamento de Live Photo existir de fato,
+    # o dado já vai estar no catálogo, sem re-scan.
+    identidade_de_captura: str | None = None
     erro: str | None = None
 
 

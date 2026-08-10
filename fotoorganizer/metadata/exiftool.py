@@ -266,6 +266,13 @@ def _palavras_chave(dados: dict) -> tuple[str, ...]:
     return tuple(vistas)
 
 
+def _texto(bruto) -> str | None:
+    if bruto is None:
+        return None
+    texto = str(bruto).strip()
+    return texto or None
+
+
 def _numero(valor) -> float | None:
     try:
         return float(str(valor).strip().lstrip("+"))
@@ -481,6 +488,23 @@ class ExifToolExtractor:
         meta.gps_lat = _numero(valor("Composite:GPSLatitude"))
         meta.gps_lon = _numero(valor("Composite:GPSLongitude"))
         meta.palavras_chave = _palavras_chave(dados)
+        # Live Photo: o iPhone grava a foto e o vídeo como dois arquivos e os
+        # amarra por um identificador comum. Sem ele, o par vira dois
+        # registros que se ignoram — a grade conta duas vezes o mesmo
+        # instante, e a rajada fica poluída por vídeos de 3 segundos.
+        #
+        # O ganho maior, porém, não é cosmético: o `.mov` costuma ter GPS
+        # quando o `.heic` ao lado não tem, e a correlação
+        # (`grouping/correlacao.py`) precisa saber que os dois são a MESMA
+        # captura para não tratar um como doador do outro a Δt zero — o que
+        # inflaria artificialmente a confiança da herança.
+        #
+        # `Apple:` vem do bloco do fabricante na foto; `QuickTime:` do
+        # contêiner do vídeo. Os dois carregam o mesmo UUID.
+        meta.identidade_de_captura = _texto(valor(
+            "Apple:ContentIdentifier", "QuickTime:ContentIdentifier",
+            "Keys:ContentIdentifier", "XMP:ContentIdentifier",
+        ))
 
         for chave, bruto in dados.items():
             grupo, _, nome = chave.partition(":")

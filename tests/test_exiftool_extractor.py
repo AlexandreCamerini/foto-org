@@ -387,3 +387,19 @@ def test_hierarquia_entra_inteira_e_por_nivel():
 
 def test_sem_palavra_chave_o_campo_fica_vazio():
     assert ExifToolExtractor._converter({}).palavras_chave == ()
+
+
+def test_identidade_de_captura_amarra_foto_e_video_da_live_photo():
+    """O iPhone grava a Live Photo como dois arquivos com o mesmo UUID. Sem
+    ele o par vira dois registros que se ignoram — e a correlação trataria um
+    como doador de GPS do outro a Δt zero, inflando a confiança da herança."""
+    uuid = "8F1A2B3C-4D5E-6F70-8192-A3B4C5D6E7F8"
+    foto = ExifToolExtractor._converter({"Apple:ContentIdentifier": uuid})
+    video = ExifToolExtractor._converter({"QuickTime:ContentIdentifier": uuid})
+    assert foto.identidade_de_captura == video.identidade_de_captura == uuid
+
+
+def test_sem_live_photo_nao_ha_identidade():
+    assert ExifToolExtractor._converter(
+        {"EXIF:Model": "Canon R5"}
+    ).identidade_de_captura is None

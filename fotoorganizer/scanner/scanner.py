@@ -496,6 +496,13 @@ class CatalogScanner:
             (NAMESPACE_CURADORIA, "palavra_chave", palavra)
             for palavra in meta.palavras_chave
         ]
+        if meta.identidade_de_captura:
+            # Vale para a testemunha também: é justamente a miniatura ou o
+            # `.mov` rebaixado que precisa dizer de que captura faz parte.
+            extras.append(
+                ("derivado", "identidade_de_captura",
+                 meta.identidade_de_captura)
+            )
         if extras:
             session.flush()
             # Re-scan reescreve a base bruta do arquivo: sem isto, cada nova
