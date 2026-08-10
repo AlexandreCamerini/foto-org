@@ -210,7 +210,7 @@ export default function Review({
                     {grupo.fora_de_alcance > 0 && (
                       // Sem isto o dono aprova 2.405 fotos de um disco
                       // desligado sem saber (mesma honestidade de D-033).
-                      <span className="text-texto-3">
+                      <span className="text-atencao">
                         {" "}
                         · {grupo.fora_de_alcance.toLocaleString("pt-BR")} fora
                         de alcance

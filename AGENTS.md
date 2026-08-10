@@ -48,10 +48,11 @@ somente por último executar operações físicas.**
 - **UI: web local** (decisão de 2026-07-24, a pedido do dono do produto) —
   FastAPI servindo apenas 127.0.0.1 (`fotoorganizer/server/`) + React/
   Vite/TypeScript/Tailwind (`webapp/`), grade virtualizada, teclado-first.
-  A UI PySide6 (`fotoorganizer/ui/`) permanece como fallback até paridade
-  e será removida em commit próprio. Streamlit foi avaliado e rejeitado
-  (era a stack da v1: sem grade virtualizada, sem teclado, re-render por
-  interação). Empacotamento Tauri é milestone futuro.
+  É a única interface: a UI PySide6 (`fotoorganizer/ui/`) já foi removida
+  por inteiro (commit `2e0ef1a`, 31/07/2026). Streamlit foi avaliado e
+  rejeitado antes disso (era a stack da v1: sem grade virtualizada, sem
+  teclado, re-render por interação). Empacotamento Tauri é milestone
+  futuro.
 - Metadados: exiftool via subprocesso em batch (`-stay_open`) quando
   instalado; fallback puro-Python (Pillow + exifread + pillow-heif + rawpy).
 - Hashing: xxhash (rápido, sempre) + SHA-256 (completo, sob demanda).
@@ -72,7 +73,7 @@ serviços. Trabalho pesado sempre fora da main thread.
 ```
 fotoorganizer/
   app/            entrypoint, injeção de dependências, config
-  ui/             PySide6 (views, viewmodels, widgets, tema QSS)
+  server/         FastAPI local (127.0.0.1) que serve o webapp — única UI
   database/       engine, migrações Alembic
   models/         ORM + dataclasses de domínio
   repositories/   acesso a dados (uma classe por agregado)
@@ -132,10 +133,10 @@ EXIF, confiança alta; cidade veio do nome da pasta, confiança média").
 - O protótipo v1 (`backend/`, `streamlit_app/`, `database/fotos.db`) foi
   portado e removido por inteiro. O catálogo vive em
   `~/Library/Application Support/FotoOrganizer/catalog.db` e é o único.
-- A UI PySide6 (`fotoorganizer/ui/`, `fotoorganizer/workers/`) é fallback e
-  está pronta para sair: o webapp tem paridade de telas (incluindo
-  Operações) e cobertura própria (vitest, `webapp/src/**/*.test.tsx`,
-  no `scripts/verificar.sh`). A remoção sai em commit próprio, não aos
-  pedaços, e leva junto `tests/test_ui_smoke.py`.
+- A UI PySide6 (`fotoorganizer/ui/`, `fotoorganizer/workers/`) já foi
+  removida por inteiro (commit `2e0ef1a`, 31/07/2026, junto com
+  `tests/test_ui_smoke.py` e `tests/test_media_model.py`). O webapp é a
+  única interface, com paridade de telas (incluindo Operações) e cobertura
+  própria (vitest, `webapp/src/**/*.test.tsx`, no `scripts/verificar.sh`).
 - Commits pequenos com mensagens convencionais (feat/fix/docs/test), em
   português como o histórico existente.

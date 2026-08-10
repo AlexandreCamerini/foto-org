@@ -9,17 +9,16 @@ scan (read-only) → catálogo SQLite → extração de metadados → evidência
 sugestões (com confiança e versão da lógica) → revisão humana → plano de
 operação → dry-run → execução (cópia verificada) → audit log.
 
-UI (PySide6, main thread) ⇄ ViewModels ⇄ Repositories/Services ⇄ Workers
-(QThreadPool) — todo I/O e CPU pesada nos workers.
+UI ⇄ Repositories/Services ⇄ Workers — todo I/O e CPU pesada nos workers.
 
-**UI web local (M9, principal):** `webapp/` (React/Vite/TS/Tailwind, grade
+**UI web local (única interface):** `webapp/` (React/Vite/TS/Tailwind, grade
 virtualizada, loupe teclado-first) fala com `fotoorganizer/server/`
 (FastAPI, só 127.0.0.1) que reusa os MESMOS repositórios/serviços — os
 handlers nunca tocam filesystem/DB direto. Trabalhos pesados (scan,
 importação, sugestões, duplicatas) rodam um por vez no JobManager
 (thread), com progresso por SSE. O build de `webapp/dist` é servido pelo
-próprio FastAPI: um processo, zero rede externa. A UI PySide6 segue como
-fallback até paridade.
+próprio FastAPI: um processo, zero rede externa. A UI PySide6 foi removida
+por inteiro (commit `2e0ef1a`, 31/07/2026).
 
 ## Schema inicial (Alembic, migração 0001)
 

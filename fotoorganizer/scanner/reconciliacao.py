@@ -37,6 +37,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from fotoorganizer.models import MediaFile, Source
 from fotoorganizer.repositories.settings import SettingsRepository
 from fotoorganizer.scanner.elegibilidade import PADRAO_SQL_REFERENCIA_EXTERNA
+# Import direto do submódulo (não do pacote `fotoorganizer.scanner`, que
+# importa este arquivo em `__init__.py` antes de `scanner.py` — passar pelo
+# pacote aqui criaria ciclo). `scanner.py` não importa nada deste arquivo,
+# então isto é seguro.
+from fotoorganizer.scanner.scanner import ScanControl
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +66,11 @@ class ResultadoReconciliacao:
     # True quando esta chamada alcançou o fim do acervo elegível (o
     # checkpoint volta a zero) — a próxima passada recomeça do início.
     ciclo_concluido: bool
+    # True quando a passada foi interrompida por `control.cancelado`, não
+    # pelo orçamento de tempo/percentual — mesmo efeito sobre o checkpoint
+    # (salva o que já foi feito), mas o chamador (job) quer relatar
+    # "cancelado" em vez de "concluído" para o usuário.
+    cancelado: bool = False
 
 
 def _condicoes_elegiveis():
@@ -92,6 +102,7 @@ def reconciliar(
     *,
     orcamento_segundos: float = _ORCAMENTO_SEGUNDOS_PADRAO,
     orcamento_percentual: float = _ORCAMENTO_PERCENTUAL_PADRAO,
+    control: ScanControl | None = None,
 ) -> ResultadoReconciliacao:
     """Uma passada, auto-limitada. Retoma de onde a passada anterior parou.
 
@@ -100,6 +111,21 @@ def reconciliar(
     hash ou thumbnail. Ao alcançar o fim do acervo elegível, o checkpoint
     volta a zero: a chamada seguinte recomeça um novo ciclo, em vez de ficar
     presa no fim para sempre.
+
+    `control`, quando informado, é o mesmo `ScanControl` cooperativo do
+    scan de pasta: um `cancelar()` do job interrompe o lote no mesmo ponto
+    em que o orçamento de tempo já interrompe (salva o checkpoint parcial,
+    não descarta o que já foi verificado).
+
+    Antes de gastar um `Path.exists()` por arquivo, confere BARATO (um
+    `Path.exists()` na raiz, uma vez por fonte presente no lote — não por
+    linha) se a fonte ainda responde. `Source.disponivel` já filtra fontes
+    que o scan/`disponibilidade.verificar()` já sabem estar fora de
+    alcance (SQL, acima); esta checagem cobre o buraco entre passadas: um
+    HD que caiu DEPOIS do último scan e ainda consta `disponivel=True` no
+    banco. Se a raiz não responde, as linhas daquela fonte neste lote são
+    puladas sem tocar o arquivo — e o checkpoint não avança além delas, para
+    não ficarem presas atrás do cursor: a próxima passada as reconfere.
     """
     settings_repo = SettingsRepository(session_factory)
     ultimo_id = _checkpoint_atual(settings_repo)
@@ -136,11 +162,37 @@ def reconciliar(
         ha_mais_depois_deste_lote = len(candidatos) > teto_linhas
         a_processar = candidatos[:teto_linhas]
 
+        # Raiz de cada fonte presente no lote, uma vez só — não por linha.
+        fontes_no_lote = {media.source_id for media in a_processar}
+        caminhos_fonte: dict[int, str] = {}
+        if fontes_no_lote:
+            caminhos_fonte = dict(session.execute(
+                select(Source.id, Source.caminho)
+                .where(Source.id.in_(fontes_no_lote))
+            ).all())
+        raiz_disponivel: dict[int, bool] = {
+            source_id: Path(caminho).exists()
+            for source_id, caminho in caminhos_fonte.items()
+        }
+
         parou_por_tempo = False
+        cancelado = False
+        # Uma vez que uma linha é pulada por fonte indisponível, o
+        # checkpoint para de avançar — mesmo que linhas seguintes (de
+        # outras fontes) sejam processadas normalmente. Garante que a
+        # linha pulada continue elegível na próxima passada, ao custo de
+        # (raramente) reconferir de novo o que veio depois dela neste lote.
+        checkpoint_travado = False
         for media in a_processar:
             if time.monotonic() - inicio >= orcamento_segundos:
                 parou_por_tempo = True
                 break
+            if control is not None and control.cancelado:
+                cancelado = True
+                break
+            if not raiz_disponivel.get(media.source_id, True):
+                checkpoint_travado = True
+                continue
             existe = Path(media.caminho).exists()
             if existe and media.arquivo_offline:
                 media.arquivo_offline = False
@@ -149,12 +201,18 @@ def reconciliar(
                 media.arquivo_offline = True
                 marcados_offline += 1
             verificados += 1
-            ultimo_processado = media.id
+            if not checkpoint_travado:
+                ultimo_processado = media.id
 
-        sobrou_no_lote_por_tempo = parou_por_tempo and verificados < len(a_processar)
+        interrompeu_lote = parou_por_tempo or cancelado
+        sobrou_no_lote_por_tempo = interrompeu_lote and verificados < len(a_processar)
         session.commit()
 
-    ciclo_concluido = not (ha_mais_depois_deste_lote or sobrou_no_lote_por_tempo)
+    ciclo_concluido = not (
+        ha_mais_depois_deste_lote
+        or sobrou_no_lote_por_tempo
+        or checkpoint_travado
+    )
     if ciclo_concluido:
         novo_checkpoint = {
             "ultimo_media_id": 0,
@@ -168,11 +226,13 @@ def reconciliar(
         "reconciliação: %d verificado(s), %d offline, %d online de novo "
         "(%s)",
         verificados, marcados_offline, marcados_online,
-        "ciclo completo" if ciclo_concluido else "orçamento consumido",
+        "cancelado" if cancelado
+        else "ciclo completo" if ciclo_concluido else "orçamento consumido",
     )
     return ResultadoReconciliacao(
         verificados=verificados,
         marcados_offline=marcados_offline,
         marcados_online=marcados_online,
         ciclo_concluido=ciclo_concluido,
+        cancelado=cancelado,
     )

@@ -26,9 +26,8 @@ quando fizer sentido evoluí-la, propõe a mudança no doc junto com o código.
 ## Onde os tokens vivem
 
 `webapp/src/index.css` (bloco `@theme` do Tailwind) é a implementação
-corrente e deve espelhar os valores acima. O tema QSS em
-`fotoorganizer/ui/theme.py` pertence à UI PySide6 legada, em remoção — não
-evolua estilo lá.
+corrente e deve espelhar os valores acima — é a única UI; a UI PySide6 foi
+removida por inteiro (commit `2e0ef1a`).
 
 ## Como revisar
 

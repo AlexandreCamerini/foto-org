@@ -100,7 +100,11 @@ export default function Duplicates({ job }: { job: Job }) {
                   ? "escolha o melhor frame"
                   : `${tamanhoLegivel(g.bytes_recuperaveis)} recuperáveis`}
                 {g.n_fontes > 1 ? ` · em ${g.n_fontes} fontes` : ""}
-                {g.decidido ? " · decidido ✓" : ""}
+                {g.resolvido_automaticamente
+                  ? " · resolvido automaticamente"
+                  : g.decidido
+                    ? " · decidido ✓"
+                    : ""}
               </div>
             </button>
           ))}
@@ -121,10 +125,20 @@ export default function Duplicates({ job }: { job: Job }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
             <span className="shrink-0 font-semibold">{grupo.rotulo}</span>
+            {grupo.resolvido_automaticamente && (
+              <span
+                title="Bytes idênticos (SHA-256): o algoritmo escolheu a cópia mais organizada como principal. Revise ou desfaça se preferir outra."
+                className="shrink-0 rounded-md border border-acento/40 px-1.5 py-0.5 text-[11px] text-acento"
+              >
+                resolvido automaticamente
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate text-texto-2">
-              {grupo.nivel === "sequencia"
-                ? "Rajada da mesma câmera — marque o melhor frame como principal."
-                : "Marque a cópia a manter como principal."}
+              {grupo.resolvido_automaticamente
+                ? "Cópia idêntica (SHA-256) — o algoritmo já marcou a principal. Escolha outra se discordar."
+                : grupo.nivel === "sequencia"
+                  ? "Rajada da mesma câmera — marque o melhor frame como principal."
+                  : "Marque a cópia a manter como principal."}
             </span>
             <button
               onClick={() =>

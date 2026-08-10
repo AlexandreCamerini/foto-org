@@ -54,7 +54,9 @@ executar operações físicas.
 
 ### Stack (decidida — não trocar sem justificar)
 
-Python 3.12+, PySide6, SQLite (WAL) via SQLAlchemy 2 + Alembic. Metadados por
+Python 3.12+, SQLite (WAL) via SQLAlchemy 2 + Alembic. UI web local
+(FastAPI + React/Vite/TS/Tailwind), única interface — a UI PySide6 foi
+removida por inteiro. Metadados por
 exiftool em batch (`-stay_open`) com fallback puro-Python (Pillow + exifread +
 pillow-heif + rawpy). Hashing xxhash + SHA-256 sob demanda; duplicata visual
 `imagehash.phash`. Geocoding reverso offline (opt-in externo com cache/rate

@@ -212,13 +212,22 @@ function ModalReapontar({
               noutro ponto. Isto reescreve só o catálogo — nenhum arquivo é
               tocado no disco.
             </p>
-            <div className="mb-3 space-y-1 truncate font-mono text-texto-2">
-              <div className="truncate" title={previa.prefixo_antigo}>
-                − {previa.prefixo_antigo}
-              </div>
-              <div className="truncate text-texto" title={previa.prefixo_novo}>
-                + {previa.prefixo_novo}
-              </div>
+            <div className="mb-3 flex items-center gap-2 truncate">
+              <span
+                className="min-w-0 flex-1 truncate text-texto-2"
+                title={previa.prefixo_antigo}
+              >
+                {previa.prefixo_antigo}
+              </span>
+              <span aria-hidden className="shrink-0 text-texto-3">
+                →
+              </span>
+              <span
+                className="min-w-0 flex-1 truncate font-medium"
+                title={previa.prefixo_novo}
+              >
+                {previa.prefixo_novo}
+              </span>
             </div>
             <p className="mb-3 text-texto-2">
               {previa.total_media_files.toLocaleString("pt-BR")} arquivo(s)

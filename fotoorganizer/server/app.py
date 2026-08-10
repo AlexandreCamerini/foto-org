@@ -1025,6 +1025,7 @@ def create_app(
                 "nivel": grupo.nivel.value,
                 "rotulo": grupo.rotulo_nivel,
                 "decidido": grupo.decidido,
+                "resolvido_automaticamente": grupo.resolvido_automaticamente,
                 "bytes_recuperaveis": grupo.bytes_recuperaveis,
                 "n_fontes": grupo.n_fontes,
                 "membros": [
