@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.models import (
     AuditLog,
+    DuplicateMember,
+    DuplicateRole,
     MediaFile,
     OperationItem,
     OperationPlan,
@@ -67,8 +69,20 @@ class OperationPlanner:
                     OperationItem.status == OperationStatus.CONCLUIDA
                 )
             ))
+            # VERSAO é a cópia redundante de um grupo de duplicata que já tem
+            # PRINCIPAL definido (automático para EXATO, ou humano em
+            # qualquer nível) — não entra no plano de cópia. IGNORADO é
+            # diferente: o usuário olhou o grupo e decidiu que não são
+            # duplicatas de fato ("nenhum arquivo será tocado",
+            # repositories/duplicates.py) — continua entrando normalmente.
+            versoes = set(session.scalars(
+                select(DuplicateMember.media_id).where(
+                    DuplicateMember.papel == DuplicateRole.VERSAO
+                )
+            ))
             pendentes = [
-                (s, m, f) for s, m, f in sugestoes if m.id not in ja_copiadas
+                (s, m, f) for s, m, f in sugestoes
+                if m.id not in ja_copiadas and m.id not in versoes
             ]
             if not pendentes:
                 return None

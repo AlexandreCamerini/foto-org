@@ -7,6 +7,10 @@ from fotoorganizer.database import create_session_factory
 from fotoorganizer.models import (
     AuditLog,
     ConfidenceLevel,
+    DuplicateGroup,
+    DuplicateLevel,
+    DuplicateMember,
+    DuplicateRole,
     MediaFile,
     OperationItem,
     OperationStatus,
@@ -77,6 +81,64 @@ def test_plano_so_inclui_aprovadas_e_resolve_colisao(ambiente):
     com_conflito = [i for i in itens if i.conflito]
     assert len(com_conflito) == 1
     assert "renomeado" in com_conflito[0].conflito
+
+
+def test_plano_exclui_versao_de_duplicata_exata(ambiente):
+    """VERSAO é a cópia redundante de um grupo já resolvido (automático ou
+    humano) — não faz sentido copiar duas vezes o mesmo conteúdo."""
+    factory, planner, executor, origem, destino = ambiente
+    with factory() as session:
+        medias = {m.caminho: m for m in session.scalars(select(MediaFile))}
+        principal = medias[str(origem / "a/IMG_1.jpg")]
+        versao = medias[str(origem / "b/IMG_1.jpg")]
+        grupo = DuplicateGroup(
+            nivel=DuplicateLevel.EXATO, resolvido_automaticamente=True
+        )
+        session.add(grupo)
+        session.flush()
+        session.add(DuplicateMember(
+            group_id=grupo.id, media_id=principal.id,
+            papel=DuplicateRole.PRINCIPAL,
+        ))
+        session.add(DuplicateMember(
+            group_id=grupo.id, media_id=versao.id, papel=DuplicateRole.VERSAO,
+        ))
+        session.commit()
+
+    plan_id = planner.criar_plano(destino)
+    itens = OperationRepository(factory).itens(plan_id)
+    origens = {i.origem for i in itens}
+
+    assert str(origem / "b/IMG_1.jpg") not in origens
+    assert str(origem / "a/IMG_1.jpg") in origens
+    assert len(itens) == 2  # 3 aprovadas - 1 versão redundante
+
+
+def test_plano_inclui_grupo_ignorado_por_inteiro(ambiente):
+    """IGNORADO é diferente de VERSAO: o usuário olhou o grupo e decidiu que
+    não são duplicatas de fato — nenhum arquivo fica fora do plano por isso
+    (fotoorganizer/repositories/duplicates.py: "nenhum arquivo será
+    tocado")."""
+    factory, planner, executor, origem, destino = ambiente
+    with factory() as session:
+        medias = {m.caminho: m for m in session.scalars(select(MediaFile))}
+        par = [
+            medias[str(origem / "a/IMG_1.jpg")],
+            medias[str(origem / "b/IMG_1.jpg")],
+        ]
+        grupo = DuplicateGroup(nivel=DuplicateLevel.EXATO)
+        session.add(grupo)
+        session.flush()
+        for media in par:
+            session.add(DuplicateMember(
+                group_id=grupo.id, media_id=media.id,
+                papel=DuplicateRole.IGNORADO,
+            ))
+        session.commit()
+
+    plan_id = planner.criar_plano(destino)
+    itens = OperationRepository(factory).itens(plan_id)
+    assert len(itens) == 3  # nenhuma exclusão — grupo ignorado, não resolvido
 
 
 def test_execucao_exige_dry_run(ambiente):

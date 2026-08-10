@@ -538,6 +538,7 @@ export interface GrupoDuplicatas {
   nivel: string;
   rotulo: string;
   decidido: boolean;
+  resolvido_automaticamente: boolean;
   bytes_recuperaveis: number;
   n_fontes: number;
   membros: MembroDuplicata[];

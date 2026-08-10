@@ -32,6 +32,13 @@ class DuplicateGroup(Base):
     nivel: Mapped[DuplicateLevel] = mapped_column(
         Enum(DuplicateLevel, native_enum=False)
     )
+    # True enquanto o papel dos membros veio da regra determinística de
+    # fotoorganizer/duplicates/resolucao.py (grupo EXATO, sem intervenção
+    # humana ainda) — a UI usa isto para diferenciar "decidido pelo
+    # algoritmo, revise se quiser" de "decidido por você". Qualquer ação
+    # humana (escolher_principal/ignorar_grupo/desfazer_grupo) volta a
+    # False: a partir daí a decisão é do usuário, não do algoritmo.
+    resolvido_automaticamente: Mapped[bool] = mapped_column(default=False)
     criado_em: Mapped[datetime] = mapped_column(default=utcnow)
 
     membros: Mapped[list["DuplicateMember"]] = relationship(

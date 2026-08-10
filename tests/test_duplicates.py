@@ -8,6 +8,7 @@ from sqlalchemy import select
 from fotoorganizer.config.settings import ScannerSettings
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.duplicates import BKTree, DuplicateDetector, distancia_hamming
+from fotoorganizer.duplicates.resolucao import escolher_principal_automatico
 from fotoorganizer.metadata import PurePythonExtractor
 from fotoorganizer.models import (
     DuplicateGroup,
@@ -15,6 +16,7 @@ from fotoorganizer.models import (
     DuplicateRole,
     MediaFile,
     Source,
+    SourceType,
 )
 from fotoorganizer.repositories import DuplicateRepository
 from fotoorganizer.scanner import CatalogScanner
@@ -47,6 +49,43 @@ def test_bktree_payloads_iguais_agrupados():
     tree.inserir(42, "y")
     (d, _v, payloads), = tree.buscar(42, 0)
     assert d == 0 and payloads == ["x", "y"]
+
+
+# -- regra de desempate de grupo EXATO (pura, sem banco) --------------------
+def _midia_solta(id_, nome, pasta, *, tipo=SourceType.PASTA) -> MediaFile:
+    media = MediaFile(
+        id=id_, source_id=1, caminho=f"{pasta}/{nome}", pasta=pasta,
+        nome=nome, extensao="jpg", tamanho=100,
+    )
+    media.source = Source(tipo=tipo, caminho=pasta)
+    return media
+
+
+def test_resolucao_prefere_fonte_propria_sobre_externa():
+    propria = _midia_solta(1, "a.jpg", "/fotos", tipo=SourceType.PASTA)
+    externa = _midia_solta(2, "a.jpg", "/import", tipo=SourceType.APPLE_PHOTOS)
+    assert escolher_principal_automatico([externa, propria]) is propria
+    assert escolher_principal_automatico([propria, externa]) is propria
+
+
+def test_resolucao_prefere_caminho_mais_organizado_em_empate_de_fonte():
+    raiz = _midia_solta(1, "foto.jpg", "/fotos")
+    organizada = _midia_solta(2, "foto.jpg", "/fotos/2024/viagem")
+    assert escolher_principal_automatico([raiz, organizada]) is organizada
+
+
+def test_resolucao_prefere_nome_descritivo_sobre_generico():
+    generico = _midia_solta(1, "IMG_1234.jpg", "/fotos")
+    descritivo = _midia_solta(2, "aniversario_maria.jpg", "/fotos")
+    assert escolher_principal_automatico([generico, descritivo]) is descritivo
+    assert escolher_principal_automatico([descritivo, generico]) is descritivo
+
+
+def test_resolucao_desempata_por_id_e_e_estavel_a_ordem_de_entrada():
+    menor = _midia_solta(3, "foto.jpg", "/fotos")
+    maior = _midia_solta(5, "foto.jpg", "/fotos")
+    assert escolher_principal_automatico([maior, menor]) is menor
+    assert escolher_principal_automatico([menor, maior]) is menor
 
 
 # -- imagens de teste --------------------------------------------------------
@@ -169,6 +208,157 @@ def test_acoes_do_repositorio(ambiente):
     repo.desfazer_grupo(grupo.id)
     atual = next(g for g in repo.listar_grupos() if g.id == grupo.id)
     assert not atual.decidido
+
+
+def test_grupo_exato_e_resolvido_automaticamente(migrated_engine):
+    """SHA-256 idêntico não deixa ambiguidade sobre o conteúdo: o detector
+    já grava PRINCIPAL/VERSAO sozinho, preferindo a fonte própria."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        propria = Source(caminho="/fotos", tipo=SourceType.PASTA)
+        externa = Source(caminho="/import", tipo=SourceType.APPLE_PHOTOS)
+        session.add_all([propria, externa])
+        session.flush()
+        a = _inserir_midia(session, propria.id, "IMG_0001.jpg",
+                            "0000000000000000", tamanho=100,
+                            hash_rapido="xxh3:igual")
+        b = _inserir_midia(session, externa.id, "IMG_0001.jpg",
+                            "0000000000000000", tamanho=100,
+                            hash_rapido="xxh3:igual")
+        session.flush()
+        a.hash_sha256 = b.hash_sha256 = "sha256:igual"
+        session.commit()
+        a_id, b_id = a.id, b.id
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["exato"] == 1
+
+    repo = DuplicateRepository(factory)
+    (grupo,) = repo.listar_grupos()
+    assert grupo.resolvido_automaticamente
+    papeis = {m.media_id: m.papel for m in grupo.membros}
+    assert papeis[a_id] == DuplicateRole.PRINCIPAL  # fonte própria vence
+    assert papeis[b_id] == DuplicateRole.VERSAO
+
+
+def test_nova_copia_identica_se_junta_a_grupo_resolvido_automaticamente(
+    migrated_engine,
+):
+    """Um grupo EXATO resolvido sozinho não pode travar no tamanho de quando
+    foi criado — resolvido_automaticamente não é decisão humana, então a
+    redetecção regenera o grupo e a terceira cópia entra nele, em vez de
+    ficar invisível para sempre (o próprio motivo de existir a coluna)."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos", tipo=SourceType.PASTA)
+        session.add(fonte)
+        session.flush()
+        a = _inserir_midia(session, fonte.id, "a.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        b = _inserir_midia(session, fonte.id, "b.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        session.flush()
+        a.hash_sha256 = b.hash_sha256 = "sha256:igual"
+        session.commit()
+
+    detector = DuplicateDetector(factory)
+    detector.detectar()
+    repo = DuplicateRepository(factory)
+    (grupo,) = repo.listar_grupos()
+    assert len(grupo.membros) == 2
+    assert grupo.resolvido_automaticamente  # ninguém tocou ainda
+
+    with factory() as session:
+        c = _inserir_midia(session, fonte.id, "c.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        session.flush()
+        c.hash_sha256 = "sha256:igual"
+        session.commit()
+
+    detector.detectar()
+    (grupo,) = repo.listar_grupos()  # continua um grupo só, agora com 3
+    assert len(grupo.membros) == 3
+    assert grupo.resolvido_automaticamente
+    papeis = [m.papel for m in grupo.membros]
+    assert papeis.count(DuplicateRole.PRINCIPAL) == 1
+    assert papeis.count(DuplicateRole.VERSAO) == 2
+
+
+def test_decisao_humana_substitui_resolucao_automatica(migrated_engine):
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos", tipo=SourceType.PASTA)
+        session.add(fonte)
+        session.flush()
+        a = _inserir_midia(session, fonte.id, "a.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        b = _inserir_midia(session, fonte.id, "b.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        session.flush()
+        a.hash_sha256 = b.hash_sha256 = "sha256:igual"
+        session.commit()
+        b_id = b.id
+
+    DuplicateDetector(factory).detectar()
+    repo = DuplicateRepository(factory)
+    (grupo,) = repo.listar_grupos()
+    assert grupo.resolvido_automaticamente
+
+    # Humano discorda da escolha automática e escolhe o outro membro.
+    repo.escolher_principal(grupo.id, b_id)
+    atual = next(g for g in repo.listar_grupos() if g.id == grupo.id)
+    assert not atual.resolvido_automaticamente
+    assert next(m.papel for m in atual.membros if m.media_id == b_id) == (
+        DuplicateRole.PRINCIPAL
+    )
+
+
+def test_desfazer_reverte_resolucao_automatica(migrated_engine):
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos", tipo=SourceType.PASTA)
+        session.add(fonte)
+        session.flush()
+        a = _inserir_midia(session, fonte.id, "a.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        b = _inserir_midia(session, fonte.id, "b.jpg", "0000000000000000",
+                            tamanho=100, hash_rapido="xxh3:igual")
+        session.flush()
+        a.hash_sha256 = b.hash_sha256 = "sha256:igual"
+        session.commit()
+
+    DuplicateDetector(factory).detectar()
+    repo = DuplicateRepository(factory)
+    (grupo,) = repo.listar_grupos()
+
+    repo.desfazer_grupo(grupo.id)
+    atual = next(g for g in repo.listar_grupos() if g.id == grupo.id)
+    assert not atual.resolvido_automaticamente
+    assert not atual.decidido
+    assert all(m.papel == DuplicateRole.INDEFINIDO for m in atual.membros)
+
+
+def test_grupo_conteudo_nao_e_resolvido_automaticamente(factory_com_source):
+    """Só EXATO tem certeza sobre o CONTEÚDO. Os demais níveis (CONTEUDO,
+    VISUAL, SEQUENCIA — este último já coberto pelos testes de rajada
+    abaixo) dependem de julgamento humano e continuam nascendo INDEFINIDO."""
+    factory, source_id = factory_com_source
+    base = datetime(2025, 5, 24, 17, 0, 0)
+    with factory() as session:
+        # phash idêntico, câmeras diferentes: CONTEUDO, não SEQUENCIA.
+        _inserir_midia(session, source_id, "c1.jpg", "00000000000000ff",
+                       model="EOS R6", quando=base)
+        _inserir_midia(session, source_id, "c2.jpg", "00000000000000ff",
+                       model="iPhone 15", quando=base + timedelta(hours=1))
+        session.commit()
+
+    stats = DuplicateDetector(factory).detectar()
+    assert stats["conteudo"] == 1
+
+    repo = DuplicateRepository(factory)
+    (grupo,) = repo.listar_grupos()
+    assert not grupo.resolvido_automaticamente
+    assert all(m.papel == DuplicateRole.INDEFINIDO for m in grupo.membros)
 
 
 # -- rajadas (sequência) vs duplicata visual ---------------------------------

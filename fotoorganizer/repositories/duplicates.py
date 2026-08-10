@@ -43,6 +43,7 @@ class GroupRow:
     rotulo_nivel: str
     membros: tuple[MemberRow, ...]
     decidido: bool
+    resolvido_automaticamente: bool
 
     @property
     def bytes_recuperaveis(self) -> int:
@@ -88,6 +89,7 @@ class DuplicateRepository:
                     decidido=any(
                         m.papel != DuplicateRole.INDEFINIDO for m in membros
                     ),
+                    resolvido_automaticamente=grupo.resolvido_automaticamente,
                 ))
             return linhas
 
@@ -102,8 +104,14 @@ class DuplicateRepository:
 
     # -- decisões ----------------------------------------------------------
     def escolher_principal(self, group_id: int, media_id: int) -> None:
-        """O escolhido vira PRINCIPAL; os demais, VERSAO."""
+        """O escolhido vira PRINCIPAL; os demais, VERSAO.
+
+        Ação humana: mesmo que o grupo já tivesse sido resolvido pela regra
+        automática (`duplicates/resolucao.py`), uma escolha explícita aqui
+        substitui o algoritmo — a partir daqui a decisão é do usuário.
+        """
         with self._factory() as session:
+            self._marcar_decisao_humana(session, group_id)
             for membro in session.scalars(
                 select(DuplicateMember).where(DuplicateMember.group_id == group_id)
             ):
@@ -122,8 +130,15 @@ class DuplicateRepository:
 
     def _set_papel_grupo(self, group_id: int, papel: DuplicateRole) -> None:
         with self._factory() as session:
+            self._marcar_decisao_humana(session, group_id)
             for membro in session.scalars(
                 select(DuplicateMember).where(DuplicateMember.group_id == group_id)
             ):
                 membro.papel = papel
             session.commit()
+
+    @staticmethod
+    def _marcar_decisao_humana(session: Session, group_id: int) -> None:
+        grupo = session.get(DuplicateGroup, group_id)
+        if grupo is not None:
+            grupo.resolvido_automaticamente = False

@@ -10,8 +10,11 @@
                distância: rajada/variações de uma cena. Não é duplicata —
                apresentar como tal induziria a descartar o melhor frame.
 
-Grupos com decisão do usuário (algum papel definido) são preservados na
-redetecção; os demais são regenerados.
+Grupos com decisão HUMANA (algum papel definido, fora da resolução
+automática) são preservados na redetecção; os demais — inclusive um grupo
+EXATO que a regra determinística resolveu sozinha e ninguém revisou ainda —
+são regenerados, para que uma nova cópia idêntica descoberta depois se junte
+ao grupo em vez de ficar invisível atrás de uma decisão que ninguém tomou.
 """
 
 from __future__ import annotations
@@ -23,9 +26,10 @@ from pathlib import Path
 from typing import Callable
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from fotoorganizer.duplicates.phash import BKTree, calcular_phash
+from fotoorganizer.duplicates.resolucao import escolher_principal_automatico
 from fotoorganizer.models import (
     DuplicateGroup,
     DuplicateLevel,
@@ -67,8 +71,13 @@ class DuplicateDetector:
 
     def detectar(self, progress: Callable[[str], None] | None = None) -> dict:
         with self._factory() as session:
+            # selectinload(source): a resolução automática de grupo EXATO
+            # (resolucao.py) olha media.source.tipo para cada membro — sem
+            # isto, cada grupo dispara um SELECT extra por membro.
             midias = list(session.scalars(
-                select(MediaFile).where(MediaFile.tamanho > 0)
+                select(MediaFile)
+                .where(MediaFile.tamanho > 0)
+                .options(selectinload(MediaFile.source))
             ))
 
             if progress:
@@ -187,15 +196,41 @@ class DuplicateDetector:
         grupo = DuplicateGroup(nivel=nivel)
         session.add(grupo)
         session.flush()
+        # SHA-256 idêntico não deixa ambiguidade sobre o conteúdo — só resta
+        # decidir qual caminho é a referência, e isso a regra determinística
+        # de resolucao.py já responde sozinha. Os outros níveis (CONTEUDO,
+        # VISUAL, SEQUENCIA) dependem de julgamento sobre o CONTEÚDO em si
+        # (qual versão é a boa, qual frame é o melhor) e continuam INDEFINIDO
+        # até um clique humano.
+        principal = (
+            escolher_principal_automatico(membros)
+            if nivel == DuplicateLevel.EXATO else None
+        )
+        if principal is not None:
+            grupo.resolvido_automaticamente = True
         for media in membros:
-            session.add(DuplicateMember(group_id=grupo.id, media_id=media.id))
+            papel = DuplicateRole.INDEFINIDO
+            if principal is not None:
+                papel = (
+                    DuplicateRole.PRINCIPAL if media.id == principal.id
+                    else DuplicateRole.VERSAO
+                )
+            session.add(DuplicateMember(
+                group_id=grupo.id, media_id=media.id, papel=papel
+            ))
 
     # -- preservação de decisões -------------------------------------------
     def _limpar_grupos_sem_decisao(self, session: Session) -> int:
         grupos = list(session.scalars(select(DuplicateGroup)))
         preservados = 0
         for grupo in grupos:
-            decidido = any(
+            # resolvido_automaticamente NÃO conta como decisão para efeito
+            # de preservação: se contasse, um grupo EXATO resolvido sozinho
+            # travaria para sempre no tamanho de quando foi criado, e uma
+            # terceira cópia idêntica descoberta depois nunca se juntaria a
+            # ele (`ja_agrupados` a excluiria da repescagem sem incluí-la em
+            # grupo nenhum). Só decisão HUMANA fecha o grupo de verdade.
+            decidido = not grupo.resolvido_automaticamente and any(
                 m.papel != DuplicateRole.INDEFINIDO for m in grupo.membros
             )
             if decidido:
