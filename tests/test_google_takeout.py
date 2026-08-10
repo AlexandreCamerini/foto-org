@@ -208,3 +208,22 @@ def test_sidecar_sem_data_nao_inventa_instante(tmp_path):
     (asset,) = list(GoogleTakeoutProvider(raiz).iter_assets())
     assert asset.data_capturada is None
     assert asset.data_capturada_utc is None
+
+
+def test_video_com_sidecar_entra_como_doador(tmp_path):
+    """O vídeo do Takeout tem sidecar JSON como qualquer foto, e o geoData
+    dele é coordenada real. Ignorá-lo descartava GPS de graça."""
+    raiz = _takeout(tmp_path)
+    clip = raiz / "Viagem" / "VID_1.mp4"
+    clip.parent.mkdir(parents=True, exist_ok=True)
+    clip.write_bytes(b"\x00\x00\x00\x18ftypmp42")  # não é aberto: só stat()
+    sidecar = clip.with_name(clip.name + ".json")
+    sidecar.write_text(json.dumps({
+        "photoTakenTime": {"timestamp": "1592668800"},
+        "geoData": {"latitude": -22.95, "longitude": -43.17},
+    }), encoding="utf-8")
+
+    assets = {a.nome: a for a in GoogleTakeoutProvider(raiz).iter_assets()}
+    assert "VID_1.mp4" in assets
+    assert assets["VID_1.mp4"].gps_lat == -22.95
+    assert assets["VID_1.mp4"].data_capturada_utc == datetime(2020, 6, 20, 16, 0)

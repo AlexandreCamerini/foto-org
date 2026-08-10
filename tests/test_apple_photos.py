@@ -116,3 +116,47 @@ def test_sem_o_extra_apple_a_mensagem_diz_o_que_instalar(tmp_path, monkeypatch):
     provider = ApplePhotosProvider(tmp_path / "Qualquer.photoslibrary")
     with pytest.raises(ApplePhotosError, match=r"fotoorganizer\[apple\]"):
         list(provider.iter_assets())
+
+
+def test_palavras_chave_do_apple_sao_lidas():
+    """Palavra-chave é intenção declarada pelo dono, como álbum e pessoa.
+    O provider lia álbum e pessoa e descartava a palavra-chave — enquanto o
+    Lightroom já preenchia o mesmo campo do `ExternalAsset`."""
+    asset = _asset_de(_photo(keywords=["Praia", "Praia", "Família", ""]))
+    assert asset.palavras_chave == ("Praia", "Família")
+
+
+def test_photo_sem_keywords_nao_quebra():
+    """`_asset_de` é duck-typed: um PhotoInfo de outra versão do osxphotos —
+    ou um fake destes testes — pode não ter o atributo. O fake padrão não
+    tem, e é essa a garantia que interessa."""
+    assert _asset_de(_photo()).palavras_chave == ()
+    assert _asset_de(_photo(keywords=None)).palavras_chave == ()
+
+
+def test_video_entra_junto_com_a_foto(tmp_path, monkeypatch):
+    """`movies=False` descartava o vídeo — que numa biblioteca de iPhone é
+    metade de cada Live Photo e carrega GPS quando a foto não carrega.
+
+    O teste fixa o CONTRATO com o osxphotos (qual argumento é pedido), que é
+    exatamente o que a regressão trocou."""
+    import osxphotos  # noqa: F401  (pulado abaixo se ausente)
+
+    pedidos = {}
+
+    class FakeDB:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def photos(self, movies=False):
+            pedidos["movies"] = movies
+            return [
+                _photo(uuid="FOTO-1"),
+                _photo(uuid="VIDEO-1", path="/lib/originals/A/clip.mov"),
+            ]
+
+    monkeypatch.setattr("osxphotos.PhotosDB", FakeDB)
+    assets = list(ApplePhotosProvider(tmp_path / "L.photoslibrary").iter_assets())
+
+    assert pedidos["movies"] is True
+    assert {a.referencia for a in assets} == {"FOTO-1", "VIDEO-1"}

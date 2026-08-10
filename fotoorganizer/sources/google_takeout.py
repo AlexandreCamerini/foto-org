@@ -30,9 +30,16 @@ from fotoorganizer.sources.base import ExternalAsset
 log = logging.getLogger(__name__)
 
 # Extensões de mídia que o Takeout costuma conter e o app cataloga.
+#
+# O vídeo entra pelo mesmo motivo que entra no Apple Fotos: ele tem sidecar
+# JSON como qualquer foto, e o `geoData` desse sidecar é coordenada real —
+# doador da correlação. Deixá-lo de fora descartava GPS de graça, ainda mais
+# numa exportação em que o vídeo costuma ser gravado pelo mesmo celular que
+# não gravou EXIF na foto ao lado.
 _MEDIA_EXTS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".bmp",
     ".heic", ".heif",
+    ".mp4", ".mov", ".m4v", ".avi", ".mkv", ".3gp", ".webm",
 }
 
 # Pastas de ano ("Photos from 2024" / "Fotos de 2024") não são álbuns.
