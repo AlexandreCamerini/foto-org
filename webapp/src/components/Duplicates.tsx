@@ -56,7 +56,7 @@ export default function Duplicates({ job }: { job: Job }) {
                 setNivel(valor);
                 setGrupoId(null);
               }}
-              className={`rounded-md px-2 py-0.5 hover:bg-cartao ${
+              className={`rounded-full px-3 py-0.5 hover:bg-cartao ${
                 nivel === valor ? "bg-cartao text-acento" : "text-texto-2"
               }`}
             >

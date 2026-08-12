@@ -132,7 +132,7 @@ export default function Review({
           <button
             key={valor}
             onClick={() => setStatus(valor)}
-            className={`rounded-md px-3 py-1 hover:bg-cartao ${
+            className={`rounded-full px-3.5 py-1 hover:bg-cartao ${
               status === valor ? "bg-realce text-texto" : "text-texto-2"
             }`}
           >
@@ -148,9 +148,9 @@ export default function Review({
           {lista.length === 1 ? "grupo" : "grupos"}
         </span>
         <Botao
+          variante="solido"
           onClick={() => job.gerarSugestoes()}
-          disabled={job.rodando}
-            className="hover:border-borda-forte">
+          disabled={job.rodando}>
           {job.rodando && job.estado.tipo === "sugestoes"
             ? "Gerando…"
             : "Gerar/atualizar sugestões"}

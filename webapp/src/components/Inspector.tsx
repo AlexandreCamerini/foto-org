@@ -21,7 +21,7 @@ export default function Inspector({ media }: { media: Media | null }) {
   });
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-l border-borda bg-painel">
+    <aside className="flex h-full w-72 shrink-0 superficie flex-col border-l border-borda">
       <div className="titulo-painel px-3 pb-2 pt-3">Inspetor</div>
       {media === null ? (
         <div className="px-3 text-texto-2">

@@ -54,7 +54,7 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-borda bg-painel">
+    <aside className="flex h-full w-60 shrink-0 superficie flex-col border-r border-borda">
       <div className="titulo-painel px-3 pb-2 pt-3">Fontes</div>
       <nav className="flex-1 overflow-y-auto">
         <button

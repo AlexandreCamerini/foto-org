@@ -57,16 +57,29 @@ desatualizado, não o código. Os valores abaixo são os reais de
   bordas `rgba(255,255,255,.1)` / `.18` na forte. Opacidade module o que
   está atrás em vez de competir com a foto; é o mecanismo que faz "a foto é
   a cor da interface" ser código, não intenção. 1px, sem sombras pesadas.
-- **Texto**: primário `#f7f8f8`, secundário `#8a8f98`, terciário/desabilitado
-  `#62666d`.
-- **Acento único, dessaturado**: `#d6d9dd` (quase-branco, não azul) para
+  - As laterais (sidebar, inspetor) usam `.superficie`: gradiente vertical
+    de branco (3,5% → 1,5%) no lugar da opacidade chapada. Profundidade sem
+    sombra — o refino de 2026-08-11, junto com a estrutura em pills abaixo.
+- **Texto**: primário `#fbfbfc`, secundário `#9499a2`, terciário/desabilitado
+  `#686c73`. (Um degrau de contraste acima dos valores originais de D-017 —
+  hierarquia por luz, não por cor.)
+- **Acento único, dessaturado**: `#e8eaee` (quase-branco, não azul) para
   seleção, foco e progresso. Continua reservado a estado — nunca decoração
   — mas agora o próprio "não ter cor" é o que garante isso: um acento
   cromático fixo compete com qualquer foto atrás dele.
   - Texto sobre um botão de acento (`bg-acento`) precisa do token
     `--color-texto-invertido` (= cor da janela, `#08090a`), não branco: o
     acento é claro, e texto quase-branco sobre um fundo quase-branco é
-    ilegível. Contraste medido `#08090a` sobre `#d6d9dd` ≈ 14:1 (AAA).
+    ilegível. Contraste `#08090a` sobre `#e8eaee` segue ≈ AAA.
+- **Estrutura em pills** (decisão de 2026-08-11, o "híbrido"): navegação de
+  abas, controles segmentados (Tudo/Organizáveis/Fora de alcance, Lista ×
+  Mapa, filtros de status e de nível), chips de filtro e campos de busca de
+  uma linha usam `rounded-full`. É a estrutura da referência (Immich) SEM a
+  cromia dela — as pills são neutras, e D-017 permanece: nenhum acento
+  cromático entrou. Controle que não é pill continua em 6px
+  (`--radius-controle`); `<select>` fica em 6px de propósito, pill com
+  chevron lê como botão. A ação primária de cada tela usa o `Botao`
+  `variante="solido"` (fundo `--color-acento`, texto invertido).
 - **Confiança é quantidade, não semáforo** (D-017): alta e média não têm
   cor própria — são segmentos preenchidos (ver componente `Confianca`).
   Só a confiança baixa/atenção usa cor, âmbar `#c2833a`, porque é o único
@@ -80,8 +93,9 @@ desatualizado, não o código. Os valores abaixo são os reais de
   `index.css` — nenhuma mudança aqui.
 - **Espaçamento em grade de 8pt** (4/8/12/16/24). Cantos 6px (`rounded-md`
   no Tailwind do webapp — não `rounded-lg`, que é um raio maior e destoa
-  do resto). Miniaturas com gap de 8px e seleção por contorno de 2px no
-  acento (`outline-acento`), não por overlay nem sombra.
+  do resto). Miniaturas com gap de 10px (o respiro que o híbrido trouxe da
+  referência) e seleção por contorno de 2px no acento (`outline-acento`),
+  não por overlay nem sombra.
 
 ## O mapa do lugar (webapp, `components/Mapa.tsx`)
 
