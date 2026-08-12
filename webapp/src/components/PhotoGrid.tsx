@@ -107,7 +107,7 @@ export default function PhotoGrid({
                   onClick={() => onSelecionar(index)}
                   onDoubleClick={onAbrirLoupe}
                   title={media.nome}
-                  className={`relative shrink-0 overflow-hidden rounded-md bg-cartao outline-offset-[-2px] ${
+                  className={`relative shrink-0 overflow-hidden rounded-controle bg-cartao outline-offset-[-2px] ${
                     selecionada ? "outline outline-2 outline-acento" : ""
                   }`}
                   style={{ width: zoom, height: zoom }}

@@ -80,7 +80,7 @@ function Card({ grupo, onAbrir }: { grupo: Agrupamento; onAbrir: () => void }) {
   return (
     <button
       onClick={onAbrir}
-      className="group relative aspect-[3/2] overflow-hidden rounded-md bg-cartao text-left outline outline-2 outline-offset-[-2px] outline-transparent transition-colors hover:outline-acento"
+      className="group relative aspect-[3/2] overflow-hidden rounded-controle bg-cartao text-left outline outline-2 outline-offset-[-2px] outline-transparent transition-colors hover:outline-acento"
     >
       {grupo.capa_id != null && !capaFalhou && (
         <img
@@ -101,7 +101,7 @@ function Card({ grupo, onAbrir }: { grupo: Agrupamento; onAbrir: () => void }) {
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 p-3">
-        <div className="mb-0.5 text-[15px] font-semibold leading-tight">
+        <div className="mb-0.5 text-realce font-semibold leading-tight">
           {grupo.nome}
         </div>
         <div className="text-texto-2">

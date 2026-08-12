@@ -79,7 +79,7 @@ export default function Loupe({ itens, index, onNavegar, onFechar }: Props) {
             <button
               key={m.id}
               onClick={() => onNavegar(i)}
-              className={`h-14 w-14 shrink-0 overflow-hidden rounded ${
+              className={`h-14 w-14 shrink-0 overflow-hidden rounded-controle ${
                 i === index ? "outline outline-2 outline-acento" : "opacity-60"
               }`}
             >

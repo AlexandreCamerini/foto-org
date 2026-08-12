@@ -54,13 +54,13 @@ export default function StatusBar({
     <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-borda bg-painel px-3">
       {ativo && (
         <>
-          <span className="h-1 w-24 overflow-hidden rounded bg-cartao">
+          <span className="h-1 w-24 overflow-hidden rounded-controle bg-cartao">
             {progresso === null ? (
-              <span className="block h-full w-1/3 animate-pulse rounded bg-acento" />
+              <span className="block h-full w-1/3 animate-pulse rounded-controle bg-acento" />
             ) : (
               <span
                 data-testid="barra-progresso"
-                className="block h-full rounded bg-acento transition-[width]"
+                className="block h-full rounded-controle bg-acento transition-[width]"
                 style={{ width: `${progresso}%` }}
               />
             )}

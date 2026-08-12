@@ -119,7 +119,7 @@ export default function Operations({ job }: { job: Job }) {
           value={destino}
           onChange={(e) => setDestino(e.target.value)}
           placeholder="Pasta de destino da biblioteca organizada…"
-          className="w-96 rounded-md border border-borda bg-cartao px-2.5 py-1 outline-none placeholder:text-texto-3 focus:border-acento"
+          className="w-96 rounded-controle border border-borda bg-cartao px-2.5 py-1 outline-none placeholder:text-texto-3 focus:border-acento"
         />
         <Botao
           onClick={() => criar.mutate()}

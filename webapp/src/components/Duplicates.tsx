@@ -56,7 +56,7 @@ export default function Duplicates({ job }: { job: Job }) {
                 setNivel(valor);
                 setGrupoId(null);
               }}
-              className={`rounded-md px-2 py-0.5 hover:bg-cartao ${
+              className={`rounded-controle px-2 py-0.5 hover:bg-cartao ${
                 nivel === valor ? "bg-cartao text-acento" : "text-texto-2"
               }`}
             >
@@ -128,7 +128,7 @@ export default function Duplicates({ job }: { job: Job }) {
             {grupo.resolvido_automaticamente && (
               <span
                 title="Bytes idênticos (SHA-256): o algoritmo escolheu a cópia mais organizada como principal. Revise ou desfaça se preferir outra."
-                className="shrink-0 rounded-md border border-acento/40 px-1.5 py-0.5 text-[11px] text-acento"
+                className="shrink-0 rounded-controle border border-acento/40 px-1.5 py-0.5 text-micro text-acento"
               >
                 resolvido automaticamente
               </span>
@@ -159,7 +159,7 @@ export default function Duplicates({ job }: { job: Job }) {
             {grupo.membros.map((m) => (
               <figure
                 key={m.member_id}
-                className={`overflow-hidden rounded-md border bg-cartao ${
+                className={`overflow-hidden rounded-controle border bg-cartao ${
                   m.papel === "principal"
                     ? "border-ok"
                     : m.papel === "ignorado"

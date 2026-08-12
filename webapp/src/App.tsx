@@ -198,7 +198,7 @@ export default function App() {
           <button
             key={nome}
             onClick={() => setAba(nome)}
-            className={`rounded-md px-3 py-1 hover:bg-cartao ${
+            className={`rounded-controle px-3 py-1 hover:bg-cartao ${
               aba === nome ? "bg-cartao text-acento" : "text-texto-2"
             }`}
           >
@@ -240,7 +240,7 @@ export default function App() {
               <span className="text-texto-3">Filtrando por</span>
               <button
                 onClick={() => setFonte(null)}
-                className="flex items-center gap-1 rounded-md border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
+                className="flex items-center gap-1 rounded-controle border border-acento px-2 py-0.5 text-acento hover:bg-cartao"
                 title="Mostrar todas as fontes"
               >
                 {rotuloDeFonte(fontes, fonte)} ✕
@@ -279,7 +279,7 @@ export default function App() {
                 {recorte && (
                   <button
                     onClick={() => setRecorte(null)}
-                    className="flex items-center gap-1 rounded-md border border-acento px-2 py-1 text-acento hover:bg-cartao"
+                    className="flex items-center gap-1 rounded-controle border border-acento px-2 py-1 text-acento hover:bg-cartao"
                     title="Limpar recorte"
                   >
                     {recorte.nome} ✕
@@ -289,7 +289,7 @@ export default function App() {
                     navegação: aparece junto do chip que diz qual grupo está
                     aberto, e some quando não há grupo. */}
                 {grupoAberto && (
-                  <div className="flex shrink-0 overflow-hidden rounded-md border border-borda">
+                  <div className="flex shrink-0 overflow-hidden rounded-controle border border-borda">
                     {[
                       ["lista", "Lista"],
                       ["mapa", "Mapa"],
@@ -318,7 +318,7 @@ export default function App() {
                     que a barra lateral já teve. */}
                 {!noMapa && (
                   <>
-                <div className="flex shrink-0 overflow-hidden rounded-md border border-borda">
+                <div className="flex shrink-0 overflow-hidden rounded-controle border border-borda">
                   {[
                     ["tudo", "Tudo"],
                     ["organizaveis", "Organizáveis"],
@@ -348,12 +348,12 @@ export default function App() {
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                   placeholder="Buscar por nome ou caminho…"
-                  className="w-64 rounded-md border border-borda bg-cartao px-2.5 py-1 outline-none placeholder:text-texto-3 focus:border-acento"
+                  className="w-64 rounded-controle border border-borda bg-cartao px-2.5 py-1 outline-none placeholder:text-texto-3 focus:border-acento"
                 />
                 <select
                   value={ordenacao}
                   onChange={(e) => setOrdenacao(e.target.value)}
-                  className="rounded-md border border-borda bg-cartao px-2 py-1"
+                  className="rounded-controle border border-borda bg-cartao px-2 py-1"
                 >
                   <option value="data_desc">Mais recentes</option>
                   <option value="data_asc">Mais antigas</option>

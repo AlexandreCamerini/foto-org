@@ -132,7 +132,7 @@ export default function Review({
           <button
             key={valor}
             onClick={() => setStatus(valor)}
-            className={`rounded-md px-3 py-1 hover:bg-cartao ${
+            className={`rounded-controle px-3 py-1 hover:bg-cartao ${
               status === valor ? "bg-realce text-texto" : "text-texto-2"
             }`}
           >
@@ -246,10 +246,10 @@ export default function Review({
                             src={api.thumbUrl(s.media_id)}
                             alt={s.nome}
                             loading="lazy"
-                            className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
+                            className="h-9 w-12 shrink-0 rounded-controle object-cover bg-cartao"
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="mb-1 truncate text-[11px] text-texto-3">
+                            <div className="mb-1 truncate text-micro text-texto-3">
                               {s.nome}
                             </div>
                             <input
@@ -260,10 +260,10 @@ export default function Review({
                                 if (e.key === "Enter") salvarEdicao(s.id);
                                 if (e.key === "Escape") cancelarEdicao();
                               }}
-                              className="w-full rounded-md border border-borda bg-cartao px-2 py-1 outline-none focus:border-acento"
+                              className="w-full rounded-controle border border-borda bg-cartao px-2 py-1 outline-none focus:border-acento"
                             />
                             {erroEdicao && (
-                              <div className="mt-1 text-[11px] text-erro">
+                              <div className="mt-1 text-micro text-erro">
                                 {erroEdicao}
                               </div>
                             )}
@@ -296,14 +296,14 @@ export default function Review({
                                linha da câmera ao lado (6px medidos). A linha
                                ao lado já traz nome, câmera e data. */
                             denso
-                            className="h-9 w-12 shrink-0 rounded bg-cartao"
+                            className="h-9 w-12 shrink-0 rounded-controle bg-cartao"
                           />
                           <div className="min-w-0 flex-1">
                             {/* Nome primeiro. Antes a pasta vinha antes e o
                                 truncate cortava a linha antes de o nome do
                                 arquivo aparecer — 63 linhas idênticas. */}
                             <div className="truncate font-medium">{s.nome}</div>
-                            <div className="truncate text-[11px] text-texto-2">
+                            <div className="truncate text-micro text-texto-2">
                               {[s.camera, formatarData(s.data_capturada)]
                                 .filter(Boolean)
                                 .join(" · ") || pastaCurta(s.pasta)}
@@ -451,7 +451,7 @@ function PorQue({ mediaId }: { mediaId: number }) {
   return (
     <ul className="space-y-1 px-3 pb-2 pl-[68px]">
       {sugestao.evidencias.map((ev, i) => (
-        <li key={i} className="flex gap-2 text-[11px]">
+        <li key={i} className="flex gap-2 text-micro">
           <Confianca nivel={ev.nivel} rotulo={false} />
           <span className="text-texto-2">
             <span className="text-texto">{ev.campo}</span>: {ev.valor} —{" "}

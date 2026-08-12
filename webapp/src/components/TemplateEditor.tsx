@@ -119,7 +119,7 @@ export default function TemplateEditor({ job }: { job: Job }) {
               setEdicao(e.target.value);
               setErroSalvar(null);
             }}
-            className="mb-2 w-full max-w-2xl rounded-md border border-borda bg-cartao px-2.5 py-1 font-mono outline-none focus:border-acento"
+            className="mb-2 w-full max-w-2xl rounded-controle border border-borda bg-cartao px-2.5 py-1 font-mono outline-none focus:border-acento"
           />
 
           <div className="mb-3 flex items-center gap-2">

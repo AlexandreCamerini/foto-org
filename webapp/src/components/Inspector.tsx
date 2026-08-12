@@ -32,7 +32,7 @@ export default function Inspector({ media }: { media: Media | null }) {
           <img
             src={api.thumbUrl(media.id)}
             alt={media.nome}
-            className="mb-2 w-full rounded-md bg-cartao object-contain"
+            className="mb-2 w-full rounded-controle bg-cartao object-contain"
           />
           <div className="mb-2 break-all font-semibold">{media.nome}</div>
           <dl className="space-y-1 text-texto-2">
@@ -77,7 +77,7 @@ export default function Inspector({ media }: { media: Media | null }) {
               ruído. O bloco cobre o caso sem sugestão (já aprovada, ou
               decidida pelo usuário), em que a estimativa ficaria muda. */}
           {detalhe?.estimativa && !detalhe?.sugestao && (
-            <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5 text-texto-2">
+            <div className="mt-3 rounded-controle border border-borda bg-cartao px-2 py-1.5 text-texto-2">
               Esta câmera não gravou coordenada. O lugar veio de{" "}
               <span className="text-texto">{detalhe.estimativa.doadora_nome}</span>
               {detalhe.estimativa.doadora_camera
@@ -99,13 +99,13 @@ export default function Inspector({ media }: { media: Media | null }) {
                 <span>Sugestão</span>
                 <Confianca nivel={detalhe.sugestao.nivel} />
               </div>
-              <div className="mb-2 break-all rounded-md bg-cartao px-2 py-1.5">
+              <div className="mb-2 break-all rounded-controle bg-cartao px-2 py-1.5">
                 {detalhe.sugestao.destino}
               </div>
               <div className="titulo-painel mb-1">Por quê?</div>
               <ul className="space-y-2">
                 {detalhe.sugestao.evidencias.map((ev, i) => (
-                  <li key={i} className="rounded-md bg-cartao px-2 py-1.5">
+                  <li key={i} className="rounded-controle bg-cartao px-2 py-1.5">
                     <div className="mb-0.5 flex items-center justify-between">
                       <span className="font-medium">
                         {ev.campo}: {ev.valor}
@@ -159,7 +159,7 @@ function TipoDaImagem({
 
   if (provisorio) {
     return (
-      <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5">
+      <div className="mt-3 rounded-controle border border-borda bg-cartao px-2 py-1.5">
         <div className="text-texto-2">
           Isto parece <span className="text-texto">{rotulo}</span>, não uma
           foto. Confere?
@@ -239,7 +239,7 @@ function MetadadosDoArquivo({ mediaId }: { mediaId: number }) {
       {aberto &&
         data?.namespaces.map((ns) => (
           <div key={ns.nome} className="mt-2">
-            <div className="mb-1 text-[11px] text-texto-3">{ns.rotulo}</div>
+            <div className="mb-1 text-micro text-texto-3">{ns.rotulo}</div>
             <dl className="space-y-0.5">
               {ns.itens.map((item) => (
                 <div key={item.chave} className="flex gap-2">

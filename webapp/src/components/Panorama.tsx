@@ -44,7 +44,7 @@ function ListaFacetas({
           key={f.chave}
           onClick={aoClicar ? () => aoClicar(f) : undefined}
           disabled={!aoClicar}
-          className={`flex w-full items-baseline gap-2 rounded px-1.5 py-0.5 text-left ${
+          className={`flex w-full items-baseline gap-2 rounded-controle px-1.5 py-0.5 text-left ${
             aoClicar ? "hover:bg-cartao" : "cursor-default"
           }`}
         >
@@ -82,7 +82,7 @@ function OAcervo({ inv }: { inv: Inventario }) {
         {inv.lugares.map((lugar) => (
           <div
             key={lugar.raiz}
-            className="rounded-md border border-borda bg-cartao px-2.5 py-2"
+            className="rounded-controle border border-borda bg-cartao px-2.5 py-2"
           >
             <div className="flex items-baseline gap-2">
               <span className="min-w-0 flex-1 truncate">{lugar.raiz}</span>
@@ -102,7 +102,7 @@ function OAcervo({ inv }: { inv: Inventario }) {
           </div>
         ))}
         {inv.sem_caminho > 0 && (
-          <div className="rounded-md border border-borda bg-cartao px-2.5 py-2">
+          <div className="rounded-controle border border-borda bg-cartao px-2.5 py-2">
             <div className="flex items-baseline gap-2">
               <span className="min-w-0 flex-1 truncate text-texto-2">
                 sem arquivo local
@@ -186,7 +186,7 @@ export default function Panorama({
               tamanho="lg"
               className="text-left disabled:hover:border-borda"
             >
-              <div className="text-[15px]">{l.quantidade}</div>
+              <div className="text-realce">{l.quantidade}</div>
               <div className="truncate text-texto-2">{l.rotulo}</div>
               <Barra fracao={l.quantidade / data.total} />
             </Botao>

@@ -246,7 +246,7 @@ export default function Mapa({
         <span aria-hidden className="text-2xl text-texto-3">
           ⊘
         </span>
-        <div className="text-[15px] font-medium">
+        <div className="text-realce font-medium">
           Nenhuma foto deste grupo tem lugar.
         </div>
         <div className="max-w-[52ch] text-texto-2">
@@ -310,7 +310,7 @@ export default function Mapa({
             preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label={`Mapa esquemático de ${data.grupo.nome}: ${lugares.length} lugares, ${contagens.no_mapa} fotos`}
-            className="block h-full w-full rounded-md border border-borda bg-painel"
+            className="block h-full w-full rounded-painel border border-borda bg-painel"
           >
             <defs>
               <pattern
@@ -655,7 +655,7 @@ function Rodape({ dados, lugares }: { dados: DadosMapa; lugares: number }) {
   const { contagens } = dados;
   return (
     <div className="border-t border-borda px-4 py-2.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-texto-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-micro text-texto-2">
         <span className="inline-flex items-center gap-1.5">
           <i className="h-[9px] w-[9px] rounded-full bg-texto" /> coordenada
           lida do arquivo
@@ -672,7 +672,7 @@ function Rodape({ dados, lugares }: { dados: DadosMapa; lugares: number }) {
       {/* Aceite 6: estes dois números precisam estar NA TELA. Uma foto que
           some da grade sem explicação é a mesma falha por silêncio que já
           apareceu nos cards. */}
-      <div className="mt-1 flex flex-wrap items-center gap-x-4 text-[11px]">
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 text-micro">
         <span className={contagens.sem_coordenada > 0 ? "text-texto-2" : "text-texto-3"}>
           {contagens.sem_coordenada} sem coordenada
           <span className="text-texto-3"> (não dá para desenhar)</span>
@@ -685,7 +685,7 @@ function Rodape({ dados, lugares }: { dados: DadosMapa; lugares: number }) {
           </span>
         </span>
       </div>
-      <div className="mt-1 text-[11px] text-texto-3">{dados.nota_do_raio}</div>
+      <div className="mt-1 text-micro text-texto-3">{dados.nota_do_raio}</div>
     </div>
   );
 }
@@ -774,7 +774,7 @@ function PainelDoLugar({
       {/* A contagem é a resposta do painel: entra no tamanho de título de
           cartão (15px), não no corpo, para o olho não ter que procurá-la
           entre a coordenada e os blocos de explicação. */}
-      <div className="mb-1 text-[15px] font-medium leading-tight">
+      <div className="mb-1 text-realce font-medium leading-tight">
         {total} {total === 1 ? "foto" : "fotos"}
       </div>
       <div className="mb-3 text-texto-3">
@@ -787,7 +787,7 @@ function PainelDoLugar({
           {[...porDoadora.entries()].map(([doadora, ponto]) => (
             <div
               key={doadora}
-              className="mb-2 rounded border border-borda border-l-2 border-l-herdado p-2 text-texto-2"
+              className="mb-2 rounded-controle border border-borda border-l-2 border-l-herdado p-2 text-texto-2"
             >
               <div className="mb-1 text-texto">
                 {contagemPorDoadora.get(doadora)}{" "}
@@ -828,7 +828,7 @@ function PainelDoLugar({
       )}
 
       {lugar.fora_de_alcance > 0 && (
-        <div className="mb-3 rounded border border-borda border-l-2 border-l-atencao p-2 text-texto-2">
+        <div className="mb-3 rounded-controle border border-borda border-l-2 border-l-atencao p-2 text-texto-2">
           {lugar.fora_de_alcance}{" "}
           {lugar.fora_de_alcance === 1 ? "foto está" : "fotos estão"} fora de
           alcance: a coordenada está no catálogo, o arquivo é que não responde
@@ -851,7 +851,7 @@ function PainelDoLugar({
               data_capturada: p.data_capturada,
               motivo_indisponivel: p.motivo_indisponivel,
             }}
-            className="h-[30px] w-[40px] shrink-0 rounded text-[11px]"
+            className="h-[30px] w-[40px] shrink-0 rounded-controle text-micro"
           />
           <div className="min-w-0">
             <div className="truncate">{p.nome}</div>

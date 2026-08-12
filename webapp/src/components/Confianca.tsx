@@ -47,7 +47,7 @@ export function Confianca({
         ))}
       </span>
       {rotulo && (
-        <span className={`text-[11px] ${baixa ? "text-atencao" : "text-texto-2"}`}>
+        <span className={`text-micro ${baixa ? "text-atencao" : "text-texto-2"}`}>
           {ROTULO[nivel] ?? nivel}
         </span>
       )}
