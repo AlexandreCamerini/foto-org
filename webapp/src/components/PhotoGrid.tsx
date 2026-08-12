@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Miniatura } from "./Miniatura";
 import type { MidiaQuery } from "../hooks/useMidia";
 
-const GAP = 8;
+const GAP = 10;
 
 interface Props {
   midia: MidiaQuery;

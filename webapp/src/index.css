@@ -14,13 +14,16 @@
   --color-realce: rgba(255, 255, 255, 0.08);
   --color-borda: rgba(255, 255, 255, 0.1);
   --color-borda-forte: rgba(255, 255, 255, 0.18);
-  --color-texto: #f7f8f8;
-  --color-texto-2: #8a8f98;
-  --color-texto-3: #62666d;
+  /* Um degrau acima do que era (#f7f8f8/#8a8f98/#62666d): o refino do
+     híbrido sobe o contraste do texto sem tocar no chrome — hierarquia por
+     luz, não por cor. */
+  --color-texto: #fbfbfc;
+  --color-texto-2: #9499a2;
+  --color-texto-3: #686c73;
   /* Sem acento cromático: numa ferramenta de foto, azul saturado compete
      com a imagem em toda tela. O "acento" é o próprio branco em opacidade
      maior; cor fica reservada para ESTADO. */
-  --color-acento: #d6d9dd;
+  --color-acento: #e8eaee;
   /* Texto sobre o acento (ex.: botão de confirmação) precisa de contraste
      contra um fundo CLARO — herdar --color-texto (quase branco) sobre
      --color-acento (quase branco também) é ilegível. Reaproveita a cor da
@@ -99,6 +102,19 @@ body,
   color: var(--color-texto-2);
 }
 
+/* Superfície lateral (sidebar, inspetor): gradiente sutil de branco em vez
+   de opacidade chapada. Profundidade sem sombra — sombra continua fora do
+   vocabulário (a superfície translúcida é a rampa neutra desta direção de
+   arte). O gradiente fica aqui e não num token de cor porque `--color-*` do
+   Tailwind 4 só aceita cor, e um wrapper de classe é o custo menor. */
+.superficie {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.015)
+  );
+}
+
 /* App teclado-first precisa mostrar onde o foco está. O acento é o token
    de foco na direção de arte; :focus-visible não aparece no clique de
    mouse, então não polui a navegação com ponteiro. */
@@ -135,6 +151,15 @@ input[type="search"] {
   color: var(--color-texto);
   font: inherit;
   padding: 4px 8px;
+}
+/* Campo de texto de uma linha vira pill — a estrutura que o híbrido trouxe
+   da referência. O raio acompanha mais padding horizontal, senão o texto
+   encosta na curva. O <select> fica em 6px: pill com chevron desenhado lê
+   como botão, e ele não é. */
+input[type="text"],
+input[type="search"] {
+  border-radius: 999px;
+  padding: 4px 12px;
 }
 select {
   padding-right: 26px;
