@@ -1339,3 +1339,120 @@ uma fatia
   de fase já fechada; a correção fica registrada aqui, não reescrita lá).
 - Status: aguardando (classe B — decisão 1 do gate da fase 5 depende desta
   correção antes de o dono decidir)
+
+## D-048 — Comparação Opus 5 × Haiku 4.5 em 5 clusters reais: Haiku inventa onde Opus recusa
+- Fase: 5 (revisão do plano, decisão 1 do gate — segue D-047)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: D-047 mudou o peso da decisão 1 (Opus 5 → Haiku 4.5 no advisor)
+  ao medir que sessões "neutra" são 39% do total, não resíduo. O dono pediu
+  a comparação real antes de decidir, com escopo explícito de 5 clusters
+  (amostra, não os 104) — Classe C (envio de metadado para API externa,
+  `docs/prompts/00-protocolo.md`), então a chamada real foi feita pelo
+  próprio dono no terminal dele, com `ANTHROPIC_API_KEY` própria; nenhuma
+  credencial foi manuseada por esta sessão. `scripts/medir_qualidade_advisor.py`
+  (novo) reconstrói os 5 clusters por SQL a partir dos mesmos períodos que
+  `medir_uso_do_advisor.py` já tinha identificado como sessão "neutra", e
+  reusa `ClassificationAdvisor`/`ClaudeAdvisor` (`advisor.py:101-144`) sem
+  lógica de chamada nova — só instancia com `model=` diferente para cada
+  comparação.
+- Resultado: **3 de 5 clusters concordam (`null`/`null` nos dois modelos)**.
+  Nas 2 divergências, o padrão é o mesmo nas duas: Haiku 4.5 devolve
+  categoria/evento onde Opus 5 recusa por falta de evidência.
+  - Cluster "Carnaval da Escola 2001" + "na Praia - Fev 2001" (2 pastas no
+    mesmo cluster, histórias diferentes): Opus recusa citando o conflito
+    entre as duas pastas; Haiku responde `Eventos/"Carnaval da Escola 2001"`
+    lendo só uma das duas pastas, ignorando a outra no mesmo payload.
+  - Cluster de virada de ano (31/12–04/01, pastas genéricas, ZERO lugar
+    geocodificado): Opus recusa, notando explicitamente "apesar do período
+    coincidir com a virada do ano"; Haiku responde
+    `Viagens/"Viagem de Ano Novo 2006-2007"` — infere viagem só da
+    proximidade de datas, sem nenhum sinal de deslocamento (nem palavra
+    "viagem" na pasta, nem GPS, nem lugar geocodificado).
+- Interpretação: amostra pequena (n=5, 2 divergências) não crava número, mas
+  a direção é consistente e o modo de falha é o previsto antes de medir
+  (revisão do dono com a sessão, achado 3): Haiku, nos dois casos em que
+  discordou, violou a instrução explícita do próprio `_SYSTEM` prompt do
+  advisor — "Se os metadados não bastarem, devolva categoria e evento
+  nulos — nunca invente" (`advisor.py:97`) — e Opus a obedeceu nos dois. O
+  argumento de custo do plano original segue válido (diferença de centavos);
+  o que muda é que "rotular três categorias não precisa de modelo caro"
+  (a premissa da decisão 1) tem contraexemplo direto na prática, não só em
+  tese.
+- Recomendação revisada para a decisão 1: **não descer para Haiku 4.5 sem
+  mais evidência** — ou rodar a comparação nos 104 clusters completos para
+  virar direção em número, ou (se o custo/latência do Opus 5 for aceitável,
+  que a aritmética do plano já mostra que é) manter Opus 5 e fechar a
+  decisão 1 como "não, por ora", revisitável se um prompt/schema mais
+  restrito para Haiku eliminar esse modo de falha específico.
+- Nota de segurança, fora do escopo da decisão de produto: o dono colou a
+  API key em texto puro no chat ao compartilhar a saída do comando rodado
+  no terminal dele. Nenhuma chamada foi feita por esta sessão com essa
+  chave — o comando rodou no terminal do próprio dono — mas o valor ficou
+  exposto no histórico da conversa. Recomendado ao dono rotacionar a chave
+  no console da Anthropic, independente da decisão 1.
+- Como reverter: nada a reverter — nenhuma mudança de código de produto,
+  só a medição e o registro.
+- Status: aguardando (decisão final da fase 5 é do dono)
+
+## D-049 — Comparação Opus 5 × Haiku 4.5 nos 104 clusters reais: bug no relatório, sinal de D-048 confirmado e reforçado
+- Fase: 5 (revisão do plano, decisão 1 do gate — segue D-047 e D-048)
+- Classe: A
+- Data: 2026-08-13
+- Contexto: o dono rodou `scripts/medir_qualidade_advisor.py` nos 104
+  clusters reais (não mais os 5 de D-048), no terminal dele, com a própria
+  `ANTHROPIC_API_KEY` — 208 chamadas (2 modelos × 104 clusters). Nenhuma
+  credencial foi manuseada por esta sessão.
+- **Bug encontrado no relatório desta sessão, não no dado**: `Comparacao.padrao`
+  comparava `resultado is None` (o objeto `AdvisorResult` inteiro) para
+  decidir "o modelo recusou". Mas `ClassificationAdvisor.classificar()`
+  quase sempre devolve um `AdvisorResult` de verdade mesmo quando recusa —
+  a recusa é `categoria=None` DENTRO do objeto (`advisor.py:97`), não o
+  objeto virando `None` (isso só acontece em erro de API/parse). Como o
+  objeto nunca é `None` na prática, as três categorias que dependiam dessa
+  comparação (`concordam_null`, `haiku_afirma_opus_recusa`,
+  `opus_afirma_haiku_recusa`) saíram zeradas por construção, e os 31 casos
+  de discordância real caíram todos, sem distinção, em
+  `discordam_entre_si`. Corrigido em `scripts/medir_qualidade_advisor.py`
+  (`Comparacao.padrao` agora testa `.categoria is None`, com teste manual
+  cobrindo os 5 padrões antes de reafirmar o registro).
+- **O dado bruto (contagem de categoria por modelo) não tinha o bug** — vem
+  direto de `.categoria`, não da comparação quebrada — e por isso dá para
+  reconstruir o essencial sem rodar os 104 de novo:
+
+  | | recusou (categoria=None) | comprometeu-se |
+  |---|---:|---:|
+  | Opus 5 | 82/104 (78,8%) | 22/104 (21,2%) |
+  | Haiku 4.5 | 63/104 (60,6%) | 41/104 (39,4%) |
+
+  Concordância exata (mesma categoria E mesmo evento): 73/104. Discordância:
+  31/104. Com as duas marginais (82/22 para Opus, 63/41 para Haiku) e o
+  total de discordância (31) fixos, a tabela de contingência 2×2 tem um só
+  grau de liberdade — mas isso já basta para provar um PISO: pelo menos
+  **19 dos 31 clusters discordantes (61% das discordâncias, 18,3% do total
+  de 104) são obrigatoriamente "Haiku afirma categoria, Opus recusa"** — a
+  matemática da tabela não permite um número menor, só igual ou maior. O
+  número exato entre 19 e 31 exigiria rerodar com o bug corrigido; não foi
+  rerodado (custo/tempo desnecessário — o piso já é decisivo).
+- Interpretação: o achado de D-048 (n=5, Haiku inventa onde Opus recusa)
+  **se confirma e se fortalece** em n=104, não enfraquece. Haiku se
+  compromete com uma categoria quase 2× mais vezes que Opus (39,4% vs.
+  21,2%) sobre o mesmo metadado, e pelo menos 19 dessas vezes é
+  especificamente onde Opus — seguindo a MESMA instrução de sistema "nunca
+  invente" (`advisor.py:97`) — preferiu não responder.
+- Recomendação final para a decisão 1 do gate: **manter Opus 5** no
+  advisor. O argumento de custo do plano original (diferença de centavos
+  para o catálogo inteiro) nunca foi a razão real da proposta de descer de
+  modelo — era a suposição "rotular três categorias não precisa de modelo
+  caro", e essa suposição tem agora 19+ contraexemplos medidos, numa fração
+  do acervo (39,10% das sessões, D-047) grande o bastante para pesar. Se no
+  futuro alguém quiser reabrir a decisão 1, o caminho é enrijecer o
+  prompt/schema especificamente para Haiku (ex.: exigir confiança mínima
+  explícita, ou threshold de concordância entre duas chamadas) — não trocar
+  o modelo sem mudar o contrato.
+- Como reverter: nada a reverter — medição e correção de bug em script de
+  staging, nenhuma mudança em `fotoorganizer/**`. `docs/PLANO_IA_E_PRODUTO.md`
+  segue não editado (entregável de fase fechada); a correção fica registrada
+  aqui.
+- Status: decidido (recomendação); aprovação final da decisão 1 do gate
+  segue sendo do dono

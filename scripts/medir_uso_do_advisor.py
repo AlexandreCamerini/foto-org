@@ -22,11 +22,13 @@ no fim. Nenhum arquivo de foto é tocado (invariante 1).
 Uso:
     .venv/bin/python scripts/medir_uso_do_advisor.py
     .venv/bin/python scripts/medir_uso_do_advisor.py --db <catalog.db>
+    .venv/bin/python scripts/medir_uso_do_advisor.py --exportar-periodos clusters_neutra.json
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
 import tempfile
@@ -72,6 +74,13 @@ def _copiar_para_temp(origem: Path, destino: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=paths.default_db_path())
+    parser.add_argument(
+        "--exportar-periodos", type=Path, default=None,
+        help="grava (início, fim, n_fotos) de TODAS as sessões neutra em "
+             "JSON — só datas e contagem, sem pasta nem nome de arquivo. "
+             "Existe para não precisar rodar a passada completa (~1h40) de "
+             "novo só para pegar os períodos de uma comparação de modelos.",
+    )
     args = parser.parse_args()
 
     if not args.db.is_file():
@@ -132,6 +141,21 @@ def main() -> None:
         for cluster in advisor.chamadas[:10]:
             print(f"  {cluster.inicio:%Y-%m-%d} → {cluster.fim:%Y-%m-%d}: "
                   f"{cluster.n_fotos} fotos")
+
+    if args.exportar_periodos:
+        dados = [
+            {
+                "inicio": c.inicio.date().isoformat(),
+                "fim": c.fim.date().isoformat(),
+                "n_fotos": c.n_fotos,
+            }
+            for c in advisor.chamadas
+        ]
+        args.exportar_periodos.write_text(
+            json.dumps(dados, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        print(f"\nperíodos das {len(dados)} sessões neutra exportados para "
+              f"{args.exportar_periodos}")
 
 
 if __name__ == "__main__":
