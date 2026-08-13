@@ -1284,3 +1284,58 @@ uma fatia
   (remedir só se o acervo mudar de forma material — novo import, ligação
   do volume `/Volumes/photo`).
 - Status: decidido
+
+## D-047 — "resíduo" do advisor é 39% das sessões e 43% do acervo, não zero — PLANO_IA_E_PRODUTO.md §2/§3 revisado
+- Fase: 5 (revisão do plano, achado 4 apontado na revisão pedida pelo dono)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: `docs/PLANO_IA_E_PRODUTO.md:56-58` afirma que sessões "neutra"
+  (as que chamariam o advisor) são residuais, com base em "zero de 63" no
+  catálogo de demonstração SINTÉTICO — nunca medido no acervo real. Pedido
+  do dono, em revisão conjunta do plano: medir de verdade antes de aprovar
+  a decisão 1 do gate (descer o advisor de Opus 5 para Haiku 4.5).
+- Medição: `scripts/medir_uso_do_advisor.py` (novo), rodando o
+  `SuggestionEngine.gerar()` REAL sobre uma cópia do catálogo (mesmo padrão
+  `sqlite3.Connection.backup()` de `scripts/medir_nome_de_album.py`), com
+  um `CountingNullAdvisor` no lugar do advisor de verdade —
+  implementa o mesmo `Protocol` que `NullAdvisor` já implementa
+  (`fotoorganizer/classification/advisor.py:55-63`), `classificar()` nunca
+  faz I/O de rede, só conta a chamada e devolve `None`. **Nenhum dado saiu
+  da máquina** — instalar dependência de API/credencial e chamar o advisor
+  de verdade é Classe C (sempre espera), a medição não fez isso.
+- Resultado sobre o catálogo real (96.692 registros de `papel='ACERVO'`,
+  passada completa, ~1h39min de CPU): **266 sessões — 36 viagem, 126
+  evento, 104 neutra. 104/266 = 39,10% das sessões, cobrindo 41.901 fotos
+  (≈43% do acervo organizável).** Fotos por sessão neutra: mín. 2, média
+  402,9, máx. 8.581.
+- Correção ao plano: "residual" está errado como descrição do papel do
+  advisor no acervo real — é quase 4 em cada 10 sessões. O que o plano
+  acerta e continua valendo: o custo em dólar não muda com esse número,
+  porque `_consultar_advisor` (`engine.py:560-569`) manda só 8 nomes de
+  arquivo de exemplo por sessão (`membros[:8]`), não a lista inteira — uma
+  sessão de 8.581 fotos custa a mesma ordem de tokens que uma de 2. O que
+  muda é a PROPORÇÃO da decisão do produto que depende do julgamento do
+  advisor: se ele errar sistematicamente, não é canto de mapa, é quase
+  metade das fotos mal categorizadas.
+- Impacto direto na decisão 1 do gate (Opus 5 → Haiku 4.5): a pergunta que
+  importa nunca foi custo (a aritmética do plano já mostrava $0,02–$0,16
+  para o catálogo inteiro) — é qualidade nos clusters ambíguos. Com 43% do
+  acervo passando por esse caminho, uma queda de qualidade ao descer de
+  modelo deixou de ser um detalhe de canto e virou o fator que mais pesa na
+  decisão. Recomendação revisada: medir Haiku 4.5 × Opus 5 numa amostra dos
+  104 clusters neutra reais (localmente reproduzível — `ClusterInfo` de
+  cada um já foi capturado por este script) ANTES de aprovar a decisão 1,
+  não depois.
+- Opções levadas ao dono: (a) aprovar a decisão 1 como está, aceitando o
+  risco sem medir qualidade; (b) medir Haiku × Opus nos 104 clusters reais
+  antes de aprovar; (c) aprovar Opus 5 (manter o modelo atual) e adiar a
+  decisão de custo.
+- Recomendada: (b) — é barata (mesma ordem de custo da tabela do plano) e
+  transforma uma aposta em decisão informada, exatamente o padrão que este
+  projeto já aplica a inferência determinística (evidência antes de
+  decisão).
+- Como reverter: nada a reverter — medição aditiva, somente leitura, sem
+  chamada de API. `docs/PLANO_IA_E_PRODUTO.md` não foi editado (é entregável
+  de fase já fechada; a correção fica registrada aqui, não reescrita lá).
+- Status: aguardando (classe B — decisão 1 do gate da fase 5 depende desta
+  correção antes de o dono decidir)
