@@ -13,6 +13,7 @@ from fotoorganizer.models import (
     ConfidenceLevel,
     Evidence,
     Event,
+    Location,
     MediaFile,
     MediaRole,
     MetadataEntry,
@@ -989,6 +990,37 @@ def test_coordenada_herdada_e_persistida_com_doador_e_delta(migrated_engine):
         # A doadora não herda de ninguém.
         assert tel.gps_lat_estimado is None
         assert tel.coordenada_estimada is False
+
+
+def test_location_id_resolvido_mesmo_para_sugestao_ja_decidida(ambiente):
+    """Fase B' (D-052): `location_id` é resolvido cedo, para TODA foto com
+    coordenada — não só para quem ainda vai ganhar sugestão nesta rodada.
+    Antes desta fatia, uma foto com sugestão já decidida nunca passava por
+    `_evidencias_geo` de novo, e um `location_id` que ficasse None (ex.:
+    resolvida antes de o resolver existir) nunca era corrigido."""
+    factory, engine = ambiente
+    engine.gerar()
+    repo = SuggestionRepository(factory)
+
+    sugestao, _ = _sugestao_de(factory, "franca_0.jpg")
+    repo.editar_destino(sugestao.id, "Meu/Destino/Especial")
+    with factory() as session:
+        media = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_0.jpg")
+        )
+        assert media.location_id is not None  # a 1ª geração já resolveu
+        media.location_id = None  # simula o gap: nunca foi resolvido
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        media = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_0.jpg")
+        )
+        assert media.location_id is not None
+        local = session.get(Location, media.location_id)
+        assert local.pais == "França"
 
 
 def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):

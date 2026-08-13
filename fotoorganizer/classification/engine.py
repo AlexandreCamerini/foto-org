@@ -35,6 +35,7 @@ from fotoorganizer.classification.templates import (
     render_destino,
 )
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
+from fotoorganizer.geolocation.resolver import cache_key as _chave_de_coordenada
 from fotoorganizer.grouping.datas import (
     data_no_caminho,
     data_no_nome,
@@ -275,6 +276,18 @@ class SuggestionEngine:
             herancas = self._correlacionar(midias)
             self._persistir_herancas(midias, herancas)
 
+            # Geocodifica TODAS as fotos com coordenada (própria ou
+            # herdada) aqui — antes de sessão/categoria rodarem, não
+            # dentro delas. Regra 1 do diagnóstico geo-first (D-051/D-052):
+            # mapear localização primeiro. `LocationResolver.resolve` já é
+            # cache-keyed por coordenada (~110 m, geolocation/resolver.py),
+            # então isto não duplica trabalho caro — garante que TODA foto
+            # com coordenada tem `location_id` resolvido cedo, inclusive a
+            # que já tem sugestão decidida e por isso nunca passa por
+            # `_evidencias_geo` (que só roda para quem ainda vai ganhar
+            # sugestão nesta rodada).
+            self._resolver_locations(session, midias)
+
             # Daqui em diante só o que o usuário pode ver e organizar. Uma
             # referência não tem arquivo para copiar; uma miniatura de cache
             # tem arquivo e ainda assim não é acervo dele — as duas doaram o
@@ -336,6 +349,40 @@ class SuggestionEngine:
             media.gps_lon_estimado = heranca.lon
             media.gps_estimado_de_id = heranca.doador_id
             media.gps_estimado_delta_s = int(heranca.delta.total_seconds())
+
+    def _resolver_locations(self, session: Session, midias) -> None:
+        """Resolve e grava `location_id` para toda foto com coordenada
+        efetiva (própria ou herdada — `MediaFile.coordenada`), chamado
+        logo após `_persistir_herancas`, antes de sessão/categoria.
+
+        Não substitui a resolução que `_evidencias_geo` ainda faz por
+        conta própria mais adiante — aquela decide QUAIS CAMPOS expor por
+        granularidade (`heranca.fator_de`), o que continua exigindo o
+        objeto `Heranca`, não só o `Location` resolvido. Rodar aqui
+        também é redundante para quem passa pelos dois caminhos na mesma
+        geração, mas o cache por coordenada em `LocationResolver.resolve`
+        faz da segunda chamada uma leitura, não um recálculo.
+
+        Memoiza por `cache_key` NESTE loop, não só na tabela `locations`:
+        sem isso, uma viagem de 500 fotos na mesma coordenada arredondada
+        vira 500 SELECTs em vez de 1 — achado da revisão com olhos
+        frescos antes do commit, antes só a tabela cobria repetição
+        ENTRE gerações, não dentro da mesma.
+        """
+        if self._resolver is None:
+            return
+        resolvidos: dict[str, int | None] = {}
+        for media in midias:
+            coordenada = media.coordenada
+            if coordenada is None:
+                continue
+            chave = _chave_de_coordenada(*coordenada)
+            if chave not in resolvidos:
+                location = self._resolver.resolve(session, *coordenada)
+                resolvidos[chave] = location.id if location is not None else None
+            location_id = resolvidos[chave]
+            if location_id is not None:
+                media.location_id = location_id
 
     # -- correlação entre fontes ---------------------------------------------
     @staticmethod
