@@ -8,12 +8,15 @@ from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.classification.confidence import nivel_para_score
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.geolocation import GeoResult, LocationResolver
+from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.models import (
     ConfidenceLevel,
     Evidence,
     Event,
+    Location,
     MediaFile,
     MediaRole,
+    MetadataEntry,
     Source,
     Suggestion,
     SuggestionStatus,
@@ -609,6 +612,92 @@ def test_pastas_tecnicas_sem_sinal_ficam_neutras(migrated_engine):
     assert sugestao.destino_sugerido == "Não classificadas/2025/mai.2025"
 
 
+def test_palavra_chave_curadoria_decide_categoria_sem_pasta(migrated_engine):
+    """Pasta técnica sem sinal, mas a foto tem palavra-chave XMP/IPTC
+    'Viagem' (D-051, regra 4) — decide a categoria mesmo sem a pasta dizer
+    nada, o caso que a cascata antiga não cobria."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 6, 10, 9, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        medias = []
+        for i in range(3):
+            m = _media(
+                fonte.id, f"IMG_{i:04d}.jpg", "/fotos/2025_06_10/[Originals]",
+                data=base + timedelta(minutes=10 * i),
+            )
+            session.add(m)
+            medias.append(m)
+        session.flush()
+        session.add(MetadataEntry(
+            media_id=medias[0].id, namespace=NAMESPACE_CURADORIA,
+            chave="palavra_chave", valor="Viagem",
+        ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
+    campos = {e.campo: e for e in evidencias}
+    assert campos["categoria"].valor == "Viagens"
+    assert campos["categoria"].origem == "curadoria"
+    assert "palavra-chave 'Viagem'" in campos["categoria"].justificativa
+
+
+def test_curadoria_nao_sobrepoe_sessao_de_alta_confianca(ambiente):
+    """Achado da revisão da Fase A: palavra-chave de curadoria (0.55) não
+    pode fragmentar uma sessão já decidida por GPS/geocodificação
+    (0.85-0.95) — sem isso, uma foto isolada da mesma viagem sairia com
+    categoria diferente das irmãs só por causa de uma tag de álbum
+    externo que apenas coincide no tempo."""
+    factory, engine = ambiente
+    with factory() as session:
+        franca_1 = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_1.jpg")
+        )
+        session.add(MetadataEntry(
+            media_id=franca_1.id, namespace=NAMESPACE_CURADORIA,
+            chave="palavra_chave", valor="Evento",
+        ))
+        session.commit()
+
+    engine.gerar()
+
+    for nome in ("franca_0.jpg", "franca_1.jpg", "franca_2.jpg"):
+        _, evidencias = _sugestao_de(factory, nome)
+        campos = {e.campo: e for e in evidencias}
+        assert campos["categoria"].valor == "Viagens", (
+            f"{nome} deveria seguir a sessão (GPS), não a curadoria"
+        )
+        assert campos["categoria"].origem != "curadoria"
+
+
+def test_pasta_vence_palavra_chave_curadoria_divergente(migrated_engine):
+    """Pasta explícita ainda manda quando a palavra-chave diverge — o
+    sinal único da pasta continua acima de qualquer outro (D-034)."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 6, 10, 9, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        m = _media(fonte.id, "IMG_0000.jpg", "/fotos/Família", data=base)
+        session.add(m)
+        session.flush()
+        session.add(MetadataEntry(
+            media_id=m.id, namespace=NAMESPACE_CURADORIA,
+            chave="palavra_chave", valor="Evento",
+        ))
+        session.commit()
+
+    SuggestionEngine(factory).gerar()
+    sugestao, evidencias = _sugestao_de(factory, "IMG_0000.jpg")
+    campos = {e.campo: e for e in evidencias}
+    assert campos["categoria"].valor == "Família"
+    assert campos["categoria"].origem == "pasta"
+
+
 def test_advisor_llm_apoia_sessao_neutra(migrated_engine):
     """Sessão neutra + advisor: vira evento com origem 'llm' (média-baixa)."""
     from fotoorganizer.classification.advisor import AdvisorResult, ClusterInfo
@@ -901,6 +990,37 @@ def test_coordenada_herdada_e_persistida_com_doador_e_delta(migrated_engine):
         # A doadora não herda de ninguém.
         assert tel.gps_lat_estimado is None
         assert tel.coordenada_estimada is False
+
+
+def test_location_id_resolvido_mesmo_para_sugestao_ja_decidida(ambiente):
+    """Fase B' (D-052): `location_id` é resolvido cedo, para TODA foto com
+    coordenada — não só para quem ainda vai ganhar sugestão nesta rodada.
+    Antes desta fatia, uma foto com sugestão já decidida nunca passava por
+    `_evidencias_geo` de novo, e um `location_id` que ficasse None (ex.:
+    resolvida antes de o resolver existir) nunca era corrigido."""
+    factory, engine = ambiente
+    engine.gerar()
+    repo = SuggestionRepository(factory)
+
+    sugestao, _ = _sugestao_de(factory, "franca_0.jpg")
+    repo.editar_destino(sugestao.id, "Meu/Destino/Especial")
+    with factory() as session:
+        media = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_0.jpg")
+        )
+        assert media.location_id is not None  # a 1ª geração já resolveu
+        media.location_id = None  # simula o gap: nunca foi resolvido
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        media = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_0.jpg")
+        )
+        assert media.location_id is not None
+        local = session.get(Location, media.location_id)
+        assert local.pais == "França"
 
 
 def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):

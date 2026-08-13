@@ -35,12 +35,14 @@ from fotoorganizer.classification.templates import (
     render_destino,
 )
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
+from fotoorganizer.geolocation.resolver import cache_key as _chave_de_coordenada
 from fotoorganizer.grouping.datas import (
     data_no_caminho,
     data_no_nome,
     rotulo_mes,
 )
 from fotoorganizer.geolocation.folder_names import _normalizar
+from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import (
@@ -107,6 +109,26 @@ _MIN_FOTOS_PERNA = 3
 
 # Como o catálogo externo se chama numa frase, por namespace do importador.
 _FONTES_DE_ALBUM = {"apple": "Apple Fotos", "lightroom": "Lightroom"}
+
+
+def _carregar_curadoria(session: Session) -> dict[int, tuple[str, ...]]:
+    """Palavras-chave humanas (XMP/IPTC, `NAMESPACE_CURADORIA`) por foto.
+
+    Uma consulta para o catálogo inteiro, não uma por foto — mesmo motivo
+    de `_IndiceDeAlbuns`: N+1 sobre `metadata_entries` não escala. Hoje só
+    alimenta `_categoria` (regra 4, D-051); usar essas palavras para
+    inferir LUGAR fica para quando esse uso existir de fato (mesmo domínio
+    de `classification/lexico.py`, não duplicado aqui).
+    """
+    stmt = select(MetadataEntry.media_id, MetadataEntry.valor).where(
+        MetadataEntry.namespace == NAMESPACE_CURADORIA,
+        MetadataEntry.chave == "palavra_chave",
+    )
+    por_media: dict[int, list[str]] = {}
+    for media_id, valor in session.execute(stmt):
+        if valor:
+            por_media.setdefault(media_id, []).append(valor)
+    return {media_id: tuple(valores) for media_id, valores in por_media.items()}
 
 
 class _IndiceDeAlbuns:
@@ -245,6 +267,7 @@ class SuggestionEngine:
             midias = list(session.scalars(select(MediaFile)))
             decididas = self._midias_com_decisao(session)
             por_id = {m.id: m for m in midias}
+            curadoria = _carregar_curadoria(session)
 
             # Correlação entre fontes: fotos sem GPS herdam localização de
             # fotos de outra origem tiradas a minutos de distância. Entram
@@ -252,6 +275,18 @@ class SuggestionEngine:
             # são elas que trazem GPS de celular numa biblioteca em iCloud.
             herancas = self._correlacionar(midias)
             self._persistir_herancas(midias, herancas)
+
+            # Geocodifica TODAS as fotos com coordenada (própria ou
+            # herdada) aqui — antes de sessão/categoria rodarem, não
+            # dentro delas. Regra 1 do diagnóstico geo-first (D-051/D-052):
+            # mapear localização primeiro. `LocationResolver.resolve` já é
+            # cache-keyed por coordenada (~110 m, geolocation/resolver.py),
+            # então isto não duplica trabalho caro — garante que TODA foto
+            # com coordenada tem `location_id` resolvido cedo, inclusive a
+            # que já tem sugestão decidida e por isso nunca passa por
+            # `_evidencias_geo` (que só roda para quem ainda vai ganhar
+            # sugestão nesta rodada).
+            self._resolver_locations(session, midias)
 
             # Daqui em diante só o que o usuário pode ver e organizar. Uma
             # referência não tem arquivo para copiar; uma miniatura de cache
@@ -273,7 +308,7 @@ class SuggestionEngine:
                     continue
                 drafts = self._evidencias_para(
                     session, media, sessao_da_media.get(media.id),
-                    herancas, por_id,
+                    herancas, por_id, curadoria.get(media.id, ()),
                 )
                 self._persistir_sugestao(session, media, drafts)
                 geradas += 1
@@ -314,6 +349,40 @@ class SuggestionEngine:
             media.gps_lon_estimado = heranca.lon
             media.gps_estimado_de_id = heranca.doador_id
             media.gps_estimado_delta_s = int(heranca.delta.total_seconds())
+
+    def _resolver_locations(self, session: Session, midias) -> None:
+        """Resolve e grava `location_id` para toda foto com coordenada
+        efetiva (própria ou herdada — `MediaFile.coordenada`), chamado
+        logo após `_persistir_herancas`, antes de sessão/categoria.
+
+        Não substitui a resolução que `_evidencias_geo` ainda faz por
+        conta própria mais adiante — aquela decide QUAIS CAMPOS expor por
+        granularidade (`heranca.fator_de`), o que continua exigindo o
+        objeto `Heranca`, não só o `Location` resolvido. Rodar aqui
+        também é redundante para quem passa pelos dois caminhos na mesma
+        geração, mas o cache por coordenada em `LocationResolver.resolve`
+        faz da segunda chamada uma leitura, não um recálculo.
+
+        Memoiza por `cache_key` NESTE loop, não só na tabela `locations`:
+        sem isso, uma viagem de 500 fotos na mesma coordenada arredondada
+        vira 500 SELECTs em vez de 1 — achado da revisão com olhos
+        frescos antes do commit, antes só a tabela cobria repetição
+        ENTRE gerações, não dentro da mesma.
+        """
+        if self._resolver is None:
+            return
+        resolvidos: dict[str, int | None] = {}
+        for media in midias:
+            coordenada = media.coordenada
+            if coordenada is None:
+                continue
+            chave = _chave_de_coordenada(*coordenada)
+            if chave not in resolvidos:
+                location = self._resolver.resolve(session, *coordenada)
+                resolvidos[chave] = location.id if location is not None else None
+            location_id = resolvidos[chave]
+            if location_id is not None:
+                media.location_id = location_id
 
     # -- correlação entre fontes ---------------------------------------------
     @staticmethod
@@ -638,7 +707,8 @@ class SuggestionEngine:
     def _evidencias_para(self, session: Session, media: MediaFile,
                          sessao: _Sessao | None,
                          herancas: dict[int, Heranca],
-                         por_id: dict[int, MediaFile]) -> list[_Draft]:
+                         por_id: dict[int, MediaFile],
+                         palavras_chave: tuple[str, ...] = ()) -> list[_Draft]:
         drafts: list[_Draft] = []
 
         # Foto de câmera ou imagem que só passou pelo disco? Decide antes de
@@ -728,7 +798,7 @@ class SuggestionEngine:
                 f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
             ))
 
-        categoria = self._categoria(media, sessao, drafts)
+        categoria = self._categoria(media, sessao, drafts, palavras_chave)
         if categoria is not None:
             drafts.append(categoria)
         return drafts
@@ -824,7 +894,8 @@ class SuggestionEngine:
         return []  # sem evidência: não inventa localização
 
     def _categoria(self, media: MediaFile, sessao: _Sessao | None,
-                   drafts: list[_Draft]) -> _Draft | None:
+                   drafts: list[_Draft],
+                   palavras_chave: tuple[str, ...] = ()) -> _Draft | None:
         # 1) Pasta de categoria explícita no caminho da foto.
         for segmento in reversed(media.pasta.split("/")):
             canonico = _CATEGORIAS_PASTA.get(_normalizar(segmento))
@@ -833,7 +904,11 @@ class SuggestionEngine:
                     "categoria", "pasta", canonico,
                     f"pasta '{segmento}' no caminho original",
                 )
-        # 2) Tipo da sessão.
+        # 2) Tipo da sessão — cascata determinística (GPS/geocodificação,
+        # confiança 0.85-0.95). Decide ANTES da palavra-chave de propósito:
+        # a sessão é o mesmo veredito para todas as fotos do grupo, e uma
+        # palavra-chave de uma foto só (0.55, abaixo) não pode fragmentar
+        # esse veredito — ver 2b.
         if sessao is not None:
             if sessao.tipo == "viagem":
                 return _Draft("categoria", sessao.origem, "Viagens",
@@ -841,11 +916,24 @@ class SuggestionEngine:
             if sessao.tipo == "evento":
                 return _Draft("categoria", sessao.origem, "Eventos",
                               sessao.justificativa)
-            # 3) Advisor deu categoria sem evento.
-            if sessao.categoria:
-                return _Draft("categoria", "llm", sessao.categoria,
-                              sessao.justificativa or
-                              "sugerido por LLM a partir de metadados")
+        # 2b) Palavra-chave humana (XMP/IPTC) com o mesmo vocabulário da
+        # pasta. Só chega aqui quando pasta E a cascata da sessão não
+        # decidiram — abaixo das duas porque é sinal por FOTO, não por
+        # sessão, e pode ter vindo de um álbum externo que só coincide no
+        # tempo, sem a mesma intenção de organizar (docs/CONFIANCA.md).
+        # Acima do advisor (LLM, item 3) porque é determinístico e grátis.
+        for palavra in palavras_chave:
+            canonico = _CATEGORIAS_PASTA.get(_normalizar(palavra))
+            if canonico:
+                return _Draft(
+                    "categoria", "curadoria", canonico,
+                    f"palavra-chave '{palavra}' (XMP/IPTC) na foto",
+                )
+        # 3) Advisor deu categoria sem evento.
+        if sessao is not None and sessao.categoria:
+            return _Draft("categoria", "llm", sessao.categoria,
+                          sessao.justificativa or
+                          "sugerido por LLM a partir de metadados")
         return None
 
     @staticmethod

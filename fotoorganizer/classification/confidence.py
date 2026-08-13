@@ -29,6 +29,13 @@ SCORES_REFERENCIA: dict[str, float] = {
     # de `vizinhanca`, com a diferença de que o valor aqui é uma palavra que
     # o dono escreveu, não uma dedução nossa.
     "album_externo": 0.55,
+    # Palavra-chave humana em XMP/IPTC (Lightroom, digiKam, Photoshop —
+    # `NAMESPACE_CURADORIA`, D-051) que bate com o mesmo vocabulário da
+    # pasta ("Viagem", "Família", "Evento"). Mesmo score de `album_externo`
+    # e mesmo motivo: é palavra do dono, mas não é a organização dele em
+    # diretório — pode ter vindo de um editor de terceiro sem a mesma
+    # intenção de classificar o acervo.
+    "curadoria": 0.55,
     "agrupamento": 0.70,   # viagem por lacuna temporal
     "llm": 0.55,           # sugerido por LLM a partir de metadados (opt-in)
     # O que a PALAVRA significa — "Pantanal" é lugar, "Quizomba" é festa
