@@ -1841,3 +1841,38 @@ uma fatia
   fica com todas as 5 fases concluídas (A, B', D, E) — só a decisão 3 do
   gate (timing do inventário por pasta) segue aberta, sem relação com
   este plano.
+
+## D-059 — Decisão 1 do gate: dono propõe Sonnet 5, ainda não medido — script generalizado para comparar qualquer par de modelos
+
+- Fase: 5 (revisão do plano, decisão 1 do gate — segue D-047/D-048/D-049)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: revisando as três decisões do gate, o dono propôs usar
+  Sonnet 5 no advisor em vez de manter Opus 5 (recomendação de D-049) ou
+  descer para Haiku 4.5 (opção original do plano, descartada por D-049).
+  D-047/048/049 mediram especificamente Opus 5 × Haiku 4.5 nos 104
+  clusters reais — Sonnet nunca entrou nessa comparação.
+- Por quê não registrar direto: toda decisão desta sessão (D-024 a D-058)
+  foi fechada com medição, não com escolha a priori — abrir exceção aqui
+  seria inconsistente, ainda mais porque o achado de D-049 (Haiku inventa
+  onde Opus recusa, violando "nunca invente") só apareceu medindo, nunca
+  teria aparecido em teoria.
+- Preparado: `scripts/medir_qualidade_advisor.py` generalizado — antes
+  hardcoded para comparar só Opus×Haiku (`Comparacao.opus`/`.haiku`,
+  texto do relatório fixo); agora aceita `--modelo-a`/`--modelo-b`
+  (default preserva o comportamento anterior: opus-5 vs haiku-4.5,
+  nenhuma mudança na comparação histórica de D-048/049). Adicionado
+  `"sonnet-5": "claude-sonnet-5"` ao dicionário `MODELOS`. Lógica de
+  `.padrao` testada localmente (5 casos, sem chamar API) — idêntica ao
+  original, só generalizada. Fica em `scripts/`, fora da fronteira da
+  fase 5 (não precisou de D-056).
+- Como rodar (classe C — o dono roda, com a própria `ANTHROPIC_API_KEY`,
+  esta sessão não manuseia a credencial, mesmo padrão de D-048/049):
+  `ANTHROPIC_API_KEY=... .venv/bin/python scripts/medir_qualidade_advisor.py
+  --periodos clusters_neutra_104.json --modelo-a opus-5 --modelo-b sonnet-5`
+- Não decidido ainda: se Sonnet 5 se comporta como Opus (recusa quando
+  falta evidência) ou como Haiku (inventa). Decisão 1 do gate segue
+  aberta até essa medição.
+- Como reverter: nada a reverter — script generalizado é aditivo,
+  comparação Opus×Haiku default preservada.
+- Status: aguardando (medição real fica com o dono, classe C)
