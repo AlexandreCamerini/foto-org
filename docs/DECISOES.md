@@ -1497,3 +1497,179 @@ uma fatia
   alterado.
 - Status: decidido (achado registrado; correção fica para fase de UX
   futura)
+
+## D-051 — "Gerar sugestões" não é geo-first por desenho: cascade prioriza pasta/tempo, geocodificação é lazy por sessão
+
+- Fase: diagnóstico solicitado pelo dono, fora de fase aberta (gate da
+  fase 5 segue fechado)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: o dono relatou que o botão "Gerar sugestões" não se comporta
+  conforme o objetivo central do produto — priorizar geolocalização como
+  critério principal, mapeando primeiro todas as fotos com GPS próprio
+  (celular + câmera) antes de qualquer correlação por data/hora.
+  Investigação em 3 frentes paralelas (implementação atual, decisões/docs
+  já registrados, boas práticas de DAM), somente leitura, sem escrita em
+  `fotoorganizer/**`/`webapp/src/**`.
+- Achado central: a funcionalidade existe e roda ponta a ponta
+  (`webapp/src/components/StatusBar.tsx:131` → `POST /api/sugestoes/gerar`
+  → `SuggestionEngine.gerar()`, `fotoorganizer/classification/engine.py:243-291`)
+  e respeita os invariantes de segurança — nunca move/renomeia (regra 6),
+  evidência com confiança expõe origem, exatamente o modelo de
+  `docs/CONFIANCA.md` (regra 7). O que falha é a ORDEM: `gerar()` chama
+  `_correlacionar` (correlação temporal entre fontes,
+  `grouping/correlacao.py`) e `agrupar_viagens` (sessão por gap de 3 dias)
+  ANTES de qualquer geocodificação, que só acontece depois, lazy, por
+  sessão, dentro de `_classificar`. Viola a regra 1 (mapear GPS de tudo
+  primeiro) e a regra 2 (nunca correlacionar por tempo antes de concluir o
+  geo) diretamente — e não é acidente: `docs/AGRUPAMENTO.md` documenta essa
+  ordem (pasta/álbum → sessão temporal → geo por sessão) como calibrada
+  contra 17/17 cenários em `scripts/avaliar_agrupamento.py`. Reordenar é
+  inversão de arquitetura com risco de regressão medido, não ajuste
+  pontual.
+- Gap real e barato de corrigir, separado do ponto acima: XMP e IPTC são
+  extraídos e persistidos (`metadata/purepython.py`) mas nenhuma linha em
+  `classification/` ou `grouping/` os usa na cascata de evidências —
+  regra 4 só parcialmente satisfeita. MakerNote fica de fora por decisão
+  deliberada já registrada (D-027); pesquisa externa (PhotoPrism, Immich,
+  exiv2) confirma que GPS raramente vive só ali — sem motivo para
+  reverter D-027.
+- Correção a uma premissa herdada de sessão anterior: o handoff que abriu
+  esta sessão registrava "Decisão 3 (inventário por pasta) travada até
+  resolver sobreposição de desenho com o Item B (protecao-julgamento)".
+  Releitura completa do README do Item B e de todo o corpus de docs não
+  encontrou NENHUMA sobreposição — o Item B cobre só export/backup/checagem
+  de esquema, nunca toca correlação temporal ou GPS. A única menção real a
+  "inventário por pasta" é a decisão 3 do gate em
+  `docs/PLANO_IA_E_PRODUTO.md` §8, que trata de timing de lançamento
+  (antes/depois), não de conflito técnico. Tratando essa premissa como não
+  confirmada; se a trava veio de conversa fora do que está documentado,
+  precisa virar decisão própria antes de valer.
+- Recomendação — plano faseado, nenhuma fase escreve em
+  `fotoorganizer/**`/`webapp/src/**` sem aprovação explícita:
+  1. Alimentar XMP/IPTC já extraídos na cascata de evidências (regra 4) —
+     baixo risco, não muda ordem de decisão geo/tempo.
+  2. Medir (não implementar) se geocodificação global-antes-de-correlação
+     muda o resultado do benchmark de 17 cenários e do acervo real —
+     decide se a inversão de arquitetura (regra 1-2) vale o custo.
+  3. Só se a medição mostrar ganho: reordenar `SuggestionEngine.gerar()` e
+     atualizar `docs/AGRUPAMENTO.md`, com o benchmark expandido como
+     critério de regressão.
+  4. Esclarecer a origem real da trava do inventário por pasta antes de
+     decidir a decisão 3 do gate.
+  Detalhamento completo, com file:line de cada achado e critério de
+  verificação executável por fase, em
+  `docs/diagnostico-gerar-sugestoes-geo-first.md`.
+- Como reverter: nada a reverter — investigação somente leitura, nenhuma
+  linha de `fotoorganizer/**`/`webapp/src/**` foi tocada.
+- Status: aguardando (classe B — plano fica pronto para entrar nas fases
+  quando o dono aprovar o gate da fase 5; decisão de inverter a ordem
+  geo/tempo — item 3 do plano acima — precisa de medição própria antes de
+  qualquer aprovação)
+
+## D-052 — Regra 1-2 (geo primeiro) não exige reordenar a cascata de categoria: geocoding e herança de GPS já são funções puras, migráveis para a carga
+
+- Fase: revisão de D-051, mesmo diagnóstico
+- Classe: B
+- Data: 2026-08-13
+- Contexto: o dono, revisando D-051, propôs resolver a violação das
+  regras 1-2 (mapear GPS antes de correlacionar por tempo) resgatando
+  todos os dados/geolocalização já durante a carga (import/scan), não na
+  geração de sugestão — uma base completa desde o início, em vez de
+  resolver depois. Verifiquei viabilidade técnica lendo o código dos três
+  pontos envolvidos.
+- Achado: viável, e com risco bem menor do que a Fase B/C que D-051 havia
+  desenhado. `LocationResolver.resolve(session, lat, lon)`
+  (`fotoorganizer/geolocation/resolver.py:36-66`) é função pura por
+  coordenada, cache-keyed a 3 casas decimais (~110 m) na tabela
+  `locations` — zero dependência de sessão, grupo ou classificação, e o
+  próprio docstring do módulo já descreve isso. `estimar_offsets` e
+  `herdar_gps` (`fotoorganizer/grouping/correlacao.py:63-194`) se
+  autodescrevem no cabeçalho do módulo como "funções puras" que operam
+  sobre a lista inteira de fotos do catálogo (`list[FotoRef]`) — não
+  recebem `_Sessao`, não dependem da cascata de categoria. As três hoje só
+  são chamadas de dentro de `SuggestionEngine.gerar()`
+  (`engine.py:253,741,763`) porque ninguém as moveu, não por necessidade
+  arquitetural.
+- Consequência: a cascata de CATEGORIA (Viagens/Família/Eventos,
+  `_categoria()`, D-034, calibrada em 17/17 cenários) é código separado
+  que consome local JÁ resolvido (país/região/cidade), nunca coordenada
+  bruta — mover a geo-resolução para a carga não toca nela e não exige
+  refazer o benchmark de categoria. Isso substitui a recomendação de D-051
+  ("medir antes de reordenar"): a mudança proposta não é uma inversão de
+  cascata, é mover uma função já pura para um estágio anterior do
+  pipeline.
+- Risco residual, real, a desenhar antes de implementar: hoje a herança é
+  recalculada do zero a cada `gerar()`. Persistida na carga, cria um
+  problema de invalidação que não existe hoje — uma foto que chega depois
+  pode ser doadora melhor (Δt menor) para uma foto já processada, e
+  mudança de constante calibrada (D-025, D-032) precisa de forma de
+  re-rodar sem reprocessar o catálogo inteiro a cada scan incremental.
+  Precedente direto: `Evidence.versao_logica` já resolve o mesmo problema
+  para sugestões — o caminho é versionar a herança do mesmo jeito, não
+  inventar um mecanismo novo.
+- Recomendação revisada: a Fase B do plano de D-051 ("medir se vale a pena
+  reordenar") vira Fase B' — desenhar e implementar um passo de
+  geo-resolução (GPS próprio + herança) que roda uma vez por scan/carga,
+  incremental, com invalidação por `versao_logica`, gravando em
+  `media.location_id` e uma tabela de heranças persistida.
+  `SuggestionEngine.gerar()` passa a LER o resultado já persistido em vez
+  de recalcular. A cascata de categoria não muda uma linha. Detalhe
+  atualizado em `docs/diagnostico-gerar-sugestoes-geo-first.md`.
+- Como reverter: nada a reverter — ainda não implementado, é refinamento
+  de plano sobre leitura de código existente.
+- Status: aguardando (plano revisado; pronto para entrar nas fases quando
+  o dono aprovar o gate da fase 5)
+
+## D-053 — Categoria travada em 3 valores em dois lugares; expansão é um eixo novo (tipo de mídia), não mais opções no mesmo campo
+
+- Fase: revisão de D-051/D-052, mesmo diagnóstico
+- Classe: B
+- Data: 2026-08-13
+- Contexto: o dono notou que o produto só tem 3 categorias organizacionais
+  (Viagens/Família/Eventos) e pediu para pesquisar a taxonomia de sistemas
+  de referência (PhotoPrism, Immich, Google Fotos, Apple Fotos, Lightroom)
+  para avaliar se cabe mais.
+- Achado 1 — o limite é estrutural, em dois lugares independentes: a
+  cascata determinística (`_CATEGORIAS_PASTA`, `engine.py:91-93`) E o
+  schema JSON do advisor LLM (`enum: ["Viagens", "Eventos", "Família"]`,
+  `advisor.py:72`). Mesmo que o modelo "quisesse" propor outra categoria,
+  o `output_config` estruturado bloqueia — não é limitação do prompt, é
+  limitação de schema.
+- Achado 2 — pesquisa (Google Fotos, Apple Fotos, PhotoPrism, Immich,
+  Lightroom) mostra que a expansão de taxonomia relevante para este
+  projeto é OUTRO EIXO, não mais valores de "por que essa sessão existe":
+  tipo/proveniência de mídia — Capturas de Tela, WhatsApp/Mensageria,
+  Fotos ao Vivo, Panorama — todos detectáveis só por metadado (resolução,
+  ausência de EXIF de câmera, XMP `GPano`/`ContentIdentifier`, padrão de
+  nome de arquivo `IMG-YYYYMMDD-WAxxxx`), sem depender de visão
+  computacional (que segue fora de escopo, mesmo motivo de D-035). RAW já
+  é distinguível por extensão, não precisa de campo novo. Misturar esse
+  eixo no campo `categoria` existente seria erro de modelagem — uma foto
+  pode ser Panorama E parte de uma Viagem ao mesmo tempo, os dois não
+  competem pelo mesmo valor.
+  Descartado por sinal fraco/ruidoso: "Documentos/Recibos" e "Selfies" —
+  a própria comunidade do Immich reporta falso positivo tentando detectar
+  screenshot só por metadado quando EXIF de câmera aparece mesmo em
+  captura de tela; Google Fotos resolve os dois via OCR/detecção facial,
+  ou seja, visão — fora de escopo pelo mesmo motivo de D-035.
+- Achado 3, hipótese não medida: parte dos 39,10% de sessões "neutra"
+  (D-047) pode não ser "faltou evidência para Viagens/Família/Eventos" —
+  pode ser "genuinamente não é nenhuma das três", como uma sessão inteira
+  de capturas de tela ou de fotos recebidas por WhatsApp. A instrução
+  "nunca invente" (`advisor.py:97`) está funcionando corretamente nesse
+  caso — o problema não é o advisor inventar, é o produto não ter destino
+  nenhum para esse conteúdo. Não medido ainda: que fração das sessões
+  "neutra" concentra padrão de nome WhatsApp ou resolução de tela de
+  dispositivo comum no catálogo real.
+- Recomendação: (a) não adicionar valores ao enum de `categoria`
+  existente; (b) desenhar um facet novo (`tipo_midia` ou equivalente,
+  evidência própria no mesmo modelo de `docs/CONFIANCA.md`) para os
+  sinais fortes de metadado (Screenshot, WhatsApp, Live Photo, Panorama);
+  (c) medir no catálogo real, ANTES de implementar, se isso reduz a
+  fração "neutra" o bastante para justificar o trabalho — mesmo padrão de
+  medir-antes-de-decidir que já rege D-024 a D-052.
+- Como reverter: nada a reverter — pesquisa e recomendação, nenhum código
+  alterado.
+- Status: aguardando (classe B — medição no catálogo real é o próximo
+  passo antes de qualquer decisão de implementar)
