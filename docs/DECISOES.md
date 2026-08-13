@@ -1795,3 +1795,49 @@ uma fatia
   medida imediata.
 - Como reverter: `git revert 7492853` — commit único e isolado.
 - Status: decidido (implementado e commitado, `7492853`)
+
+## D-058 — Fase B' implementada: geo-resolução cedo, com escopo menor do que D-052 previa
+
+- Fase: 5 (implementação, autorizada por D-056) — fecha o plano de D-051
+- Classe: A — execução do que já estava desenhado e aprovado, com ajuste
+  de escopo descoberto durante a implementação
+- Data: 2026-08-13
+- Contexto: D-056 abriu a fronteira para a Fase B' (mover geo-resolução
+  para a carga, D-052). Ao investigar o código para implementar, ficou
+  claro que `_correlacionar`/`_persistir_herancas` (herança de GPS entre
+  fontes) JÁ rodavam cedo em `gerar()`, uma vez por catálogo inteiro, e
+  já persistiam em colunas (`gps_lat_estimado` etc.) — D-052 tinha
+  avaliado isso como não-persistido; estava desatualizado. O que
+  realmente era lazy: a GEOCODIFICAÇÃO (`LocationResolver.resolve`,
+  coordenada → país/região/cidade), chamada só dentro de
+  `_evidencias_geo`, só para fotos sem sugestão decidida nesta rodada.
+- Implementado: `fotoorganizer/classification/engine.py` ganhou
+  `_resolver_locations(session, midias)`, chamado logo após
+  `_persistir_herancas` — resolve `location_id` para TODA foto com
+  coordenada (própria ou herdada, via `MediaFile.coordenada`), inclusive
+  já decidida e inclusive referência SINAL (usada pela Biblioteca para
+  filtrar por país, `repositories/media.py`). `_evidencias_geo` mantido
+  sem mudança — continua decidindo quais campos expor por granularidade,
+  que depende do objeto `Heranca`, não só do `Location` resolvido.
+- Achado da revisão com olhos frescos (antes do commit): sem memoização
+  por coordenada dentro do próprio loop, um cluster de centenas de fotos
+  da mesma viagem viraria um `SELECT` por foto em vez de um só — a
+  tabela `locations` evita recalcular via geocodificação externa, mas
+  não evita o `SELECT` repetido dentro da mesma geração. Corrigido com
+  um dicionário local por `cache_key`, mesma chave que `LocationResolver`
+  já usa.
+- Escopo reduzido em relação a D-052: NÃO é ainda um job separado do
+  scan/carga — roda dentro de `gerar()`, mesmo padrão de
+  `_correlacionar`. Separar em job próprio (a visão original de D-052)
+  fica para quando houver necessidade medida de resolver local sem
+  esperar geração de sugestão — não implementado agora, sem prazo.
+- Verificação: `scripts/verificar.sh` verde (697 testes, 17/17 benchmark,
+  108 testes de UI, build); provado via API real do servidor
+  (`/api/midia/{id}`) contra catálogo sintético isolado — foto com
+  destino editado manualmente, `location_id` zerado à força, volta a
+  mostrar o lugar resolvido depois de regenerar.
+- Como reverter: `git revert b5f94b2` — commit único e isolado.
+- Status: decidido (implementado e commitado, `b5f94b2`). Plano de D-051
+  fica com todas as 5 fases concluídas (A, B', D, E) — só a decisão 3 do
+  gate (timing do inventário por pasta) segue aberta, sem relação com
+  este plano.

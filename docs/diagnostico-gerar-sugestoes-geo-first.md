@@ -179,7 +179,27 @@ curadoria no catálogo inteiro, D-054) — o ganho é arquitetural (regra 4
 satisfeita, pronto para acervos com mais tagging XMP/IPTC), não medido
 como melhoria imediata.
 
-**Fase B' — mover a geo-resolução para a carga, não para a geração de
+**Fase B' — CONCLUÍDA (commit `b5f94b2`)**
+Implementada com escopo menor do que D-052 previa: a investigação para
+codar revelou que `_correlacionar`/`_persistir_herancas` (herança de GPS)
+já rodavam cedo, uma vez por catálogo — só a GEOCODIFICAÇÃO (coordenada
+→ país/região/cidade) ainda era lazy, dentro de `_evidencias_geo`, e só
+para fotos sem sugestão decidida. Corrigido com `_resolver_locations`,
+chamado logo após `_persistir_herancas`: resolve `location_id` para TODA
+foto com coordenada, inclusive já decidida e inclusive referência SINAL
+(que a Biblioteca também usa para filtrar por país). Revisão com olhos
+frescos achou uma regressão de performance real (sem memoização por
+coordenada, um cluster de fotos na mesma viagem viraria um SELECT por
+foto) — corrigida antes do commit. Não é ainda um job separado do scan
+(ideia original de D-052) — roda dentro de `gerar()`, no mesmo padrão já
+usado por `_correlacionar`; separar em job próprio fica para quando
+houver necessidade medida de rodar sem esperar geração de sugestão.
+Provado via API real do servidor.
+
+<details>
+<summary>Desenho original (D-052), mantido como referência histórica</summary>
+
+**mover a geo-resolução para a carga, não para a geração de
 sugestão (revisado em D-052, substitui a Fase B/C originais)**
 `LocationResolver.resolve` (`geolocation/resolver.py:36-66`) e
 `estimar_offsets`/`herdar_gps` (`grouping/correlacao.py:63-194`) já são
@@ -235,6 +255,8 @@ invalidação incremental nova. O único gatilho de invalidação real é
 mudança de constante calibrada (D-025/D-032) ou de `versao_logica` —
 mesmo mecanismo que já existe para `Evidence`, reaproveitado sem
 desenhar nada novo.
+
+</details>
 
 **Fase E — medir se um facet de tipo de mídia reduz a fração "neutra"
 (D-053) — CONCLUÍDA, resultado negativo (D-054)**
