@@ -1741,3 +1741,28 @@ uma fatia
   código alterado.
 - Status: decidido (Fase D do plano de D-051 encerrada; decisão 3 do
   gate segue aguardando o dono, agora sem dependência falsa)
+
+## D-056 — Dono aprova o plano da fase 5 para as Fases A e B' do diagnóstico de "Gerar sugestões"
+
+- Fase: 5 (abre a fronteira, `docs/prompts/fase-5-ia-e-produto.md`)
+- Classe: B — decisão do dono, registrada
+- Data: 2026-08-13
+- Contexto: D-051/D-052 desenharam duas fases de implementação — A
+  (alimentar XMP/IPTC na cascata de evidências) e B' (mover
+  geo-resolução para a carga) — para corrigir os gaps encontrados no
+  diagnóstico de "Gerar sugestões" contra o objetivo geo-first. As duas
+  ficaram bloqueadas pela fronteira fechada desde D-001
+  (`fotoorganizer/**`, `webapp/src/**`, migrações Alembic,
+  `pyproject.toml`, `CLAUDE.md`), que só abre com aprovação formal do
+  dono ao plano da fase 5.
+- Decisão do dono: "Aprovado", em resposta direta à pergunta "aprovar
+  formalmente o plano da fase 5 para destravar as Fases A e B'".
+- Escopo tratado como aprovado: implementar a Fase A e a Fase B'
+  exatamente como desenhadas em
+  `docs/diagnostico-gerar-sugestoes-geo-first.md` e em D-051/D-052 — não
+  é abertura geral e irrestrita de `fotoorganizer/**`/`webapp/src/**`
+  para qualquer mudança futura, e não inclui a decisão 3 do gate (timing
+  do inventário por pasta), que segue explicitamente aberta (D-055).
+- Como reverter: os commits de cada fase são independentes e revertem
+  isolados, mesmo padrão já usado no projeto (D-016).
+- Status: decidido pelo dono
