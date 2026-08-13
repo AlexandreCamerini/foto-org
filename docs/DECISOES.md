@@ -1241,3 +1241,46 @@ uma fatia
 - Como reverter: apagar `docs/lib-preparatoria/`; nada fora dela foi
   tocado.
 - Status: decidido
+
+## D-046 — Medição do empilhamento de capturas irmãs: D-042 resolvida, 11,72% do acervo
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: D-042 descartou "empilhamento de capturas irmãs" (RAW+JPEG do
+  mesmo clique) no filtro 1 da fase 14 — é table stakes, Lightroom/Apple
+  Fotos/Mylio já empilham — mas deixou uma medição pendente antes de poder
+  dimensionar esforço para um retorno futuro como candidato de roadmap:
+  "o mapa 01 dimensiona em 'M' um problema de tamanho desconhecido [...]
+  sem número, 'M' é chute". A medição prescrita ali ("contar, por fonte,
+  linhas com a mesma `data_capturada` e a mesma câmera cuja extensão
+  difere") não precisa de pixel nem de volume montado — roda só leitura
+  sobre o catálogo atual.
+- Medição: `scripts/medir_capturas_irmas.py` (novo, somente leitura, aberto
+  com `mode=ro`/`immutable=1`), rodado sobre o catálogo real
+  (`~/Library/Application Support/FotoOrganizer/catalog.db`, 940 MB).
+  Critério: `papel='ACERVO'` agrupado por `(source_id, data_capturada,
+  make, model)` com mais de uma `extensao` distinta no grupo.
+- Resultado: **3.846 grupos, 11.331 fotos envolvidas — 11,72% dos 96.692
+  registros de `papel='ACERVO'`.** Concentrado quase todo em
+  `/Volumes/photo` (3.843 dos 3.846 grupos — o volume Lightroom/RAW
+  citado em D-028, hoje desmontado). Par de extensão dominante: `cr2+jpg`
+  (3.361 grupos, 87% do total), seguido de `cr2+dng` (397, 10%); o resto
+  (`cr2+tif(f)`, `dng+*`, `cr3+jpg`) soma menos de 3%.
+- Interpretação: o número é real e não é ruído de rajada de 1 segundo —
+  11,72% do acervo organizável é ordem de grandeza relevante, e o padrão
+  MUITO concentrado num par só (`cr2+jpg`, 87%) muda o "M" de D-042 de
+  chute para estimativa com base: um resolvedor que trate esse par
+  específico (mesma fonte + mesmo instante + mesma câmera + `cr2`
+  irmanado com `jpg`) cobriria a esmagadora maioria dos casos sem precisar
+  tratar a cauda longa de combinações raras.
+- O item **continua fora do escopo da fase 14** — a medição não reabre o
+  item agora, só destrava o dimensionamento para quando ele voltar como
+  candidato de roadmap (a razão do descarte, table stakes de mercado,
+  segue valendo; D-042 já separou "descartar por table stakes" de "custo
+  desconhecido", e só o segundo motivo esta medição resolve).
+- Como reverter: nada a reverter — medição aditiva, somente leitura, nenhum
+  arquivo do acervo nem linha do catálogo foi alterada. Quando o item
+  voltar como candidato, citar este número em vez de remedir do zero
+  (remedir só se o acervo mudar de forma material — novo import, ligação
+  do volume `/Volumes/photo`).
+- Status: decidido
