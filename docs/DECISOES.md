@@ -993,3 +993,251 @@ fosse caminho de arquivo
   `:_gravar_referencia`) e nenhum leitor depende da coluna ainda — é aditivo
   de ponta a ponta.
 - Status: decidido
+
+## D-039 — Referência PhotoPrism + síntese de backlog cruzando as duas leituras
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: dono pediu para levantar o que PhotoPrism e Immich têm de mais
+  avançado/diferenciador vs. mercado, para trazer ao foto-organizer — não
+  para portar ao PhotoPrism. Já existe leitura completa do Immich
+  (`docs/referencia-immich/`, 2026-08-08) e uma auditoria de 453
+  capabilities do PhotoPrism feita numa sessão paralela em
+  `~/dev/photoprism-develop/.local/audit/photoprism/` (8 domínios, âncoras
+  `arquivo:linha` verificadas, mesma licença AGPLv3).
+- Opções: (a) reler o PhotoPrism do zero, espelhando os cinco agentes de
+  reconhecimento usados no Immich; (b) sintetizar a partir da auditoria já
+  feita (já ancorada), dividida pelos três agentes de domínio existentes
+  (agente-arquivos/agente-imagem/agente-ux) em vez de leitores genéricos
+  novos; (c) pular o mapa de mecanismo e ir direto a um backlog sem
+  referência.
+- Escolhida: (b)
+- Por quê: a auditoria paralela já tem 453 capabilities com âncora
+  verificada — reler do zero duplicaria custo sem ganho de precisão. Os
+  agentes de domínio do próprio projeto já carregam o contexto de fit ("isso
+  já existe aqui? vale para este acervo?") que um leitor genérico não tem —
+  soldar leitura e julgamento de fit num único agente evita uma segunda
+  rodada de revisão. (c) foi descartada porque o valor do
+  `referencia-immich` ("reler custa uma tarde; redescobrir custa meses",
+  conforme seu próprio README) se perde sem o mapa equivalente do
+  PhotoPrism.
+- Como reverter: `docs/referencia-photoprism/` e o novo
+  `docs/prompts/fase-14-*.md` são aditivos, docs-only — apagar os arquivos
+  não afeta nada.
+- Status: decidido
+
+## D-040 — O diferencial não é a linguagem de busca, é o que ela consegue perguntar
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: a DSL de campo único do PhotoPrism (`internal/form/serialize.go:16-191`,
+  `search_photos.go:11-99`) é o mecanismo de UX mais sofisticado dos dois mapas
+  lidos, e a tentação é propô-la como item por si. Mas "filtro salvável" é table
+  stakes: o Lightroom tem coleções inteligentes há mais de uma década, e a busca
+  do Google Fotos é melhor que qualquer DSL que este projeto vá escrever. Se o
+  item fosse "trazer a DSL", ele morreria no filtro 1 da própria fase.
+- Opções: (a) propor a DSL como item de UX, pelo mérito do mecanismo;
+  (b) descartar por table stakes; (c) propor o mecanismo, mas justificado pelo
+  vocabulário que só este projeto pode oferecer — `confianca:`, `origem:`,
+  `versao:`, `papel:`, `lugar:estimado`, `alcance:` — que sai de `evidence`
+  (`models/inference.py:39-58`) e de colunas que nenhum app de mercado tem
+  porque nenhum registra proveniência por campo.
+- Escolhida: (c)
+- Por quê: o filtro 1 pergunta se o mercado já faz aquilo. O mercado faz busca
+  e faz filtro salvo; o que o mercado não faz — nem pode, com o modelo de dados
+  que tem — é responder "me mostre o que foi inferido por vizinhança temporal,
+  com confiança baixa, pela lógica 3.9". O mecanismo do PhotoPrism é o veículo;
+  o diferencial é a carga. Escrito assim, o item também deixa de ser um pedido
+  de UI nova e vira o que de fato é: tornar alcançável um ativo que o M3 já
+  pagou e que hoje o usuário não consegue consultar.
+- Consequência de desenho: sem o round-trip simétrico (`Serialize`, `:16-77`) o
+  item perde a única mitigação decente para "mais uma sintaxe para aprender" —
+  clicar nos controles existentes escreve a sintaxe na caixa. Um port que
+  implemente só o parser entrega uma caixa de texto que ninguém preenche.
+- Como reverter: o item é proposta em `docs/prompts/fase-14-*.md`; nada foi
+  implementado.
+- Status: decidido
+
+## D-041 — Estado do pipeline no catálogo sai da lista de "vale importar"
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: o README de `docs/referencia-immich/` lista três coisas como "vale
+  importar", e uma delas é "o estado do pipeline gravado no catálogo em vez de
+  na fila" (`asset_job_status`, `schema/tables/asset-job-status.table.ts:5`, com
+  `asset-job.repository.ts:356-369` derivando "o que falta processar" por
+  consulta). As outras duas viraram os itens B e C da fase 12 e já foram
+  implementadas (D-037, D-038); esta ficou pendente e reapareceu como candidata
+  nesta rodada.
+- Opções: (a) promover a item da fase 14, honrando a marcação do README;
+  (b) descartar por filtro 1, registrando que a marcação anterior usava outra
+  régua; (c) deixar sem julgamento, para reaparecer numa terceira rodada.
+- Escolhida: (b)
+- Por quê: o filtro desta fase é "diferencia vs. produtos de mercado". Estado de
+  pipeline é arquitetura interna que o usuário nunca vê — e o que ninguém vê não
+  diferencia produto nenhum. A marcação do README do Immich foi feita sob a
+  régua da fase 12 ("o que mudaria substancialmente o projeto"), que é outra
+  pergunta e admitia resposta de engenharia. Continua sendo boa engenharia: se
+  algum dia a fila de background crescer, derivar o pendente por consulta é
+  melhor que manter estado de fila. Só não é item de backlog de valor.
+- Como reverter: nada foi removido; o julgamento está em
+  `docs/prompts/fase-14-*.md` §7.1 e pode ser revisto se a fila crescer.
+- Status: decidido
+
+## D-042 — Empilhamento de capturas irmãs: os dois mapas discordavam, e o
+desempate não é o argumento de nenhum dos dois
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: `docs/referencia-photoprism/01-ingestao-e-arquivos.md` §11 marca o
+  empilhamento (`index_mediafile.go:150-200`, `mediafile_related.go:16`) como
+  "vale considerar, M", porque `duplicates/` agrupa hash idêntico e phash mas
+  não RAW+JPEG do mesmo clique — bytes diferentes, phash diferente, são
+  codificações distintas da mesma cena. `03-ux-e-organizacao.md` §4.3 marca como
+  "não vale", alegando que `papel` ACERVO/SINAL já resolve. Os dois mapas do
+  mesmo levantamento se contradizem e alguém ia ter que decidir.
+- Opções: (a) seguir o mapa 01 e propor como item M; (b) seguir o mapa 03 e
+  descartar como já resolvido; (c) rejeitar os dois argumentos e descartar por
+  outro motivo, condicionando o retorno a uma medição.
+- Escolhida: (c)
+- Por quê: o mapa 03 está errado no mérito — `papel` responde "isto é acervo ou
+  testemunha", não "estes dois arquivos são o mesmo disparo"; a lacuna que o
+  mapa 01 aponta é real. Mas o item morre no filtro 1 desta fase: Lightroom,
+  Apple Fotos e Mylio empilham RAW+JPEG, é table stakes do segmento. E o mapa 01
+  dimensiona em "M" um problema de tamanho desconhecido: por padrão o Lightroom
+  não trata o JPEG ao lado do RAW como foto separada, então o `.lrcat` importado
+  (54.086 `captureTime`, D-038) pode já ter escondido metade das capturas irmãs.
+  Sem número, "M" é chute.
+- Medição que destrava: contar, por fonte, linhas com a mesma `data_capturada` e
+  a mesma câmera cuja extensão difere. Não precisa de pixel nem de volume
+  montado — roda sobre o catálogo atual, somente leitura.
+- Como reverter: volta como candidato de roadmap assim que a medição existir.
+- Status: decidido
+
+## D-043 — `versao_logica` é escrito e nunca lido, e o conserto é um token, não
+uma fatia
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: `Evidence.versao_logica` e `Suggestion.versao_logica`
+  (`models/inference.py:57,75`) são preenchidos com `VERSAO_LOGICA = "4.1"`
+  (`classification/engine.py:75,970,1045`) e não aparecem em nenhuma consulta,
+  filtro ou operação — grep confirma zero leitores. A auditoria mais cara do
+  projeto (qual raciocínio decidiu cada campo) está gravada e é inalcançável.
+- Opções: (a) propor "recomputar em massa por origem e versão de lógica,
+  preservando o manual" como item próprio, espelhando `asset_face.sourceType` do
+  Immich (`asset-face.table.ts:75`, com `metadata.service.ts:968` apagando e
+  recriando só as faces de origem `exif`); (b) tratar como token do filtro
+  composto (Item A da fase 14); (c) remover a coluna, já que ninguém lê.
+- Escolhida: (b)
+- Por quê: (a) resolve um problema que este projeto não tem. A preservação do
+  manual aqui já é melhor que a do Immich: a decisão do usuário mora em coluna
+  própria (`tipo_confirmado`, `gps_lat` vs `gps_lat_estimado`) e a evidência é
+  cache derivado, apagado e refeito inteiro a cada passada
+  (`classification/engine.py:961`) — recomputar já preserva o manual por
+  construção, sem precisar de `sourceType` nem de `lockedProperties`. O que
+  falta não é a operação de recomputar, é **enxergar** o que cada versão
+  decidiu, e isso é um predicado de filtro. (c) está errado: a coluna custa
+  nada e é a única testemunha de qual lógica produziu 101 mil inferências.
+- O que muda de resposta: se o motor de sugestões ficar caro o bastante para que
+  reprocessar 101 mil registros incomode, a operação escopada de (a) volta a
+  fazer sentido — e o token `versao:` já terá provado que o dado é confiável.
+- Como reverter: nada implementado; o token é parte da proposta do Item A.
+- Status: decidido
+
+## D-044 — A ordem dos itens da fase 14 não é a ordem de valor/custo bruta
+- Fase: 14
+- Classe: A
+- Data: 2026-08-12
+- Contexto: o Item B da fase 14 (proteger a camada de julgamento: export legível
+  + dump agendado com retenção + checagem de esquema no boot) custa **S**; o
+  Item A (filtro composto sobre proveniência) custa **M**. Pela régua do
+  `ROADMAP.md` — valor por unidade de custo — o mais barato deveria vir antes, e
+  o Item B protege literalmente todo o resto: D-024 a D-039 são meses de
+  calibração sobre 101.516 registros, e é a única camada que uma nova varredura
+  não reconstrói. Hoje não há mecanismo nenhum: `sqlite3 .backup` aparece em
+  quatro scripts ad-hoc (`scripts/preparar_versao.sh:121-125`,
+  `rebaixar_nao_acervo.py:88-90`, `podar_metadados.py:55`,
+  `medir_nome_de_album.py:105-110`), e D-038 já registra que a migração `0014`
+  não é atômica e uma interrupção deixaria o app sem abrir.
+- Opções: (a) B → A → C, por custo; (b) A → B → C, por valor entregue no caso
+  esperado; (c) não ordenar e deixar a decisão para quem for implementar.
+- Escolhida: (b)
+- Por quê: o valor do Item B é **zero no caso esperado** — é seguro, e seguro só
+  entrega na cauda. O Item A entrega todo dia em que o app abrir, e é o único
+  dos três que converte em capacidade visível um diferencial pelo qual o projeto
+  já pagou (a tabela `evidence`, construída no M3). A régua diz "valor
+  entregue", não "risco evitado".
+- Ressalva que faz parte da decisão, não a contradiz: quem pesar risco de cauda
+  acima de valor contínuo deve inverter os dois. Como o B custa S e não toca em
+  nada que o A toca (o A é leitura; o B escreve só em arquivo próprio do app),
+  os dois correm em paralelo sem conflito — a ordem é recomendação, não
+  dependência.
+- Como reverter: trocar a ordem em `docs/prompts/fase-14-*.md` §3-4; não há
+  dependência técnica entre os dois.
+- Status: decidido
+
+## D-045 — Lib preparatória dos 4 itens da fase 14 (+ item 5 do roadmap), em staging fora da fronteira
+- Fase: 14 (Itens A, B, C) + roadmap "Próximas versões" item 5 (Item D)
+- Classe: A
+- Data: 2026-08-12
+- Contexto: o dono ainda não aprovou o plano da fase 5, então
+  `fotoorganizer/**`, `webapp/src/**`, migrações Alembic e `pyproject.toml`
+  continuam fora de alcance (`docs/prompts/00-protocolo.md:80-88`). Os
+  quatro itens já estavam decididos e mapeados (fase 14 + roadmap item 5) e
+  o pedido foi preparar a reimplementação inteira — lib, testes, README —
+  em `docs/lib-preparatoria/`, pronta para plugar quando o gate abrir, sem
+  tocar em código de produção agora.
+- Opções: (a) esperar o gate abrir para escrever qualquer código; (b)
+  escrever a lib completa em staging dentro de `docs/**`, com testes e
+  documentação do ponto de integração; (c) escrever só o desenho (prosa),
+  sem código executável.
+- Escolhida: (b)
+- Por quê: `docs/**` está dentro da fronteira liberada, e o valor de ter
+  código testado e pronto para colar é maior que o de prosa — quando o gate
+  abrir, a integração vira "colar + ajustar import", não "implementar do
+  zero". Os quatro itens nasceram só da descrição de mecanismo em
+  `docs/referencia-photoprism/`, `docs/referencia-immich/` e do schema real
+  lido em `fotoorganizer/**`/`webapp/src/**` (leitura permitida) — nunca de
+  abrir os dois repositórios de referência (ambos AGPLv3).
+- O que foi preparado, um diretório por item, cada um com `lib.py` +
+  `test_lib.py` + `README.md`:
+  - `docs/lib-preparatoria/filtro-proveniencia/` (Item A) — parser +
+    serializador simétrico para um filtro composto sobre `evidence`
+    (`confianca`, `origem`, `papel`, `lugar:estimado`), sem OU/negação
+    nesta versão (mitigação já recomendada na seção 6 do prompt de
+    origem). 34 testes.
+  - `docs/lib-preparatoria/protecao-julgamento/` (Item B) — export legível
+    em JSON (decisão de formato registrada no README do item, não aqui:
+    JSON em vez de YAML, zero dependência nova), backup com retenção sobre
+    o mesmo padrão `sqlite3 .backup` já usado em quatro scripts, e
+    checagem de esquema no boot que cobre nomeadamente o cenário que
+    D-038 descreve (migração `0014` não atômica). 24 testes.
+  - `docs/lib-preparatoria/deteccao-sidecar-xmp/` (Item C) — resolução
+    reversa `.xmp` → mídia principal (sem adivinhar em caso de
+    ambiguidade) + classificação em 5 casos para detectar "só o sidecar
+    mudou", o gatilho que falta no scanner incremental hoje. 22 testes.
+  - `docs/lib-preparatoria/timezone-por-pais/` (Item D, roadmap item 5) —
+    `TZ_POR_PAIS` cobrindo os 250 países reais de
+    `geolocation/paises.py::PAISES_PT` (o prompt de fase-11 citava "98",
+    número desatualizado — medido nesta sessão), todos validados contra
+    `zoneinfo.available_timezones()`, mais a função de cálculo que já
+    distingue "ganhou tz por GPS próprio" de "ganhou por herança D-025"
+    para a medição que o aceite da fase pede. 17 testes.
+  - Total: 97 testes, `pytest docs/lib-preparatoria/*/test_lib.py` verde.
+- Verificação de contaminação: `grep -rl "photoprism-develop\|~/dev/fot"
+  docs/lib-preparatoria/` voltou vazio na versão final. Na primeira
+  rodada NÃO voltou vazio — os três README que citavam a restrição de
+  licença ("nenhuma linha vem de `~/dev/photoprism-develop` ou
+  `~/dev/fot`") continham, eles mesmos, os literais proibidos dentro da
+  própria frase de conformidade. Investigado: falso positivo (nenhuma
+  linha de código citava os repositórios, só a frase de negação os
+  nomeava) — corrigido reformulando as três frases para não conter os
+  literais, sem perder o sentido da declaração.
+- Nenhuma linha desta sessão veio de abrir arquivo dentro dos dois
+  repositórios de referência (ambos AGPLv3) — confirmado pelo grep acima e
+  por não haver, no histórico de ferramentas desta sessão, nenhuma leitura
+  de caminho fora de `docs/`, `fotoorganizer/`, `webapp/src/` e `scripts/`.
+- Como reverter: apagar `docs/lib-preparatoria/`; nada fora dela foi
+  tocado.
+- Status: decidido
