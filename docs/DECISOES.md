@@ -1717,3 +1717,27 @@ uma fatia
 - Status: decidido (hipótese refutada por medição; a recomendação de
   D-053 de "medir antes de implementar" foi seguida, e a resposta é não
   implementar por este motivo)
+
+## D-055 — Fase D fechada: dono confirma que a trava do Item B não tinha base real
+
+- Fase: revisão do diagnóstico, fecha a Fase D do plano de D-051
+- Classe: A — confirmação direta do dono, sem julgamento em aberto
+- Data: 2026-08-13
+- Contexto: D-051 apontou que a premissa herdada do handoff que abriu esta
+  sessão ("Decisão 3 do gate travada até resolver sobreposição de desenho
+  com o Item B/protecao-julgamento") não tinha base em nenhum documento —
+  releitura completa do README do Item B e de todo `docs/DECISOES.md`,
+  `docs/PLANO_IA_E_PRODUTO.md` e `docs/ROADMAP.md` não encontrou nenhuma
+  sobreposição real. Perguntei diretamente ao dono se confirmava.
+- Resposta do dono: confirma — a trava não tem origem real fora dos
+  documentos.
+- Consequência: a decisão 3 do gate ("inventário por pasta entra antes ou
+  depois do lançamento", `docs/PLANO_IA_E_PRODUTO.md` §8) fica livre para
+  ser decidida independente do Item B — não precisa mais esperar a
+  resolução de um conflito que não existia. A decisão 3 EM SI (timing do
+  inventário) segue em aberto; só a trava artificial foi removida, não a
+  decisão.
+- Como reverter: não se aplica — remoção de uma trava incorreta, nenhum
+  código alterado.
+- Status: decidido (Fase D do plano de D-051 encerrada; decisão 3 do
+  gate segue aguardando o dono, agora sem dependência falsa)

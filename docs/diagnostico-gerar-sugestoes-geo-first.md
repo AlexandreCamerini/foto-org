@@ -240,11 +240,12 @@ não existe em volume neste acervo. **Não implementar** o facet
 sustenta. Se o facet tiver valor por outro motivo (navegação/filtro por
 tipo de mídia), é decisão de produto separada, sem essa medição a favor.
 
-**Fase D — esclarecer a decisão 3 do gate**
-Antes de aprovar timing do "inventário por pasta" (`PLANO_IA_E_PRODUTO.md`
-§8), confirmar com o dono se a trava com o Item B tem origem real fora
-dos documentos — se não, a decisão 3 pode seguir independente do Item B,
-sem esperar mais nada.
+**Fase D — esclarecer a decisão 3 do gate — CONCLUÍDA (D-055)**
+O dono confirmou diretamente: a trava do Item B não tinha origem real
+fora dos documentos. A decisão 3 do gate (timing do "inventário por
+pasta", `PLANO_IA_E_PRODUTO.md` §8) segue independente do Item B — a
+trava artificial foi removida; a decisão em si (antes ou depois do
+lançamento) ainda é do dono, sem prazo.
 
 ## Parar aqui
 
