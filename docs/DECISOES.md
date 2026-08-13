@@ -1766,3 +1766,32 @@ uma fatia
 - Como reverter: os commits de cada fase são independentes e revertem
   isolados, mesmo padrão já usado no projeto (D-016).
 - Status: decidido pelo dono
+
+## D-057 — Fase A implementada: palavra-chave XMP/IPTC vira evidência de categoria
+
+- Fase: 5 (implementação, autorizada por D-056)
+- Classe: A — execução do que já estava desenhado e aprovado
+- Data: 2026-08-13
+- Contexto: D-056 abriu a fronteira para a Fase A (alimentar XMP/IPTC na
+  cascata de evidências, regra 4 de D-051). Implementada como fatia
+  vertical (skill `fatia-vertical`): `fotoorganizer/classification/engine.py`
+  ganhou `_carregar_curadoria` (uma consulta por geração, evita N+1) e um
+  novo passo em `_categoria()`; `fotoorganizer/classification/confidence.py`
+  ganhou a origem `curadoria` (score 0.55, mesmo tier de `album_externo`).
+- Achado da revisão com olhos frescos (antes do commit): a ordem original
+  colocava a palavra-chave (0.55) ANTES do tipo de sessão decidido por
+  GPS/geocodificação (0.85-0.95) na cascata — uma foto isolada com
+  palavra-chave divergente (ex.: vinda de álbum externo que só coincide
+  no tempo) fragmentaria o destino de uma viagem inteira já decidida com
+  alta confiança. Corrigido: palavra-chave só decide quando pasta E
+  tipo de sessão não decidiram. Coberto por
+  `test_curadoria_nao_sobrepoe_sessao_de_alta_confianca`.
+- Verificação: `scripts/verificar.sh` verde (696 testes, 17/17 benchmark,
+  108 testes de UI, build); provado no Inspector real contra catálogo
+  sintético isolado (HOME redirecionado, mesmo padrão de D-010).
+- Efeito no acervo real: quase nulo hoje — só 8 entradas de curadoria no
+  catálogo inteiro (D-054). O ganho é a regra 4 satisfeita e o mecanismo
+  pronto para quando houver mais tagging XMP/IPTC, não uma melhoria
+  medida imediata.
+- Como reverter: `git revert 7492853` — commit único e isolado.
+- Status: decidido (implementado e commitado, `7492853`)

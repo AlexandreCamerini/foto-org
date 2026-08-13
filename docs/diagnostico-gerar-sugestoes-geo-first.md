@@ -165,12 +165,19 @@ do que foi medido e por quê a resposta é não.
 
 ## Plano faseado — nenhuma fase escreve em `fotoorganizer/**`/`webapp/src/**` sem aprovação explícita do dono
 
-**Fase A — alimentar XMP/IPTC na cascata de evidências (regra 4)**
-Baixo risco: não muda a ordem geo/tempo, só adiciona um sinal que já é
-extraído e persistido, mas ignorado. Verificação: teste novo em
-`tests/test_classification*.py` cobrindo um caso onde XMP/IPTC decide um
-campo que EXIF sozinho não decidiria; captura de tela do Inspector
-(`webapp/src/components/Inspector.tsx:107`) mostrando a evidência nova.
+**Fase A — alimentar XMP/IPTC na cascata de evidências (regra 4) — CONCLUÍDA**
+Implementada (commit `7492853`): palavra-chave de curadoria (XMP/IPTC)
+vira evidência de categoria (origem `curadoria`, confiança 0.55) quando
+não há pasta explícita — abaixo da pasta E do tipo de sessão por
+GPS/geocodificação (achado da revisão com olhos frescos: a ordem
+original deixava uma palavra-chave de baixa confiança fragmentar uma
+viagem inteira já decidida com confiança alta numa única foto; corrigido
+antes do commit, com teste de regressão). Coberto por 3 testes de
+unidade e provado no Inspector real contra catálogo sintético isolado.
+No acervo real, o efeito prático hoje é quase nulo (só 8 entradas de
+curadoria no catálogo inteiro, D-054) — o ganho é arquitetural (regra 4
+satisfeita, pronto para acervos com mais tagging XMP/IPTC), não medido
+como melhoria imediata.
 
 **Fase B' — mover a geo-resolução para a carga, não para a geração de
 sugestão (revisado em D-052, substitui a Fase B/C originais)**
