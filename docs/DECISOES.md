@@ -1456,3 +1456,44 @@ uma fatia
   aqui.
 - Status: decidido (recomendação); aprovação final da decisão 1 do gate
   segue sendo do dono
+
+## D-050 — O mapa do lugar estimado (item 1 do roadmap, fase 9) existe e funciona, mas ninguém acha
+- Fase: 9 (achado de UX, fora de qualquer fase aberta — registrado por
+  verificação ao vivo pedida pelo dono)
+- Classe: A
+- Data: 2026-08-13
+- Contexto: o dono pediu para rodar o item 1 do roadmap ("mapa do lugar
+  estimado com raio de incerteza"). Servidor local (`python -m fotoorganizer
+  web`, porta 8765) subido contra o catálogo real, sem gerar sugestão nova
+  (já havia 96.549 pendentes/143 aprovadas/272 grupos persistidos de antes
+  — nenhuma escrita nova no catálogo nesta verificação). Confirmado ao vivo:
+  grupo "Brasil" (10–26/04/2009, 2.133 fotos) mostra círculo tracejado de
+  raio de incerteza em volta de coordenada herdada (158 fotos herdando de
+  `IMG00019-20090423-1706.jpg`, Δt 3h55min, "o raio pode crescer até 50 km"),
+  distinto do ponto cheio de coordenada lida, com aviso separado para as 159
+  fotos "fora de alcance" (arquivo não responde, D-028/D-033). O mecanismo
+  descrito no `ROADMAP.md` item 1 está implementado e correto.
+- Achado: o dono tentou navegar até o mapa sozinho, no próprio app, e não
+  achou. Não é erro de uso — é desenho: `webapp/src/App.tsx:88-91` decide
+  deliberadamente NÃO dar ao mapa uma aba própria ("Lista × Mapa vale só
+  quando o recorte É um grupo... por isso é um controle da tela do grupo, e
+  não uma sétima aba no topo"). Na prática isso exige 3 passos sem nenhuma
+  affordance visual: aba Viagens → abrir um card de viagem específico →
+  dentro da Biblioteca que abre, achar o toggle Lista/Mapa (sem ícone, sem
+  destaque, só aparece com um grupo já aberto). Nenhum link "ver no mapa"
+  existe no Panorama nem nos próprios cards da aba Viagens.
+- Por quê o desenho original não é irracional, mas falhou na prática: a
+  lógica de "mapa só faz sentido com um grupo" está certa — o problema não é
+  a regra, é a ausência de qualquer pista de que a tela existe antes de já
+  saber procurá-la. Isso é table stakes de descoberta de feature (nem chega
+  a ser um caso de UX complexo), e mesmo assim ninguém achou sem ajuda.
+- Não corrigido nesta sessão: `webapp/src/**` segue fora da fronteira até a
+  fase 5 ser aprovada (`docs/prompts/00-protocolo.md:80-88`). Registrado
+  como achado para entrar no escopo de UX quando a fronteira abrir —
+  candidatos óbvios: badge/ícone de mapa no card da aba Viagens quando o
+  grupo tem lugar estimado ou lido, ou um atalho direto a partir do
+  Panorama na faceta "local_estimado".
+- Como reverter: nada a reverter — achado registrado, nenhum código
+  alterado.
+- Status: decidido (achado registrado; correção fica para fase de UX
+  futura)
