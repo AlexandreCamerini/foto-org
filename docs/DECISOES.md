@@ -1673,3 +1673,47 @@ uma fatia
   alterado.
 - Status: aguardando (classe B — medição no catálogo real é o próximo
   passo antes de qualquer decisão de implementar)
+
+## D-054 — Hipótese de D-053 refutada: sessões "neutra" não são screenshots/WhatsApp disfarçados
+
+- Fase: revisão de D-053, mesmo diagnóstico (Fase E do plano)
+- Classe: A — medição com resultado negativo claro, sem julgamento em
+  aberto
+- Data: 2026-08-13
+- Contexto: D-053 levantou a hipótese de que parte dos 39,10% de sessões
+  "neutra" (D-047) pudesse ser conteúdo que genuinamente não é Viagens/
+  Família/Eventos — sessões inteiras de captura de tela ou fotos recebidas
+  por WhatsApp — e recomendou medir antes de desenhar um facet novo.
+  `scripts/medir_categorias_ausentes.py` (novo) rodou a passada completa
+  sobre as 104 sessões neutra reais (mesmo conjunto de D-047/048/049),
+  instrumentando `SuggestionEngine._consultar_advisor` por monkeypatch em
+  tempo de execução — nenhum arquivo de `fotoorganizer/**` foi editado —
+  para capturar os membros completos de cada sessão, não só os 8 exemplos
+  que `ClusterInfo` carrega.
+- Resultado: **0 de 104 sessões neutra** (0% das 41.901 fotos) têm
+  qualquer traço — nem majoritário, nem parcial, nem um único arquivo —
+  de padrão de nome WhatsApp ou de captura de tela. Checagem adicional
+  direto no catálogo (fora da amostra de sessões neutra, SQL somente
+  leitura) confirma que não é nome perdido na importação: no acervo
+  inteiro (`papel='ACERVO'`, 96.692 registros), só 1 arquivo com padrão
+  parecido com WhatsApp, 2 com nome de captura de tela, 187 PNG (0,19%).
+  O conteúdo genuinamente não está no acervo em volume nenhum — não é
+  falso negativo do sinal de metadado.
+- Interpretação: a hipótese de D-053 estava errada para este acervo. Faz
+  sentido em retrospecto — é uma biblioteca fotográfica curada de 25 anos
+  (Canon + Lightroom, D-028/D-029), não um despejo de rolo de celular com
+  forward de grupo de WhatsApp. Os 39,10% de sessões "neutra" continuam
+  sem explicação alternativa medida — a leitura original de D-047
+  (residual genuíno da cascata determinística, grande demais para ser
+  ignorado, não pequeno o bastante para ser resíduo) segue de pé.
+- Recomendação: **não implementar** o facet `tipo_midia`
+  (Screenshot/WhatsApp) com a justificativa de reduzir a fração "neutra"
+  — a medição mostra que não reduziria nem uma sessão neste acervo. Se o
+  facet tiver valor por outro motivo (filtrar/navegar por tipo de mídia),
+  é decisão de produto separada, sem essa medição a favor e sem urgência
+  medida.
+- Como reverter: nada a reverter — medição negativa, nenhum código de
+  produção alterado.
+- Status: decidido (hipótese refutada por medição; a recomendação de
+  D-053 de "medir antes de implementar" foi seguida, e a resposta é não
+  implementar por este motivo)

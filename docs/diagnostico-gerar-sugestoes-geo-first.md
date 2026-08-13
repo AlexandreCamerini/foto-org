@@ -150,13 +150,18 @@ metadado ficam de fora: sinal ruidoso (a comunidade do Immich já reportou
 falso positivo tentando isso) e a versão confiável depende de visão
 (OCR/rosto), fora de escopo pelo mesmo motivo de D-035.
 
-Hipótese não medida, decorrente disso: parte dos 39,10% de sessões
-"neutra" (D-047) pode não ser falta de evidência para Viagens/Família/
-Eventos — pode ser que a sessão genuinamente não seja nenhuma das três
-(ex.: sessão inteira de capturas de tela ou fotos recebidas por
-WhatsApp). O advisor recusando corretamente ("nunca invente") não é o
-problema; o problema é o produto não ter destino para esse conteúdo.
-Precisa medir no catálogo real antes de implementar — ver Fase E.
+**Atualização (D-054): hipótese medida e refutada.** `scripts/medir_categorias_ausentes.py`
+rodou a passada completa sobre as 104 sessões neutra reais — **0 sessões,
+0% das 41.901 fotos**, têm qualquer traço de padrão de nome WhatsApp ou
+de captura de tela, mesmo no limiar mais frouxo. Checagem direta no
+catálogo confirma que o conteúdo genuinamente não existe em volume neste
+acervo (187 PNG em 96.692 registros, 1 nome tipo WhatsApp, 2 nomes de
+screenshot) — não é sinal de metadado perdido na importação. Os 39,10%
+de "neutra" continuam sem explicação alternativa medida; a leitura
+original de D-047 (residual genuíno da cascata, não resíduo pequeno)
+segue de pé. **Não implementar o facet `tipo_midia` com essa
+justificativa** — ver Fase E abaixo, mantida no documento como registro
+do que foi medido e por quê a resposta é não.
 
 ## Plano faseado — nenhuma fase escreve em `fotoorganizer/**`/`webapp/src/**` sem aprovação explícita do dono
 
@@ -192,18 +197,48 @@ depois; teste de invalidação por `versao_logica`; medição no catálogo real
 mostrando que `SuggestionEngine.gerar()` lê `location_id`/heranças
 pré-persistidos sem recalcular.
 
+### Fase B' — desenho técnico (sem código)
+
+**Onde entra no pipeline**: não dentro do `scanner/` (que precisa continuar
+rápido e somente leitura, invariante 1) — como um job novo, próprio,
+disparado depois do scan completar (mesmo padrão de job em background já
+existente em `fotoorganizer/server/jobs.py`), não por arquivo individual.
+Rodar por arquivo a cada evento de scan incremental sairia mais caro do
+que rodar a geração de sugestão sob demanda como hoje — `estimar_offsets`/
+`herdar_gps` operam sobre o catálogo inteiro a cada chamada (é assim que
+uma foto nova vira doadora melhor para uma foto antiga, ver abaixo), então
+acoplar isso a CADA scan incremental multiplicaria o custo sem
+necessidade. Proposta: job "resolver geo" que o usuário dispara (ou que
+roda uma vez ao fim de um scan grande), não por arquivo.
+
+**O que persiste**: nada de tabela nova — o job grava exatamente as mesmas
+linhas de `Evidence` (origem `geocoding_offline`/`vizinhanca_temporal`,
+mesmos campos `pais`/`regiao`/`cidade`, mesma justificativa) que
+`_evidencias_geo` já produz hoje, só que mais cedo no pipeline. `gerar()`
+passa a LER essa evidência existente em vez de chamar `_evidencias_geo`
+do zero a cada geração — o método encolhe para cascata de categoria +
+fallback para o que ainda não foi resolvido (foto processada entre o job
+de geo e a geração de sugestão).
+
+**Invalidação**: como o job recalcula sobre o catálogo inteiro a cada
+execução (mesmo custo do `gerar()` de hoje, só que dissociado do clique
+do usuário), o problema de "foto nova é doadora melhor para foto antiga"
+se resolve sozinho a cada rodada do job — não precisa de lógica de
+invalidação incremental nova. O único gatilho de invalidação real é
+mudança de constante calibrada (D-025/D-032) ou de `versao_logica` —
+mesmo mecanismo que já existe para `Evidence`, reaproveitado sem
+desenhar nada novo.
+
 **Fase E — medir se um facet de tipo de mídia reduz a fração "neutra"
-(D-053, antes de qualquer implementação)**
-Query no catálogo real: entre as sessões hoje classificadas "neutra"
-(categoria/evento nulos), que fração tem maioria de arquivos com padrão
-de nome WhatsApp (`IMG-\d{8}-WA\d+`/`VID-\d{8}-WA\d+`) ou resolução de
-tela de dispositivo comum sem EXIF de câmera? Se a fração for material,
-desenhar um facet `tipo_midia` (evidência própria, mesmo modelo de
-`docs/CONFIANCA.md`) para Screenshot/WhatsApp/Live Photo/Panorama — nunca
-adicionar esses valores ao enum de `categoria` existente, são eixos
-diferentes. Verificação: script de medição novo (mesmo padrão de
-`scripts/medir_uso_do_advisor.py`), resultado registrado como decisão
-própria antes de qualquer código mudar.
+(D-053) — CONCLUÍDA, resultado negativo (D-054)**
+`scripts/medir_categorias_ausentes.py` mediu, entre as 104 sessões neutra
+reais, a fração com maioria de arquivos em padrão de nome WhatsApp ou de
+captura de tela. Resultado: **0%** — nem uma sessão, nem parcialmente.
+Checagem direta no catálogo (fora da amostra) confirma que o conteúdo
+não existe em volume neste acervo. **Não implementar** o facet
+`tipo_midia` com a justificativa de reduzir "neutra" — a medição não
+sustenta. Se o facet tiver valor por outro motivo (navegação/filtro por
+tipo de mídia), é decisão de produto separada, sem essa medição a favor.
 
 **Fase D — esclarecer a decisão 3 do gate**
 Antes de aprovar timing do "inventário por pasta" (`PLANO_IA_E_PRODUTO.md`
