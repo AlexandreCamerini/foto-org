@@ -1876,3 +1876,56 @@ uma fatia
 - Como reverter: nada a reverter — script generalizado é aditivo,
   comparação Opus×Haiku default preservada.
 - Status: aguardando (medição real fica com o dono, classe C)
+
+## D-060 — Decisão 1 do gate fechada: Sonnet 5 no advisor, medido nos 104 clusters reais
+
+- Fase: 5 (revisão do plano, decisão 1 do gate — fecha D-047/D-048/D-049/D-059)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: o dono rodou `scripts/medir_qualidade_advisor.py --modelo-a
+  opus-5 --modelo-b sonnet-5` (script generalizado em D-059) contra os
+  mesmos 104 clusters "neutra" de D-047/048/049, no terminal dele, com a
+  própria `ANTHROPIC_API_KEY`. Nenhuma credencial foi manuseada por esta
+  sessão.
+- Resultado, comparado com Opus×Haiku (D-049):
+
+  | | Opus × Haiku (D-049) | Opus × Sonnet (agora) |
+  |---|---:|---:|
+  | Concordância | 73/104 (70,2%) | 86/104 (82,7%) |
+  | Discordância | 31/104 (29,8%) | 18/104 (17,3%) |
+  | "modelo barato afirma, Opus recusa" | ≥19/104 (18,3%, piso — bug do relatório antigo impediu o número exato) | 7/104 (6,7%), número exato |
+  | Modelo barato se compromete | 41/104 (39,4%) | 28/104 (26,9%) |
+  | Opus se compromete (baseline) | 22/104 (21,2%) | 23/104 (22,1%) — quase igual; a diferença de 1 é efeito colateral provável da Fase B' (D-058) ter resolvido `location_id`/`lugares` para mais clusters do que na rodada de D-049 |
+
+  Sonnet cai no padrão de risco (afirmar onde Opus recusa) de 2,7 a 4,4×
+  menos que Haiku, e se compromete numa taxa muito mais perto de Opus
+  (23 vs 28) do que Haiku estava (22 vs 41).
+- Achado qualitativo que pesa contra, não só a favor: o primeiro exemplo
+  da amostra de risco do Sonnet é **o mesmo cluster** que D-048 já tinha
+  flagado como erro do Haiku — "Carnaval da Escola 2001" + "na Praia -
+  Fev 2001" (2 pastas, histórias diferentes no mesmo payload). Opus
+  recusa citando o conflito; Sonnet, como o Haiku antes dele, lê só uma
+  pasta e afirma "Eventos/Carnaval da Escola 2001". Dois outros exemplos
+  da amostra inferem "Viagens" só da cadência de pastas diárias
+  consecutivas, sem lugar nem palavra de viagem — mesmo tipo de invenção
+  da "Viagem de Ano Novo" do Haiku em D-048. Um exemplo ("Peru-Bolivia-
+  Chile", nome de pasta que lista 3 países) parece captura correta, não
+  erro — Opus só recusou por ruído de outras pastas no mesmo cluster.
+- Por que a taxa residual (7/104) é aceitável: todo output do advisor já
+  é evidência de confiança média-baixa (0,55, abaixo de qualquer regra
+  determinística) e nunca decide sozinho — invariante 2 do projeto
+  (operação física só como plano até aprovação humana) segura esse
+  resíduo antes de qualquer cópia real acontecer.
+- Decisão do dono: confirma Sonnet 5. Aplicado em
+  `fotoorganizer/classification/advisor.py::MODELO_PADRAO`
+  (`claude-opus-5` → `claude-sonnet-5`), único ponto que decide o modelo
+  do advisor — `classification/lexico.py` tem seu próprio
+  `MODELO_PADRAO`, não tocado (é um sistema diferente, classificação de
+  NOME de pasta/álbum, não medido nesta decisão).
+- Verificação: `scripts/verificar.sh` verde (697 testes, 17/17 benchmark,
+  108 testes de UI, build) — nenhum teste referencia o modelo diretamente
+  (todos usam `FakeAdvisor`/`NullAdvisor`), então a troca não tinha como
+  quebrar teste nenhum; a garantia real é a medição acima, não a suíte.
+- Como reverter: uma linha (`MODELO_PADRAO`) mais o comentário —
+  `git revert` do commit isolado.
+- Status: decidido pelo dono. Decisão 1 do gate fechada.

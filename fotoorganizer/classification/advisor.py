@@ -19,10 +19,14 @@ from typing import Protocol
 
 log = logging.getLogger(__name__)
 
-# Opus 5 é a geração corrente do tier. Ver docs/PLANO_IA_E_PRODUTO.md §3
-# para a recomendação de descer para Haiku 4.5 nesta tarefa: rotular
-# metadados em três categorias não precisa do modelo mais caro.
-MODELO_PADRAO = "claude-opus-5"
+# Decisão 1 do gate da fase 5 (docs/DECISOES.md D-047 a D-060). Descer
+# para Haiku 4.5 foi medido e descartado: em 104 clusters reais, Haiku
+# afirmava categoria onde Opus recusava por falta de evidência em pelo
+# menos 19/31 discordâncias (D-049) — violava a instrução "nunca invente"
+# do próprio `_SYSTEM` abaixo. Sonnet 5, medido depois (D-060) nos mesmos
+# 104 clusters, cai nesse padrão só 7 vezes (contra o piso de 19 do
+# Haiku) — motivo da escolha.
+MODELO_PADRAO = "claude-sonnet-5"
 
 
 @dataclass(frozen=True, slots=True)
