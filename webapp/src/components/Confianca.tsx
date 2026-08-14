@@ -21,10 +21,41 @@ const PREENCHIDOS: Record<string, number> = { alta: 3, media: 2, baixa: 1 };
 export function Confianca({
   nivel,
   rotulo = true,
+  naoClassificado = false,
 }: {
   nivel: string;
   rotulo?: boolean;
+  /** A sugestão não tem nenhuma evidência de categoria/viagem/evento — o
+   * `nivel` recebido reflete só a confiança de outro campo (tipicamente a
+   * data). Mostrar "Alta"/"Média"/"Baixa" aqui mentiria sobre existir uma
+   * classificação: não é baixa confiança, é NENHUMA classificação (D-071).
+   * Troca os três segmentos por um traço — a mesma gramática visual
+   * (quantidade, não cor) dizendo "zero categoria", não "pouca categoria". */
+  naoClassificado?: boolean;
 }) {
+  if (naoClassificado) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center gap-1.5"
+        title={`Sem categoria — a data é confiável (${ROTULO[nivel] ?? nivel}), mas nada indica para onde esta foto deveria ir.`}
+      >
+        <span className="flex gap-[2px]" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="block h-[11px] w-[3px] rounded-[1px] bg-realce"
+            />
+          ))}
+        </span>
+        {rotulo && (
+          <span className="text-[11px] text-texto-2">Sem categoria</span>
+        )}
+        <span className="sr-only">
+          Sem categoria — data confiável, mas nenhuma categoria identificada
+        </span>
+      </span>
+    );
+  }
   const cheios = PREENCHIDOS[nivel] ?? 0;
   const baixa = nivel === "baixa";
   return (

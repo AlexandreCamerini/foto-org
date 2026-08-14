@@ -18,6 +18,35 @@ function grupo(over: Record<string, unknown>) {
 }
 
 describe("Trips", () => {
+  it("não mostra 'nenhuma viagem' enquanto as consultas ainda estão pendentes (D-072)", async () => {
+    // As duas consultas eram lentas o bastante no acervo real (D-069 achado
+    // 3 — 50-120s+ medidos, N+1 sem índice) para a mensagem de vazio
+    // aparecer antes da resposta chegar, mesmo com 190 grupos existentes.
+    // Checagem síncrona (sem await): é exatamente a janela entre o mount e
+    // a promise do fetch resolver que o bug vivia.
+    servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    expect(
+      screen.queryByText(/Nenhuma viagem ou evento ainda/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("carregando…")).toBeInTheDocument();
+
+    // E depois que a resposta chega, o card aparece — não fica preso em
+    // "carregando" para sempre.
+    expect(await screen.findByText("Dubai")).toBeInTheDocument();
+    expect(screen.queryByText("carregando…")).not.toBeInTheDocument();
+  });
+
+  it("catálogo genuinamente vazio ainda mostra a mensagem, depois de carregar", async () => {
+    servirApi({ "/api/viagens": [], "/api/eventos": [] });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    expect(
+      await screen.findByText(/Nenhuma viagem ou evento ainda/),
+    ).toBeInTheDocument();
+  });
+
   it("a capa é a miniatura cacheada, não a prévia grande do loupe", async () => {
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
     montar(<Trips onAbrir={vi.fn()} />);

@@ -548,6 +548,33 @@ def test_filtro_por_viagem(client, migrated_engine):
     assert filtrado["total"] == 1
 
 
+def test_agrupamentos_conta_por_grupo_com_uma_consulta_so(client, migrated_engine):
+    """A contagem de `_agrupamentos` virou uma consulta agregada (GROUP BY)
+    em vez de uma por grupo (D-072) — o teste garante que a contagem por
+    grupo continua certa, não só que o endpoint não quebra."""
+    from fotoorganizer.models import MediaFile, Trip
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        cheia = Trip(nome="Cheia")
+        vazia = Trip(nome="Vazia")
+        session.add_all([cheia, vazia])
+        session.flush()
+        midias = session.query(MediaFile).order_by(MediaFile.id).all()
+        assert len(midias) >= 3, "fixture do client tem 5 fotos"
+        midias[0].trip_id = cheia.id
+        midias[1].trip_id = cheia.id
+        midias[2].trip_id = cheia.id
+        cheia_id, vazia_id = cheia.id, vazia.id
+        session.commit()
+
+    grupos = {g["id"]: g for g in client.get("/api/viagens").json()}
+    assert grupos[cheia_id]["fotos"] == 3
+    # Trip sem nenhuma foto ainda aparece na lista (0 fotos), diferente do
+    # recorte por fonte — aqui não há `source_id`, então nada é filtrado.
+    assert grupos[vazia_id]["fotos"] == 0
+
+
 def test_duplicatas_detectar_e_decidir(migrated_engine, tmp_path):
     import shutil
     import time

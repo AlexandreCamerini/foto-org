@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Miniatura } from "./Miniatura";
 import { api, type Media, type Sugestao } from "../api";
 import { formatarData } from "../data";
+import { naoClassificado } from "../sugestoes";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
 import Botao from "../ui/Botao";
@@ -217,7 +218,7 @@ export default function Review({
                       </span>
                     )}
                   </span>
-                  <Confianca nivel={grupo.nivel} />
+                  <Confianca nivel={grupo.nivel} naoClassificado={naoClassificado(destino)} />
                   <div className="flex-1" />
                   {status === "pendente" && (
                     <Botao tamanho="sm"
@@ -322,7 +323,7 @@ export default function Review({
                             aria-expanded={porque === s.media_id}
                             title={`Por que este destino para ${s.nome}?`}
             className="px-1">
-                            <Confianca nivel={s.nivel} />
+                            <Confianca nivel={s.nivel} naoClassificado={naoClassificado(s.destino)} />
                           </Botao>
                           {status === "pendente" ? (
                             <div className="flex shrink-0 gap-2">

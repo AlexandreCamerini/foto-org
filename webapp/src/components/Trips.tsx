@@ -20,19 +20,31 @@ interface Props {
 /** Galeria de viagens e eventos como cards com capa — o agrupamento
  * explicável do motor apresentado do jeito que se mostra pra alguém. */
 export default function Trips({ onAbrir, fonte }: Props) {
-  const { data: viagens } = useQuery({
+  const { data: viagens, isPending: viagensPendente } = useQuery({
     queryKey: ["viagens", fonte],
     queryFn: () => api.viagens(fonte),
   });
-  const { data: eventos } = useQuery({
+  const { data: eventos, isPending: eventosPendente } = useQuery({
     queryKey: ["eventos", fonte],
     queryFn: () => api.eventos(fonte),
   });
 
-  const vazio = (viagens ?? []).length === 0 && (eventos ?? []).length === 0;
+  // As duas consultas eram lentas o bastante (D-069 achado 3 — N+1 sem
+  // índice, 50-120s+ medidos no acervo real) para a tela terminar de
+  // carregar e mostrar "nenhuma viagem" antes da resposta chegar, mesmo
+  // com 190 grupos existentes. "Ainda carregando" e "realmente vazio"
+  // não podem ser o mesmo estado.
+  const carregando = viagensPendente || eventosPendente;
+  const vazio =
+    !carregando && (viagens ?? []).length === 0 && (eventos ?? []).length === 0;
 
   return (
     <div className="h-full overflow-y-auto p-4">
+      {carregando && (
+        <div className="flex h-full items-center justify-center text-texto-3">
+          carregando…
+        </div>
+      )}
       {vazio && (
         <div className="flex h-full items-center justify-center text-texto-2">
           Nenhuma viagem ou evento ainda — gere as sugestões na aba Revisão.
