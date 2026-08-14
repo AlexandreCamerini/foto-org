@@ -1956,3 +1956,37 @@ uma fatia
   para quando o dono priorizar essa fatia.
 - Como reverter: registro de decisão, não código — não se aplica.
 - Status: decidido pelo dono. Gate da fase 5 fechado nas três decisões.
+
+## D-062 — Desenho do inventário por pasta pronto para implementar
+
+- Fase: 5 (segue D-061) — desenho, não implementação
+- Classe: A — leitura de código existente e proposta técnica, sem
+  escrever em `fotoorganizer/**`
+- Data: 2026-08-13
+- Contexto: D-061 fechou a decisão 3 (inventário antes do lançamento).
+  Faltava o desenho técnico — schema, ponto de entrada no pipeline,
+  comportamento de falha.
+- Desenho completo em `docs/desenho-inventario-por-pasta.md`. Resumo:
+  - Hook em `operations/executor.py::_executar_item`, logo depois da
+    cópia verificada por hash — nunca antes.
+  - Um par `inventario.json`/`INVENTARIO.md` por PASTA de destino
+    (`Path(item.destino).parent`), aditivo entre execuções de planos
+    diferentes ao longo do tempo, não um par por foto ou por plano.
+  - `Suggestion.evidencias` (relationship já existente) dá a lista de
+    `Evidence` sem consulta nova — mesmo dado que o Inspector já mostra.
+  - `versao_logica` por ENTRADA, não só no cabeçalho — fotos na mesma
+    pasta em execuções diferentes podem ter evidência de versões
+    diferentes da lógica.
+  - `INVENTARIO.md` sempre regenerado por inteiro a partir do JSON
+    (nunca editado à parte) — evita os dois divergirem.
+  - Falha ao escrever o inventário NÃO desfaz a cópia já verificada —
+    vira `AuditLog` + contador visível (`stats["inventario_falhou"]`),
+    não bloqueia a operação.
+  - Nenhuma migração Alembic (arquivo em disco, não em `catalog.db`);
+    nenhuma mudança em `planner.py`/`classification/**`.
+- Não decidido: formato exato do Markdown (tabela vs. lista) — fica para
+  quando a implementação for aprovada, não bloqueia o desenho de dados.
+- Como reverter: nada a reverter — documento novo, nenhum código
+  alterado.
+- Status: aguardando aprovação do dono para virar fatia de implementação
+  (escopo próprio, fora do que D-056 abriu)
