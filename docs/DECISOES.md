@@ -1841,3 +1841,213 @@ uma fatia
   fica com todas as 5 fases concluídas (A, B', D, E) — só a decisão 3 do
   gate (timing do inventário por pasta) segue aberta, sem relação com
   este plano.
+
+## D-059 — Decisão 1 do gate: dono propõe Sonnet 5, ainda não medido — script generalizado para comparar qualquer par de modelos
+
+- Fase: 5 (revisão do plano, decisão 1 do gate — segue D-047/D-048/D-049)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: revisando as três decisões do gate, o dono propôs usar
+  Sonnet 5 no advisor em vez de manter Opus 5 (recomendação de D-049) ou
+  descer para Haiku 4.5 (opção original do plano, descartada por D-049).
+  D-047/048/049 mediram especificamente Opus 5 × Haiku 4.5 nos 104
+  clusters reais — Sonnet nunca entrou nessa comparação.
+- Por quê não registrar direto: toda decisão desta sessão (D-024 a D-058)
+  foi fechada com medição, não com escolha a priori — abrir exceção aqui
+  seria inconsistente, ainda mais porque o achado de D-049 (Haiku inventa
+  onde Opus recusa, violando "nunca invente") só apareceu medindo, nunca
+  teria aparecido em teoria.
+- Preparado: `scripts/medir_qualidade_advisor.py` generalizado — antes
+  hardcoded para comparar só Opus×Haiku (`Comparacao.opus`/`.haiku`,
+  texto do relatório fixo); agora aceita `--modelo-a`/`--modelo-b`
+  (default preserva o comportamento anterior: opus-5 vs haiku-4.5,
+  nenhuma mudança na comparação histórica de D-048/049). Adicionado
+  `"sonnet-5": "claude-sonnet-5"` ao dicionário `MODELOS`. Lógica de
+  `.padrao` testada localmente (5 casos, sem chamar API) — idêntica ao
+  original, só generalizada. Fica em `scripts/`, fora da fronteira da
+  fase 5 (não precisou de D-056).
+- Como rodar (classe C — o dono roda, com a própria `ANTHROPIC_API_KEY`,
+  esta sessão não manuseia a credencial, mesmo padrão de D-048/049):
+  `ANTHROPIC_API_KEY=... .venv/bin/python scripts/medir_qualidade_advisor.py
+  --periodos clusters_neutra_104.json --modelo-a opus-5 --modelo-b sonnet-5`
+- Não decidido ainda: se Sonnet 5 se comporta como Opus (recusa quando
+  falta evidência) ou como Haiku (inventa). Decisão 1 do gate segue
+  aberta até essa medição.
+- Como reverter: nada a reverter — script generalizado é aditivo,
+  comparação Opus×Haiku default preservada.
+- Status: aguardando (medição real fica com o dono, classe C)
+
+## D-060 — Decisão 1 do gate fechada: Sonnet 5 no advisor, medido nos 104 clusters reais
+
+- Fase: 5 (revisão do plano, decisão 1 do gate — fecha D-047/D-048/D-049/D-059)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: o dono rodou `scripts/medir_qualidade_advisor.py --modelo-a
+  opus-5 --modelo-b sonnet-5` (script generalizado em D-059) contra os
+  mesmos 104 clusters "neutra" de D-047/048/049, no terminal dele, com a
+  própria `ANTHROPIC_API_KEY`. Nenhuma credencial foi manuseada por esta
+  sessão.
+- Resultado, comparado com Opus×Haiku (D-049):
+
+  | | Opus × Haiku (D-049) | Opus × Sonnet (agora) |
+  |---|---:|---:|
+  | Concordância | 73/104 (70,2%) | 86/104 (82,7%) |
+  | Discordância | 31/104 (29,8%) | 18/104 (17,3%) |
+  | "modelo barato afirma, Opus recusa" | ≥19/104 (18,3%, piso — bug do relatório antigo impediu o número exato) | 7/104 (6,7%), número exato |
+  | Modelo barato se compromete | 41/104 (39,4%) | 28/104 (26,9%) |
+  | Opus se compromete (baseline) | 22/104 (21,2%) | 23/104 (22,1%) — quase igual; a diferença de 1 é efeito colateral provável da Fase B' (D-058) ter resolvido `location_id`/`lugares` para mais clusters do que na rodada de D-049 |
+
+  Sonnet cai no padrão de risco (afirmar onde Opus recusa) de 2,7 a 4,4×
+  menos que Haiku, e se compromete numa taxa muito mais perto de Opus
+  (23 vs 28) do que Haiku estava (22 vs 41).
+- Achado qualitativo que pesa contra, não só a favor: o primeiro exemplo
+  da amostra de risco do Sonnet é **o mesmo cluster** que D-048 já tinha
+  flagado como erro do Haiku — "Carnaval da Escola 2001" + "na Praia -
+  Fev 2001" (2 pastas, histórias diferentes no mesmo payload). Opus
+  recusa citando o conflito; Sonnet, como o Haiku antes dele, lê só uma
+  pasta e afirma "Eventos/Carnaval da Escola 2001". Dois outros exemplos
+  da amostra inferem "Viagens" só da cadência de pastas diárias
+  consecutivas, sem lugar nem palavra de viagem — mesmo tipo de invenção
+  da "Viagem de Ano Novo" do Haiku em D-048. Um exemplo ("Peru-Bolivia-
+  Chile", nome de pasta que lista 3 países) parece captura correta, não
+  erro — Opus só recusou por ruído de outras pastas no mesmo cluster.
+- Por que a taxa residual (7/104) é aceitável: todo output do advisor já
+  é evidência de confiança média-baixa (0,55, abaixo de qualquer regra
+  determinística) e nunca decide sozinho — invariante 2 do projeto
+  (operação física só como plano até aprovação humana) segura esse
+  resíduo antes de qualquer cópia real acontecer.
+- Decisão do dono: confirma Sonnet 5. Aplicado em
+  `fotoorganizer/classification/advisor.py::MODELO_PADRAO`
+  (`claude-opus-5` → `claude-sonnet-5`), único ponto que decide o modelo
+  do advisor — `classification/lexico.py` tem seu próprio
+  `MODELO_PADRAO`, não tocado (é um sistema diferente, classificação de
+  NOME de pasta/álbum, não medido nesta decisão).
+- Verificação: `scripts/verificar.sh` verde (697 testes, 17/17 benchmark,
+  108 testes de UI, build) — nenhum teste referencia o modelo diretamente
+  (todos usam `FakeAdvisor`/`NullAdvisor`), então a troca não tinha como
+  quebrar teste nenhum; a garantia real é a medição acima, não a suíte.
+- Como reverter: uma linha (`MODELO_PADRAO`) mais o comentário —
+  `git revert` do commit isolado.
+- Status: decidido pelo dono. Decisão 1 do gate fechada.
+
+## D-061 — Decisão 3 do gate fechada: inventário por pasta entra antes do lançamento
+
+- Fase: 5 (revisão do plano, decisão 3 do gate — segue D-055, fecha o gate)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: `docs/PLANO_IA_E_PRODUTO.md` §8 já recomendava "antes, é
+  barato agora e caro depois" para o inventário por pasta
+  (`inventario.json`+`INVENTARIO.md` por pasta de destino, evidência por
+  foto). A trava com o Item B (protecao-julgamento) não existia de
+  verdade (D-055) — a única pendência real era o dono confirmar o
+  timing.
+- Recomendação dada: manter "antes", especificamente antes da primeira
+  aprovação de execução física real — nenhuma cópia ainda rodou no
+  acervo do dono (D-011), então o custo de retrofit ainda não começou a
+  se acumular, e o histórico do próprio projeto (D-026, D-035, D-036,
+  D-037) mostra retrofit como fonte real de dor, não hipótese.
+- Decisão do dono: confirma "antes do lançamento".
+- Consequência: as três decisões do gate da fase 5 estão fechadas —
+  decisão 1 (Sonnet 5, D-060), decisão 2 (visão/rostos só local, sem
+  pendência), decisão 3 (inventário antes do lançamento, aqui). O que
+  falta não é mais decisão, é plano de implementação: schema exato de
+  `inventario.json`/`INVENTARIO.md`, e onde no pipeline de
+  `operations/executor.py` ele entra — não desenhado nesta sessão, fica
+  para quando o dono priorizar essa fatia.
+- Como reverter: registro de decisão, não código — não se aplica.
+- Status: decidido pelo dono. Gate da fase 5 fechado nas três decisões.
+
+## D-062 — Desenho do inventário por pasta pronto para implementar
+
+- Fase: 5 (segue D-061) — desenho, não implementação
+- Classe: A — leitura de código existente e proposta técnica, sem
+  escrever em `fotoorganizer/**`
+- Data: 2026-08-13
+- Contexto: D-061 fechou a decisão 3 (inventário antes do lançamento).
+  Faltava o desenho técnico — schema, ponto de entrada no pipeline,
+  comportamento de falha.
+- Desenho completo em `docs/desenho-inventario-por-pasta.md`. Resumo:
+  - Hook em `operations/executor.py::_executar_item`, logo depois da
+    cópia verificada por hash — nunca antes.
+  - Um par `inventario.json`/`INVENTARIO.md` por PASTA de destino
+    (`Path(item.destino).parent`), aditivo entre execuções de planos
+    diferentes ao longo do tempo, não um par por foto ou por plano.
+  - `Suggestion.evidencias` (relationship já existente) dá a lista de
+    `Evidence` sem consulta nova — mesmo dado que o Inspector já mostra.
+  - `versao_logica` por ENTRADA, não só no cabeçalho — fotos na mesma
+    pasta em execuções diferentes podem ter evidência de versões
+    diferentes da lógica.
+  - `INVENTARIO.md` sempre regenerado por inteiro a partir do JSON
+    (nunca editado à parte) — evita os dois divergirem.
+  - Falha ao escrever o inventário NÃO desfaz a cópia já verificada —
+    vira `AuditLog` + contador visível (`stats["inventario_falhou"]`),
+    não bloqueia a operação.
+  - Nenhuma migração Alembic (arquivo em disco, não em `catalog.db`);
+    nenhuma mudança em `planner.py`/`classification/**`.
+- Não decidido: formato exato do Markdown (tabela vs. lista) — fica para
+  quando a implementação for aprovada, não bloqueia o desenho de dados.
+- Como reverter: nada a reverter — documento novo, nenhum código
+  alterado.
+- Status: aguardando aprovação do dono para virar fatia de implementação
+  (escopo próprio, fora do que D-056 abriu)
+
+## D-063 — Dono aprova a implementação do inventário por pasta
+
+- Fase: 5 (segue D-062)
+- Classe: B — decisão do dono, registrada
+- Data: 2026-08-13
+- Contexto: D-062 entregou o desenho técnico completo. Faltava aprovação
+  explícita para abrir `fotoorganizer/operations/**` — escopo que D-056
+  não cobria (aquele foi só para as Fases A/B' do diagnóstico de "Gerar
+  sugestões").
+- Decisão do dono: aprova implementar, exatamente como desenhado em
+  D-062/`docs/desenho-inventario-por-pasta.md`.
+- Escopo tratado como aprovado: `fotoorganizer/operations/inventario.py`
+  (novo) + hook em `executor.py::_executar_item` + testes. Não inclui
+  nenhuma mudança em `planner.py`, `classification/**`, nem migração
+  Alembic — o próprio desenho já exclui essas três coisas.
+- Como reverter: commit isolado da fatia, revertível sozinho.
+- Status: decidido pelo dono
+
+## D-064 — Inventário por pasta implementado
+
+- Fase: 5 (implementação, autorizada por D-063) — fecha a decisão 3 do
+  gate (D-061)
+- Classe: A — execução do que já estava desenhado e aprovado, com
+  correções encontradas na revisão antes do commit
+- Data: 2026-08-13
+- Contexto: D-063 abriu a fronteira para `fotoorganizer/operations/**`.
+  Implementado como fatia vertical (skill `fatia-vertical`):
+  `fotoorganizer/operations/inventario.py` (novo) + hook em
+  `executor.py::_executar_item`, logo depois da cópia verificada por
+  hash.
+- Achados da revisão com olhos frescos, corrigidos antes do commit:
+  1. O `except` no executor capturava só `OSError` — um
+     `inventario.json` corrompido por uma escrita anterior interrompida
+     levanta `json.JSONDecodeError` (não é `OSError`), que escaparia e
+     abortaria o PLANO INTEIRO no meio, deixando cópias já verificadas
+     por hash com o commit do item pendente (a sessão fecha sem
+     commitar, mas o arquivo físico já foi copiado — na retomada, o
+     executor tentaria recopiar e bloquearia por "destino já existe").
+     Corrigido: `except Exception` no executor (é auxiliar, nunca pode
+     travar a cópia real) e `_carregar` recupera de JSON corrompido
+     preservando o arquivo ruim ao lado (`.corrompido-<timestamp>`) em
+     vez de propagar.
+  2. Escrita não era atômica (`write_text` trunca antes de escrever) —
+     era a causa mais provável do próprio cenário do achado 1. Corrigido
+     com write-temp + `os.replace` (atômico no mesmo filesystem).
+  3. Campo `tamanho` vinha de `media.tamanho` (do momento do scan), não
+     do arquivo realmente copiado e verificado nesta execução —
+     corrigido para `destino.stat().st_size`.
+- Verificação: `scripts/verificar.sh` verde (701 testes, 17/17
+  benchmark, 108 testes de UI, build); prova real — plano completo
+  (dry-run + execução, cópia de arquivo de verdade) contra catálogo
+  sintético isolado, `INVENTARIO.md` gerado e legível, com evidência e
+  justificativa por foto.
+- O que ficou fora, conforme o desenho: formato exato do Markdown
+  (tabela vs. lista, usei lista com seção "Por quê?" por foto) não foi
+  revisado com o dono — é decisão de apresentação, não de dado, ajustável
+  sem migração.
+- Como reverter: `git revert 6efde4e` — commit único e isolado.
+- Status: decidido (implementado e commitado, `6efde4e`). Decisão 3 do
+  gate (D-061) está fechada tanto na decisão quanto na implementação.

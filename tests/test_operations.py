@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import pytest
@@ -11,6 +12,8 @@ from fotoorganizer.models import (
     DuplicateLevel,
     DuplicateMember,
     DuplicateRole,
+    Evidence,
+    Location,
     MediaFile,
     OperationItem,
     OperationStatus,
@@ -23,6 +26,7 @@ from fotoorganizer.operations import (
     OperationExecutor,
     OperationPlanner,
 )
+from fotoorganizer.operations import inventario
 from fotoorganizer.operations.executor import DryRunObrigatorio
 from fotoorganizer.repositories.operations import OperationRepository
 
@@ -161,7 +165,7 @@ def test_copia_verificada_preserva_originais(ambiente):
 
     stats = executor.executar(plan_id)
     assert stats == {"copiados": 3, "erros": 0, "pulados": 0,
-                     "cancelado": False}
+                     "cancelado": False, "inventario_falhou": 0}
 
     # Originais intactos.
     assert {p: p.read_bytes() for p in origem.rglob("*.jpg")} == originais
@@ -173,6 +177,12 @@ def test_copia_verificada_preserva_originais(ambiente):
             assert item.status == OperationStatus.CONCLUIDA
             assert item.hash_pre == item.hash_pos
             assert item.hash_pre.startswith("sha256:")
+    # Inventário escrito ao lado das cópias, uma pasta por destino: as
+    # sugestões usam "Viagens/2024 - Franca" e "Familia/2023" (fixture
+    # `ambiente`), então duas pastas de destino, cada uma com seu par.
+    for pasta in ("Viagens/2024 - Franca", "Familia/2023"):
+        assert (destino / pasta / "inventario.json").is_file()
+        assert (destino / pasta / "INVENTARIO.md").is_file()
 
 
 def test_sobrescrita_impossivel(ambiente):
@@ -311,3 +321,180 @@ def test_resumo_do_plano_carrega_o_veredito_do_dry_run(ambiente):
     assert row.prontos == 0 and row.problemas == 3
     assert row.executavel is False
     assert row.com_erro == 0  # o campo que enganava: nada executou ainda
+
+
+# -- inventário por pasta (D-062/D-063) --------------------------------------
+
+def test_inventario_registra_evidencia_e_hash_verificado(ambiente):
+    """O JSON carrega o mesmo dado que o Inspector mostra — origem,
+    confiança e justificativa de cada evidência — e o hash já verificado
+    pelo executor, sem recalcular."""
+    factory, planner, executor, origem, destino = ambiente
+    with factory() as session:
+        media = session.scalar(
+            select(MediaFile).where(MediaFile.caminho == str(origem / "a/IMG_1.jpg"))
+        )
+        local = Location(pais="França", regiao="Provence", cidade="Avignon",
+                        fonte="fake", cache_key="fake")
+        session.add(local)
+        session.flush()
+        media.location_id = local.id
+        media.make, media.model = "Canon", "Canon EOS R5"
+        sugestao = session.scalar(
+            select(Suggestion).where(Suggestion.media_id == media.id)
+        )
+        evidencia = Evidence(
+            media_id=media.id, campo="pais", origem="geocoding_offline",
+            valor="França", nivel=ConfidenceLevel.ALTA, score=0.85,
+            justificativa="geocodificação offline das coordenadas GPS",
+            versao_logica="4.1",
+        )
+        session.add(evidencia)
+        sugestao.evidencias = [evidencia]
+        session.commit()
+
+    plan_id = planner.criar_plano(destino)
+    executor.dry_run(plan_id)
+    executor.executar(plan_id)
+
+    pasta_destino = destino / "Viagens/2024 - Franca"
+    dados = json.loads((pasta_destino / "inventario.json").read_text())
+    entrada = next(f for f in dados["fotos"] if f["arquivo"] == "IMG_1.jpg")
+    assert entrada["camera"] == "Canon EOS R5"
+    assert entrada["lugar"] == {"pais": "França", "regiao": "Provence",
+                               "cidade": "Avignon"}
+    assert entrada["evidencias"] == [{
+        "campo": "pais", "origem": "geocoding_offline", "valor": "França",
+        "nivel": "alta", "score": 0.85,
+        "justificativa": "geocodificação offline das coordenadas GPS",
+    }]
+    with factory() as session:
+        item = session.scalar(
+            select(OperationItem).where(OperationItem.media_id == media.id)
+        )
+        assert entrada["hash_sha256"] == item.hash_pos
+
+    md = (pasta_destino / "INVENTARIO.md").read_text()
+    assert "IMG_1.jpg" in md
+    assert "geocodificação offline das coordenadas GPS" in md
+
+
+def test_inventario_e_aditivo_entre_execucoes_e_idempotente(ambiente):
+    """Duas execuções de planos diferentes mandando para a MESMA pasta
+    acrescentam ao mesmo par de arquivos; chamar registrar() de novo para
+    a mesma foto não duplica a entrada."""
+    factory, planner, executor, origem, destino = ambiente
+    plan_id = planner.criar_plano(destino)
+    executor.dry_run(plan_id)
+    executor.executar(plan_id)
+
+    pasta_destino = destino / "Viagens/2024 - Franca"
+    dados = json.loads((pasta_destino / "inventario.json").read_text())
+    # "a/IMG_1.jpg" e "b/IMG_1.jpg" (colisão resolvida por sufixo) — as
+    # duas sugestões APROVADA desta pasta na fixture `ambiente`.
+    assert len(dados["fotos"]) == 2
+
+    # Reprocessar o mesmo item (idempotência) não duplica.
+    with factory() as session:
+        item = session.scalars(select(OperationItem)).first()
+        inventario.registrar(session, item)
+    dados = json.loads((pasta_destino / "inventario.json").read_text())
+    assert len(dados["fotos"]) == 2
+
+    # Uma foto NOVA chegando depois, mandada pra mesma pasta por um plano
+    # futuro, acrescenta — não recria o arquivo.
+    with factory() as session:
+        fonte = session.scalar(select(Source))
+        nova = MediaFile(
+            source_id=fonte.id, caminho=str(origem / "c/IMG_9.jpg"),
+            pasta=str(origem / "c"), nome="IMG_9.jpg", extensao="jpg",
+            tamanho=5, data_capturada=datetime(2024, 1, 1),
+        )
+        session.add(nova)
+        session.flush()
+        session.add(Suggestion(
+            media_id=nova.id, destino_sugerido="Viagens/2024 - Franca",
+            template="t", nivel=ConfidenceLevel.ALTA,
+            status=SuggestionStatus.APROVADA, versao_logica="test",
+        ))
+        session.commit()
+    (origem / "c").mkdir(exist_ok=True)
+    (origem / "c/IMG_9.jpg").write_bytes(b"foto nova")
+
+    plan_id_2 = planner.criar_plano(destino)
+    executor.dry_run(plan_id_2)
+    executor.executar(plan_id_2)
+
+    dados = json.loads((pasta_destino / "inventario.json").read_text())
+    assert len(dados["fotos"]) == 3
+    assert any(f["arquivo"] == "IMG_9.jpg" for f in dados["fotos"])
+
+
+def test_falha_no_inventario_nao_desfaz_copia_verificada(ambiente):
+    """A cópia real já foi verificada por hash quando o inventário é
+    escrito — se essa escrita falhar, o item continua CONCLUIDA (a foto
+    está correta no destino) e a falha aparece no relatório, sem travar
+    o resto da execução."""
+    factory, planner, executor, origem, destino = ambiente
+    pasta_destino = destino / "Viagens/2024 - Franca"
+    pasta_destino.mkdir(parents=True)
+    # Um DIRETÓRIO no lugar onde o inventário escreveria o JSON — a
+    # escrita falha com IsADirectoryError (subclasse de OSError), sem
+    # depender de chmod (mais portátil entre ambientes).
+    (pasta_destino / "inventario.json").mkdir()
+
+    plan_id = planner.criar_plano(destino)
+    executor.dry_run(plan_id)
+    stats = executor.executar(plan_id)
+
+    assert stats["inventario_falhou"] == 2  # as 2 fotos desta pasta
+    assert stats["copiados"] == 3  # nenhuma cópia foi perdida
+    assert stats["erros"] == 0
+
+    with factory() as session:
+        itens = list(session.scalars(
+            select(OperationItem).where(
+                OperationItem.destino.like(f"{pasta_destino}%")
+            )
+        ))
+        assert len(itens) == 2
+        for item in itens:
+            # A cópia continua válida e concluída — só o inventário falhou.
+            assert item.status == OperationStatus.CONCLUIDA
+            assert item.hash_pre == item.hash_pos
+        registros = list(session.scalars(
+            select(AuditLog).where(AuditLog.acao == "inventario")
+        ))
+        assert len(registros) == 2
+        assert all("erro" in r.resultado for r in registros)
+
+    # O arquivo copiado existe e está íntegro, apesar da falha ao lado.
+    copiadas = list(pasta_destino.glob("*.jpg"))
+    assert len(copiadas) == 2
+
+
+def test_inventario_corrompido_recupera_em_vez_de_travar_o_plano(ambiente):
+    """Achado da revisão com olhos frescos: um inventario.json de escrita
+    anterior interrompida (JSON inválido) não pode subir como exceção não
+    tratada e abortar o plano inteiro — recomeça um inventário novo na
+    pasta, preserva o corrompido para inspeção, e a execução segue."""
+    factory, planner, executor, origem, destino = ambiente
+    pasta_destino = destino / "Viagens/2024 - Franca"
+    pasta_destino.mkdir(parents=True)
+    (pasta_destino / "inventario.json").write_text("{ isso não é json válido")
+
+    plan_id = planner.criar_plano(destino)
+    executor.dry_run(plan_id)
+    stats = executor.executar(plan_id)
+
+    # Recuperou e escreveu com sucesso — não conta como falha.
+    assert stats["copiados"] == 3
+    assert stats["erros"] == 0
+    assert stats["inventario_falhou"] == 0
+
+    corrompidos = list(pasta_destino.glob("inventario.json.corrompido-*"))
+    assert len(corrompidos) == 1
+    assert corrompidos[0].read_text() == "{ isso não é json válido"
+
+    dados = json.loads((pasta_destino / "inventario.json").read_text())
+    assert len(dados["fotos"]) == 2  # as 2 fotos aprovadas desta pasta

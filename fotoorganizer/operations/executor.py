@@ -31,6 +31,7 @@ from fotoorganizer.models import (
     OperationPlan,
     OperationStatus,
 )
+from fotoorganizer.operations import inventario
 from fotoorganizer.security.hashing import sha256_full
 
 log = logging.getLogger(__name__)
@@ -167,7 +168,8 @@ class OperationExecutor:
             pendentes = [i for i in itens
                          if i.status != OperationStatus.CONCLUIDA]
             stats = {"copiados": 0, "erros": 0, "pulados":
-                     len(itens) - len(pendentes), "cancelado": False}
+                     len(itens) - len(pendentes), "cancelado": False,
+                     "inventario_falhou": 0}
 
             for n, item in enumerate(pendentes, start=1):
                 if control.cancelado:
@@ -215,6 +217,28 @@ class OperationExecutor:
             item.erro = None
             stats["copiados"] += 1
             self._audit_item(session, item, "copia_verificada", "ok")
+
+            # Registro do inventário roda só DEPOIS da cópia já verificada
+            # por hash — falha aqui nunca desfaz uma cópia válida (D-062):
+            # o arquivo real já está correto no destino, só o manifesto
+            # auxiliar não. Visível no relatório, não bloqueante.
+            #
+            # Except genérico de propósito, não só OSError: um
+            # inventario.json de execução anterior corrompido levanta
+            # json.JSONDecodeError (ValueError), não OSError — e
+            # `inventario.py` já trata isso, mas qualquer outra falha
+            # inesperada aqui (ex.: erro de banco ao ler Location) não pode
+            # subir e abortar o PLANO INTEIRO no meio, deixando cópias já
+            # verificadas com o commit do item pendente (achado da revisão
+            # com olhos frescos antes deste commit). O manifesto é
+            # auxiliar; a cópia real nunca pode depender dele.
+            try:
+                inventario.registrar(session, item)
+            except Exception as exc:  # noqa: BLE001 — auxiliar, nunca bloqueia
+                stats["inventario_falhou"] += 1
+                self._audit_item(
+                    session, item, "inventario", f"erro: {exc}"
+                )
         except FileExistsError:
             item.status = OperationStatus.ERRO
             item.erro = "destino já existe — sobrescrita bloqueada"

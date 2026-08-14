@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Compara Haiku 4.5 × Opus 5 no advisor de classificação, sobre clusters
-REAIS do acervo — a comparação pedida na revisão de
-`docs/PLANO_IA_E_PRODUTO.md` (decisão 1 do gate), depois de D-047 mostrar
-que sessões "neutra" são 39% do total, não resíduo, e D-048 mostrar um
-primeiro sinal (n=5) de que Haiku inventa onde Opus recusa.
+"""Compara dois modelos no advisor de classificação, sobre clusters REAIS
+do acervo — a comparação pedida na revisão de `docs/PLANO_IA_E_PRODUTO.md`
+(decisão 1 do gate), depois de D-047 mostrar que sessões "neutra" são 39%
+do total, não resíduo, e D-048/D-049 mostrar que Haiku 4.5 inventa
+categoria onde Opus 5 recusa, em pelo menos 19/31 discordâncias (n=104).
+
+Generalizado para qualquer par de `MODELOS` (era hardcoded a Opus×Haiku;
+a comparação original continua sendo o default, sem mudança de
+comportamento se você não passar `--modelo-a`/`--modelo-b`). Motivo:
+Sonnet 5 nunca entrou na medição — só Opus 5 e Haiku 4.5 foram testados.
 
 ATENÇÃO — este script ENVIA metadado real do acervo (nomes de pasta, até 8
 nomes de arquivo por cluster, datas, lugares já geocodificados — nunca a
@@ -30,6 +35,13 @@ clusters (útil para conferência manual, não para leitura corrida).
 Uso:
     ANTHROPIC_API_KEY=... .venv/bin/python scripts/medir_qualidade_advisor.py \\
         --periodos clusters_neutra_104.json
+
+    # Repetir a comparação original (Opus 5 × Haiku 4.5) é o default —
+    # nada muda em relação ao script anterior a este ajuste.
+
+    # Comparar Opus 5 × Sonnet 5 (decisão 1, opção Sonnet):
+    ANTHROPIC_API_KEY=... .venv/bin/python scripts/medir_qualidade_advisor.py \\
+        --periodos clusters_neutra_104.json --modelo-a opus-5 --modelo-b sonnet-5
 """
 
 from __future__ import annotations
@@ -55,6 +67,12 @@ from fotoorganizer.config import paths  # noqa: E402
 MODELOS = {
     "opus-5": "claude-opus-5",
     "haiku-4.5": "claude-haiku-4-5-20251001",
+    "sonnet-5": "claude-sonnet-5",
+}
+NOMES_LEGIVEIS = {
+    "opus-5": "Opus 5",
+    "haiku-4.5": "Haiku 4.5",
+    "sonnet-5": "Sonnet 5",
 }
 
 # Amostra pequena de fallback (as mesmas 5 de D-048), só para --periodos
@@ -108,8 +126,8 @@ def _reconstruir_cluster(con: sqlite3.Connection, inicio: str, fim: str) -> Clus
 @dataclass
 class Comparacao:
     cluster: ClusterInfo
-    opus: AdvisorResult | None
-    haiku: AdvisorResult | None
+    a: AdvisorResult | None
+    b: AdvisorResult | None
 
     @property
     def padrao(self) -> str:
@@ -118,23 +136,21 @@ class Comparacao:
         `categoria=None` DENTRO do objeto (`advisor.py:97`: "devolva
         categoria e evento nulos"), não o objeto inteiro sendo `None`
         (isso só acontece em erro de API/parse, `advisor.py` mais abaixo).
-        Comparar `self.opus is None` aqui seria o bug que gerou a primeira
+        Comparar `self.a is None` aqui seria o bug que gerou a primeira
         versão deste relatório — sempre zero nas três categorias que
         dependiam disso. O sinal certo de "recusou" é `.categoria is None`.
         """
-        op_recusou = self.opus is None or self.opus.categoria is None
-        ha_recusou = self.haiku is None or self.haiku.categoria is None
-        if op_recusou and ha_recusou:
+        a_recusou = self.a is None or self.a.categoria is None
+        b_recusou = self.b is None or self.b.categoria is None
+        if a_recusou and b_recusou:
             return "concordam_null"
-        if not op_recusou and not ha_recusou:
-            if (self.opus.categoria, self.opus.evento) == (
-                self.haiku.categoria, self.haiku.evento
-            ):
+        if not a_recusou and not b_recusou:
+            if (self.a.categoria, self.a.evento) == (self.b.categoria, self.b.evento):
                 return "concordam_afirmam"
             return "discordam_entre_si"
-        if op_recusou and not ha_recusou:
-            return "haiku_afirma_opus_recusa"
-        return "opus_afirma_haiku_recusa"
+        if a_recusou and not b_recusou:
+            return "b_afirma_a_recusa"
+        return "a_afirma_b_recusa"
 
 
 def main() -> None:
@@ -154,6 +170,15 @@ def main() -> None:
         "--detalhe", action="store_true",
         help="imprime cada cluster individualmente, além do resumo.",
     )
+    parser.add_argument(
+        "--modelo-a", choices=sorted(MODELOS), default="opus-5",
+        help="primeiro modelo da comparação (default: opus-5, igual a "
+             "D-048/D-049 — não muda a comparação histórica por padrão).",
+    )
+    parser.add_argument(
+        "--modelo-b", choices=sorted(MODELOS), default="haiku-4.5",
+        help="segundo modelo da comparação (default: haiku-4.5).",
+    )
     args = parser.parse_args()
 
     if args.periodos:
@@ -167,23 +192,24 @@ def main() -> None:
     clusters = [_reconstruir_cluster(con, p["inicio"], p["fim"]) for p in periodos]
     con.close()
 
-    advisor_opus = ClaudeAdvisor(model=MODELOS["opus-5"])
-    advisor_haiku = ClaudeAdvisor(model=MODELOS["haiku-4.5"])
+    nome_a, nome_b = NOMES_LEGIVEIS[args.modelo_a], NOMES_LEGIVEIS[args.modelo_b]
+    advisor_a = ClaudeAdvisor(model=MODELOS[args.modelo_a])
+    advisor_b = ClaudeAdvisor(model=MODELOS[args.modelo_b])
 
     comparacoes: list[Comparacao] = []
     for i, cluster in enumerate(clusters, 1):
         print(f"[{i}/{len(clusters)}] {cluster.inicio:%Y-%m-%d} → {cluster.fim:%Y-%m-%d} "
               f"({cluster.n_fotos} fotos)...", file=sys.stderr)
-        op = advisor_opus.classificar(cluster)
-        ha = advisor_haiku.classificar(cluster)
-        comparacoes.append(Comparacao(cluster, op, ha))
+        ra = advisor_a.classificar(cluster)
+        rb = advisor_b.classificar(cluster)
+        comparacoes.append(Comparacao(cluster, ra, rb))
 
     # -- relatório executivo -------------------------------------------------
     padroes = Counter(c.padrao for c in comparacoes)
     total = len(comparacoes)
 
     print(f"\n{'='*70}")
-    print(f"RELATÓRIO — {total} clusters comparados (Opus 5 × Haiku 4.5)")
+    print(f"RELATÓRIO — {total} clusters comparados ({nome_a} × {nome_b})")
     print(f"{'='*70}\n")
 
     concordancia = padroes["concordam_null"] + padroes["concordam_afirmam"]
@@ -192,18 +218,19 @@ def main() -> None:
     print(f"  — ambos recusam (null/null): {padroes['concordam_null']}")
     print(f"  — ambos afirmam a MESMA categoria/evento: {padroes['concordam_afirmam']}")
     print(f"Discordância: {discordancia}/{total} ({100*discordancia/total:.1f}%)")
-    print(f"  — Haiku afirma, Opus recusa: {padroes['haiku_afirma_opus_recusa']}"
-          f"  ← padrão de risco (D-048: Haiku inventa onde Opus se abstém)")
-    print(f"  — Opus afirma, Haiku recusa: {padroes['opus_afirma_haiku_recusa']}")
+    print(f"  — {nome_b} afirma, {nome_a} recusa: {padroes['b_afirma_a_recusa']}"
+          f"  ← padrão de risco (D-048/D-049: modelo mais barato inventa "
+          f"onde o mais caro se abstém)")
+    print(f"  — {nome_a} afirma, {nome_b} recusa: {padroes['a_afirma_b_recusa']}")
     print(f"  — os dois afirmam, mas discordam entre si: {padroes['discordam_entre_si']}")
 
     # Distribuição de categoria quando cada modelo afirma algo, para ver se
     # convergem no TIPO de resposta mesmo quando divergem no caso a caso.
-    for nome, advisor_key in (("Opus 5", "opus"), ("Haiku 4.5", "haiku")):
+    for nome, campo in ((nome_a, "a"), (nome_b, "b")):
         cats = Counter(
-            getattr(c, advisor_key).categoria
+            getattr(c, campo).categoria
             for c in comparacoes
-            if getattr(c, advisor_key) is not None
+            if getattr(c, campo) is not None
         )
         if cats:
             print(f"\nCategorias que {nome} afirmou (entre os que respondeu algo):")
@@ -211,17 +238,17 @@ def main() -> None:
                 print(f"  {cat}: {n}")
 
     # Amostra do padrão de risco — até 5 exemplos, não os N inteiros.
-    risco = [c for c in comparacoes if c.padrao == "haiku_afirma_opus_recusa"]
+    risco = [c for c in comparacoes if c.padrao == "b_afirma_a_recusa"]
     if risco:
-        print(f"\nAmostra de 'Haiku afirma, Opus recusa' ({len(risco)} no total, "
-              f"mostrando até 5):")
+        print(f"\nAmostra de '{nome_b} afirma, {nome_a} recusa' ({len(risco)} no "
+              f"total, mostrando até 5):")
         for c in risco[:5]:
             print(f"\n  {c.cluster.inicio:%Y-%m-%d} → {c.cluster.fim:%Y-%m-%d} "
                   f"({c.cluster.n_fotos} fotos)")
             print(f"    pastas: {c.cluster.pastas[:3]}"
                   f"{' ...' if len(c.cluster.pastas) > 3 else ''}")
-            print(f"    Haiku: {c.haiku.categoria}/{c.haiku.evento!r} — "
-                  f"{c.haiku.justificativa}")
+            print(f"    {nome_b}: {c.b.categoria}/{c.b.evento!r} — "
+                  f"{c.b.justificativa}")
 
     if args.detalhe:
         print(f"\n{'='*70}\nDETALHE — todos os {total} clusters\n{'='*70}")
@@ -229,14 +256,14 @@ def main() -> None:
             print(f"\n[{i}] {c.cluster.inicio:%Y-%m-%d} → {c.cluster.fim:%Y-%m-%d} "
                   f"({c.cluster.n_fotos} fotos) — {c.padrao}")
             print(f"    pastas: {c.cluster.pastas}")
-            if c.opus:
-                print(f"    Opus:  {c.opus.categoria}/{c.opus.evento!r} — {c.opus.justificativa}")
+            if c.a:
+                print(f"    {nome_a}:  {c.a.categoria}/{c.a.evento!r} — {c.a.justificativa}")
             else:
-                print("    Opus:  null")
-            if c.haiku:
-                print(f"    Haiku: {c.haiku.categoria}/{c.haiku.evento!r} — {c.haiku.justificativa}")
+                print(f"    {nome_a}:  null")
+            if c.b:
+                print(f"    {nome_b}: {c.b.categoria}/{c.b.evento!r} — {c.b.justificativa}")
             else:
-                print("    Haiku: null")
+                print(f"    {nome_b}: null")
 
 
 if __name__ == "__main__":
