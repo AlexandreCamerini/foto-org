@@ -2008,3 +2008,46 @@ uma fatia
   Alembic — o próprio desenho já exclui essas três coisas.
 - Como reverter: commit isolado da fatia, revertível sozinho.
 - Status: decidido pelo dono
+
+## D-064 — Inventário por pasta implementado
+
+- Fase: 5 (implementação, autorizada por D-063) — fecha a decisão 3 do
+  gate (D-061)
+- Classe: A — execução do que já estava desenhado e aprovado, com
+  correções encontradas na revisão antes do commit
+- Data: 2026-08-13
+- Contexto: D-063 abriu a fronteira para `fotoorganizer/operations/**`.
+  Implementado como fatia vertical (skill `fatia-vertical`):
+  `fotoorganizer/operations/inventario.py` (novo) + hook em
+  `executor.py::_executar_item`, logo depois da cópia verificada por
+  hash.
+- Achados da revisão com olhos frescos, corrigidos antes do commit:
+  1. O `except` no executor capturava só `OSError` — um
+     `inventario.json` corrompido por uma escrita anterior interrompida
+     levanta `json.JSONDecodeError` (não é `OSError`), que escaparia e
+     abortaria o PLANO INTEIRO no meio, deixando cópias já verificadas
+     por hash com o commit do item pendente (a sessão fecha sem
+     commitar, mas o arquivo físico já foi copiado — na retomada, o
+     executor tentaria recopiar e bloquearia por "destino já existe").
+     Corrigido: `except Exception` no executor (é auxiliar, nunca pode
+     travar a cópia real) e `_carregar` recupera de JSON corrompido
+     preservando o arquivo ruim ao lado (`.corrompido-<timestamp>`) em
+     vez de propagar.
+  2. Escrita não era atômica (`write_text` trunca antes de escrever) —
+     era a causa mais provável do próprio cenário do achado 1. Corrigido
+     com write-temp + `os.replace` (atômico no mesmo filesystem).
+  3. Campo `tamanho` vinha de `media.tamanho` (do momento do scan), não
+     do arquivo realmente copiado e verificado nesta execução —
+     corrigido para `destino.stat().st_size`.
+- Verificação: `scripts/verificar.sh` verde (701 testes, 17/17
+  benchmark, 108 testes de UI, build); prova real — plano completo
+  (dry-run + execução, cópia de arquivo de verdade) contra catálogo
+  sintético isolado, `INVENTARIO.md` gerado e legível, com evidência e
+  justificativa por foto.
+- O que ficou fora, conforme o desenho: formato exato do Markdown
+  (tabela vs. lista, usei lista com seção "Por quê?" por foto) não foi
+  revisado com o dono — é decisão de apresentação, não de dado, ajustável
+  sem migração.
+- Como reverter: `git revert 6efde4e` — commit único e isolado.
+- Status: decidido (implementado e commitado, `6efde4e`). Decisão 3 do
+  gate (D-061) está fechada tanto na decisão quanto na implementação.
