@@ -29,7 +29,7 @@ export default function Trips({ onAbrir, fonte }: Props) {
     queryFn: () => api.eventos(fonte),
   });
 
-  // As duas consultas eram lentas o bastante (D-066 achado 3 — N+1 sem
+  // As duas consultas eram lentas o bastante (D-069 achado 3 — N+1 sem
   // índice, 50-120s+ medidos no acervo real) para a tela terminar de
   // carregar e mostrar "nenhuma viagem" antes da resposta chegar, mesmo
   // com 190 grupos existentes. "Ainda carregando" e "realmente vazio"

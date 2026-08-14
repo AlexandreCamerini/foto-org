@@ -5,7 +5,7 @@
 consulta é um SCAN completo da tabela (medido: 477 mil linhas), e o endpoint
 faz ~190×2 dessas consultas numa carga só. Medido no catálogo real: aba
 Viagens levava 50-120+ segundos para responder, tempo suficiente para a UI
-mostrar "nenhuma viagem" antes da resposta chegar (D-066 achado 3, D-069).
+mostrar "nenhuma viagem" antes da resposta chegar (D-069 achado 3, D-072).
 
 Revision ID: 0017
 Revises: 0016

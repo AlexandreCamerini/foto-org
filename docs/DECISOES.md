@@ -2517,15 +2517,15 @@ inteiro passa a ser contado numa passada só
   achados de D-069 continuam aguardando (achado 4 explicitamente NÃO
   resolvido por esta fatia — ver acima).
 
-## D-069 — Fatia #3 de D-066: aba Viagens de 50-120s+ para ~0,1s
+## D-072 — Fatia #3 de D-069: aba Viagens de 50-120s+ para ~0,1s
 
-- Fase: pós-gate — terceira fatia de D-066 (achado 3, Tier 1 — o mais fácil
+- Fase: pós-gate — terceira fatia de D-069 (achado 3, Tier 1 — o mais fácil
   de reproduzir e provavelmente a causa direta do "caos" relatado pelo
   dono), fronteira aberta a pedido explícito do dono para esta fatia
 - Classe: A — execução de achado já registrado, sem decisão de produto em
   aberto
 - Data: 2026-08-14
-- Contexto: D-066 achado 3 — `/api/viagens`/`/api/eventos` levavam 50-120s+
+- Contexto: D-069 achado 3 — `/api/viagens`/`/api/eventos` levavam 50-120s+
   no catálogo real (medido antes de qualquer mudança), fazendo a aba
   Viagens mostrar "Nenhuma viagem ou evento ainda — gere as sugestões na
   aba Revisão" por até 2 minutos mesmo com 190 grupos existentes.
@@ -2579,5 +2579,5 @@ inteiro passa a ser contado numa passada só
 - Como reverter: `git revert` do commit desta fatia reverte o código; a
   migração tem `downgrade()` simétrico (`drop_index` nos dois índices) se
   precisar desfazer o schema também.
-- Status: decidido (implementado e commitado). D-066 achado 3 fechado; 15
-  achados de D-066 continuam aguardando.
+- Status: decidido (implementado e commitado). D-069 achado 3 fechado; 15
+  achados de D-069 continuam aguardando.

@@ -18,8 +18,8 @@ function grupo(over: Record<string, unknown>) {
 }
 
 describe("Trips", () => {
-  it("não mostra 'nenhuma viagem' enquanto as consultas ainda estão pendentes (D-069)", async () => {
-    // As duas consultas eram lentas o bastante no acervo real (D-066 achado
+  it("não mostra 'nenhuma viagem' enquanto as consultas ainda estão pendentes (D-072)", async () => {
+    // As duas consultas eram lentas o bastante no acervo real (D-069 achado
     // 3 — 50-120s+ medidos, N+1 sem índice) para a mensagem de vazio
     // aparecer antes da resposta chegar, mesmo com 190 grupos existentes.
     // Checagem síncrona (sem await): é exatamente a janela entre o mount e

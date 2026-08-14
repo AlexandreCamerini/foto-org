@@ -131,7 +131,7 @@ class MediaFile(Base):
         # delas é um SCAN completo da tabela (medido: 477 mil linhas), e o
         # endpoint faz ~190×2 dessas consultas numa carga só. É o mesmo tipo
         # de índice que este comentário já defende em outro lugar deste
-        # arquivo: consumidor real, custo de escrita justificado (D-069).
+        # arquivo: consumidor real, custo de escrita justificado (D-072).
         Index("ix_media_files_trip_id", "trip_id"),
         Index("ix_media_files_event_id", "event_id"),
     )

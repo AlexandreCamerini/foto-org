@@ -550,7 +550,7 @@ def test_filtro_por_viagem(client, migrated_engine):
 
 def test_agrupamentos_conta_por_grupo_com_uma_consulta_so(client, migrated_engine):
     """A contagem de `_agrupamentos` virou uma consulta agregada (GROUP BY)
-    em vez de uma por grupo (D-069) — o teste garante que a contagem por
+    em vez de uma por grupo (D-072) — o teste garante que a contagem por
     grupo continua certa, não só que o endpoint não quebra."""
     from fotoorganizer.models import MediaFile, Trip
 

@@ -841,7 +841,7 @@ def create_app(
         # Uma consulta agregada para o recorte inteiro, não uma por grupo:
         # ~190 grupos (viagens+eventos) faziam ~190 SELECT COUNT separados —
         # N+1 clássico, e sem índice em trip_id/event_id cada um era um SCAN
-        # completo de 477 mil linhas (D-066 achado 3, D-069).
+        # completo de 477 mil linhas (D-069 achado 3, D-072).
         filtro_contagem = [coluna.is_not(None)]
         if source_id is not None:
             filtro_contagem.append(MediaFile.source_id == source_id)
