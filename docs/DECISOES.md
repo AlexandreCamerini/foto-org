@@ -2516,3 +2516,68 @@ inteiro passa a ser contado numa passada só
 - Status: decidido (implementado e commitado). D-069 achado 2 fechado; 16
   achados de D-069 continuam aguardando (achado 4 explicitamente NÃO
   resolvido por esta fatia — ver acima).
+
+## D-069 — Fatia #3 de D-066: aba Viagens de 50-120s+ para ~0,1s
+
+- Fase: pós-gate — terceira fatia de D-066 (achado 3, Tier 1 — o mais fácil
+  de reproduzir e provavelmente a causa direta do "caos" relatado pelo
+  dono), fronteira aberta a pedido explícito do dono para esta fatia
+- Classe: A — execução de achado já registrado, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: D-066 achado 3 — `/api/viagens`/`/api/eventos` levavam 50-120s+
+  no catálogo real (medido antes de qualquer mudança), fazendo a aba
+  Viagens mostrar "Nenhuma viagem ou evento ainda — gere as sugestões na
+  aba Revisão" por até 2 minutos mesmo com 190 grupos existentes.
+- Investigação antes de escrever código: `_agrupamentos` (server/app.py)
+  fazia 1 `SELECT COUNT` por grupo (~190 consultas, N+1 clássico). Rodei
+  `EXPLAIN QUERY PLAN` da query real contra o catálogo de produção
+  (`sqlite3 -readonly`) e confirmei a causa dominante: `SCAN media_files`
+  — `trip_id`/`event_id` não tinham índice, então cada consulta era
+  varredura completa de 477 mil linhas. `docs/METODO_DE_TRABALHO.md`/
+  princípio já documentado no próprio `catalog.py` ("índice sem consumidor
+  é custo de escrita à toa") não tinha sido aplicado aqui porque o
+  consumidor (`_agrupamentos`) só passou a existir depois — a fatia fecha
+  essa lacuna, não inventa regra nova.
+- Duas frentes, as duas dentro desta fatia (nenhuma cabia sozinha sem
+  deixar o achado pela metade — resolver só o índice deixaria a UI
+  vulnerável ao mesmo bug de "vazio enganoso" na próxima lentidão real;
+  resolver só o loading state deixaria os 50-120s intactos):
+  1. **Índice** — `Index("ix_media_files_trip_id", ...)` e
+     `..._event_id` em `fotoorganizer/models/catalog.py` (mesmo padrão dos
+     índices vizinhos, com o consumidor citado no comentário) +
+     migração `0017` (`batch_alter_table`/`create_index`, downgrade
+     simétrico, mesmo formato de `0007_tipo_confirmado_em_media_files.py`).
+  2. **N+1 → agregado** — `_agrupamentos` trocou 1 `SELECT COUNT` por
+     grupo por 1 `SELECT ... GROUP BY` para o recorte inteiro.
+  3. **Loading state** — `webapp/src/components/Trips.tsx` ganhou
+     `isPending` das duas queries; "Nenhuma viagem" só aparece depois que
+     as duas resolvem, nunca mais durante o carregamento.
+  Deixado de fora conscientemente: `_capa_disponivel` continua 1 query por
+  grupo — mas agora indexada (ganho colateral do item 1), e o achado nunca
+  apontou ela como a causa dominante. Reescrevê-la (ex.: window function
+  para buscar candidatos de todos os grupos numa consulta só) seria
+  otimização adicional sem medição pedindo por ela — fica de fora até
+  medição mostrar que ainda é gargalo.
+- Medido, catálogo real, antes e depois: `/api/viagens` e `/api/eventos`
+  caíram de 50-120s+ para **~0,1s cada** (60 viagens, 130 eventos,
+  contagens corretas). ~500-1200× mais rápido.
+- Revisão com olhos frescos (subagente `agente-arquivos`, contexto
+  isolado): nenhum bug achado. Confirmou que `coluna.is_not(None)` é
+  estritamente equivalente à query antiga, que `contagens.get(grupo.id, 0)`
+  não diverge do comportamento anterior, e que a migração segue o padrão
+  exato de migrações anteriores. Achado não-bloqueante registrado: `Trips.tsx`
+  não trata `isError` (se uma query falhar, mostra "vazio" em vez de erro)
+  — gap pré-existente, fora do que este achado prometia corrigir.
+- Verificação: `scripts/verificar.sh` verde (702 testes — 1 novo em
+  `tests/test_server_api.py` cobrindo contagem correta por grupo com
+  grupo cheio e vazio —, 17/17 benchmark, 120 testes de UI — 2 novos em
+  `Trips.test.tsx` cobrindo o estado pendente e o vazio genuíno); migração
+  aplicada e provada no dev server (porta 8405) contra o catálogo real —
+  log confirma "Running upgrade 0016 -> 0017", `curl` timed antes/depois,
+  aba Viagens carrega os 60 cards instantaneamente no navegador.
+- Como reverter: `git revert` do commit desta fatia reverte o código; a
+  migração tem `downgrade()` simétrico (`drop_index` nos dois índices) se
+  precisar desfazer o schema também.
+- Status: decidido (implementado e commitado). D-066 achado 3 fechado; 15
+  achados de D-066 continuam aguardando.

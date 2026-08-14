@@ -126,6 +126,14 @@ class MediaFile(Base):
         # consulta de "faltantes" — a tela que este campo existe para servir
         # — filtra exatamente por ela.
         Index("ix_media_files_arquivo_offline", "arquivo_offline"),
+        # `_agrupamentos` (server/app.py, /api/viagens e /api/eventos) filtra
+        # por estas duas colunas uma vez por grupo — sem índice, cada uma
+        # delas é um SCAN completo da tabela (medido: 477 mil linhas), e o
+        # endpoint faz ~190×2 dessas consultas numa carga só. É o mesmo tipo
+        # de índice que este comentário já defende em outro lugar deste
+        # arquivo: consumidor real, custo de escrita justificado (D-069).
+        Index("ix_media_files_trip_id", "trip_id"),
+        Index("ix_media_files_event_id", "event_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
