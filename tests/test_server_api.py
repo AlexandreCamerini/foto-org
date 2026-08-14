@@ -1051,6 +1051,24 @@ def test_media_diz_por_que_nao_da_para_abrir(client, migrated_engine):
     outras = client.get("/api/midia", params={"busca": "img_0"}).json()["itens"]
     assert outras and outras[0]["motivo_indisponivel"] is None
 
+    # E o que a grade marca como fora de alcance não pode aparecer sob o
+    # filtro "Organizáveis": era exatamente isso que a tela fazia com as
+    # 2.405 fotos da pasta "Dubai, Thai & Viet" (D-068).
+    organizaveis = client.get(
+        "/api/midia", params={"alcance": "organizaveis"}).json()["itens"]
+    assert not any(i["motivo_indisponivel"] for i in organizaveis)
+    assert not any(i["nome"] == "a.dng" for i in organizaveis)
+
+    faltantes = client.get(
+        "/api/midia", params={"alcance": "faltantes"}).json()["itens"]
+    assert any(i["nome"] == "a.dng" for i in faltantes)
+
+    # E o degrau do funil concorda com o filtro que ele abre: a foto do
+    # volume desmontado não é contada como organizável.
+    funil = client.get("/api/funil").json()
+    assert funil["conhecidas"] >= funil["alcancaveis"] >= funil["organizaveis"]
+    assert funil["organizaveis"] == len(organizaveis)
+
 
 def test_media_diz_arquivo_sumiu_quando_offline(client, migrated_engine):
     """Terceiro motivo (fase 12, item B): a fonte responde, mas ESTE

@@ -10,11 +10,12 @@ describe("App", () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
 
-    // "8 fotos no catálogo" virou "das 8 fotos que dá para organizar agora":
-    // o total da tela passou a ser o acervo conhecido, e as lacunas dizem
-    // explicitamente sobre que subconjunto falam.
+    // "8 fotos no catálogo" virou "das 8 fotos do seu acervo": o total da
+    // tela é o acervo conhecido, e as lacunas dizem explicitamente sobre
+    // que subconjunto falam. O "estejam ao alcance ou não" é o que separa
+    // este número do degrau "organizáveis" do funil, que é menor (D-068).
     expect(
-      await screen.findByText(/das 8 fotos que dá para organizar agora/),
+      await screen.findByText(/das 8 fotos do seu acervo/),
     ).toBeInTheDocument();
     expect(screen.getByText("sem data de captura")).toBeInTheDocument();
     expect(screen.getByText("sem coordenada")).toBeInTheDocument();
@@ -168,9 +169,9 @@ describe("o acervo, antes das lacunas", () => {
       screen.getByText(/fora de alcance — volume não montado/),
     ).toBeInTheDocument();
 
-    // E as lacunas ficam explicitamente escopadas ao organizável.
+    // E as lacunas ficam explicitamente escopadas ao acervo.
     expect(
-      await screen.findByText(/das 8 fotos que dá para organizar agora/),
+      await screen.findByText(/das 8 fotos do seu acervo/),
     ).toBeInTheDocument();
   });
 });

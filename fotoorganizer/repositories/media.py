@@ -41,12 +41,35 @@ _TIPO_EFETIVO = func.coalesce(MediaFile.tipo_confirmado, MediaFile.tipo_imagem)
 _ACERVO = MediaFile.organizavel
 _TESTEMUNHA = ~_ACERVO
 
-# O que a grade mostra. Uma foto sem arquivo continua fora da revisão e do
-# plano de cópia — aqui se decide se ela é VISÍVEL, não se é organizável.
+
+def _acervo_ao_alcance():
+    """Acervo cuja fonte responde AGORA — o que a grade promete ao dizer
+    "organizáveis".
+
+    `MediaFile.organizavel` classifica o registro (é acervo e tem arquivo) e
+    não sabe se o disco está montado; quem sabe é `Source.disponivel`. Sem
+    esta segunda metade, o filtro "Organizáveis" entregava 2.405 fotos de uma
+    pasta que saiu do disco, cada miniatura escrevendo "volume ou pasta fora
+    de alcance" — organizáveis que não abrem. Ver D-068.
+
+    Subconsulta em vez de join: `sources` tem dezenas de linhas e o filtro
+    entra em toda consulta da biblioteca, inclusive nas agregadas (linha do
+    tempo), onde um join a mais mudaria a cardinalidade.
+    """
+    return and_(
+        _ACERVO,
+        MediaFile.source_id.not_in(
+            select(Source.id).where(Source.disponivel.is_(False))
+        ),
+    )
+
+
+# O que a grade mostra. Os dois recortes são complementares: o que não dá
+# para organizar agora aparece em "faltantes", nunca em lugar nenhum.
 ALCANCES: dict[str, str] = {
     "tudo": "tudo que o app conhece",
-    "organizaveis": "só o que dá para organizar agora",
-    "faltantes": "só o que está fora de alcance",
+    "organizaveis": "acervo com o arquivo ao alcance agora",
+    "faltantes": "o resto: sem arquivo, fora de alcance ou não é acervo",
 }
 
 # O que impede uma foto de ser organizada sozinha. A chave é o filtro; o
@@ -173,10 +196,12 @@ class MediaRepository:
     def _query(self, filters: MediaFilters):
         # Testemunhas ficam fora da biblioteca visível, das contagens e de
         # qualquer filtro. Existem só para doar GPS e horário à correlação.
+        # Junto delas fica o acervo cuja fonte não responde: é foto do dono,
+        # e mesmo assim não há o que abrir, revisar ou copiar agora.
         if filters.alcance == "organizaveis":
-            stmt = select(MediaFile).where(_ACERVO)
+            stmt = select(MediaFile).where(_acervo_ao_alcance())
         elif filters.alcance == "faltantes":
-            stmt = select(MediaFile).where(_TESTEMUNHA)
+            stmt = select(MediaFile).where(~_acervo_ao_alcance())
         else:
             stmt = select(MediaFile)
         if filters.busca:

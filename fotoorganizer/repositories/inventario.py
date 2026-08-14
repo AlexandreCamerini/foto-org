@@ -75,9 +75,12 @@ class Funil:
       Lightroom é uma só.
     - `alcancaveis`: dá para abrir o arquivo agora (disco montado, não é
       referência de nuvem).
-    - `organizaveis`: é acervo do dono e tem arquivo — o que entra na
-      revisão e no plano de cópia. Miniatura de cache e referência ficam de
-      fora por não serem acervo (invariante 8), mesmo estando alcançáveis.
+    - `organizaveis`: das alcançáveis, as que são acervo do dono — o que
+      entra na revisão e no plano de cópia. Miniatura de cache e referência
+      ficam de fora por não serem acervo (invariante 8), mesmo estando
+      alcançáveis; e acervo cuja única fonte está desmontada também não
+      conta, porque não abre agora (D-068) — sem isto o terceiro degrau
+      deixava de ser subconjunto do segundo.
 
     O quarto degrau — quantas o filtro atual deixou passar — é da tela, não
     do catálogo, e por isso não mora aqui.
@@ -155,18 +158,21 @@ def levantar(factory: sessionmaker[Session]) -> Inventario:
     # Um inteiro por linha, para o `max` do agrupamento poder decidir.
     # Alcançável exige as três coisas: não é referência sem arquivo, a
     # FONTE responde agora, e este arquivo específico não sumiu dela.
-    _alcancavel = case(
-        (
-            and_(
-                MediaFile.arquivo_ausente.is_(False),
-                Source.disponivel.is_(True),
-                MediaFile.arquivo_offline.is_(False),
-            ),
-            1,
-        ),
-        else_=0,
+    _e_alcancavel = and_(
+        MediaFile.arquivo_ausente.is_(False),
+        Source.disponivel.is_(True),
+        MediaFile.arquivo_offline.is_(False),
     )
-    _organizavel = case((MediaFile.organizavel, 1), else_=0)
+    _alcancavel = case((_e_alcancavel, 1), else_=0)
+    # Organizável também exige estar alcançável — não só ser acervo
+    # (`MediaFile.organizavel`). Sem isto, uma foto cuja única fonte
+    # organizável está desmontada (ex.: "Dubai, Thai & Viet" saiu do disco)
+    # continuava contada como organizável enquanto a grade escrevia "fora
+    # de alcance" em cada miniatura — o terceiro degrau deixava de ser
+    # subconjunto do segundo. Ver D-068.
+    _organizavel = case(
+        (and_(MediaFile.organizavel, _e_alcancavel), 1), else_=0
+    )
     # macOS não distingue maiúscula no caminho, e as fontes discordam: o
     # Lightroom grava "/Users", o scan gravou "/users". Sem normalizar, o
     # mesmo lugar vira dois e a foto é contada duas vezes.

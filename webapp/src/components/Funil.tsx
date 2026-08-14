@@ -33,7 +33,9 @@ function formatar(n: number): string {
 }
 
 /** A leitura única do acervo: conhecidas → alcançáveis → organizáveis → no
- *  filtro atual.
+ *  filtro atual. Os três primeiros vêm do catálogo na mesma passada e na
+ *  mesma unidade (foto), e por isso estreitam sempre; o quarto é da tela e
+ *  conta registro — o que a grade tem para mostrar.
  *
  *  Existe porque cinco telas mostravam cinco números para a mesma pergunta,
  *  cada uma com um denominador diferente e nenhuma dizendo qual. A régua
@@ -83,9 +85,9 @@ export default function Funil({
       rotulo: "organizáveis",
       valor: data.organizaveis,
       titulo:
-        "É acervo seu e tem arquivo: o que entra na revisão e no plano de " +
-        "cópia. Miniatura de cache e referência ficam de fora por não serem " +
-        "acervo, mesmo estando alcançáveis.",
+        "Das alcançáveis, as que são acervo seu: o que entra na revisão e " +
+        "no plano de cópia. Miniatura de cache e referência ficam de fora " +
+        "por não serem acervo.",
       aoClicar: aoIrPara && (() => aoIrPara("organizaveis")),
     },
   ];
@@ -93,7 +95,11 @@ export default function Funil({
     degraus.push({
       rotulo: "no filtro",
       valor: noFiltro,
-      titulo: "Quantas o filtro atual desta tela deixou passar.",
+      titulo:
+        "Quantas o filtro atual desta tela deixou passar. Este conta " +
+        "REGISTRO, e não foto: a mesma foto catalogada por duas fontes " +
+        "ocupa duas células na grade — por isso ele pode ser maior que os " +
+        "degraus do catálogo.",
     });
   }
 

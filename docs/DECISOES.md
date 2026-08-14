@@ -2200,3 +2200,88 @@ uma fatia
 - Como reverter: reverter o commit desta fatia — isolado em
   `fotoorganizer/grouping/datas.py` e `tests/test_datas_em_pastas.py`.
 - Status: decidido e implementado. D-066 (achado relacionado) fechado.
+
+## D-068 — "Organizáveis" passa a exigir a fonte respondendo, e o funil
+inteiro passa a ser contado numa passada só
+
+- Fase: manutenção do funil do acervo (commit `4132160`), defeito de
+  definição encontrado depois que os três degraus ficaram juntos na tela.
+- Classe: B (muda a definição de um número que aparece em toda tela e o
+  conjunto que o filtro "Organizáveis" da Biblioteca devolve).
+- Data: 2026-08-04
+- Contexto: o funil promete que cada degrau é subconjunto do anterior
+  (`Funil` em `fotoorganizer/repositories/inventario.py`). "Alcançáveis"
+  olhava `Source.disponivel`; "organizáveis" vinha de
+  `MediaRepository.estatisticas()["total"]`, que usa `MediaFile.organizavel`
+  (`fotoorganizer/models/catalog.py:184`) — papel `ACERVO` e arquivo não
+  ausente, sem nenhuma pergunta sobre a fonte estar montada. Observado ao
+  vivo: a pasta "Dubai, Thai & Viet" (source_id=3) saiu do disco, e suas
+  2.405 fotos seguiam contadas como organizáveis e listadas sob o filtro
+  "Organizáveis" com "volume ou pasta fora de alcance" escrito em cada
+  miniatura. Hoje a ordem numérica ainda se sustentava por sorte
+  (26.023 < 94.557); com a maior parte do acervo desmontada, o funil deixa
+  de afunilar. Havia ainda um segundo descasamento, mais silencioso: os dois
+  primeiros degraus contam FOTO (caminho distinto) e o terceiro contava
+  REGISTRO.
+- Medição no catálogo real (`scripts/medir_alcance_do_organizavel.py`, cópia
+  por `.backup`, somente leitura; saída completa no commit desta entrada):
+  - 197.338 registros; 26.023 organizáveis pela definição antiga.
+  - **2.566 registros (9,9%) de acervo estão em fonte que não responde** —
+    2.405 do Dubai, 143 de `Pictures/2025_05_24`, 18 de `/Volumes/photo`. As
+    três pastas realmente não existem no disco agora.
+  - Contando FOTO em vez de registro, o acervo com arquivo cai de 26.023
+    para 22.150 — 3.873 registros são a mesma foto catalogada duas vezes (a
+    pasta específica e a varredura de `/Users/acamerini`).
+  - Acervo alcançável, contado por foto: **21.989**. Só 161 fotos saem por
+    indisponibilidade, porque Dubai e 2025_05_24 têm registro gêmeo na
+    varredura da home, que responde. (Esses arquivos também não abrem — o
+    arquivo sumiu do disco e nada detectou; é defeito separado, ver abaixo.)
+  - 143 de 143 sugestões aprovadas estão em fonte indisponível.
+- Opções:
+  (a) `MediaFile.organizavel` passa a exigir `Source.disponivel`.
+  (b) O funil calcula o próprio terceiro degrau com a checagem de fonte, e o
+      filtro "Organizáveis" da grade passa a usar o mesmo critério.
+  (c) Aceitar que "organizáveis" é classificação de acervo e não de alcance,
+      abandonando a promessa de monotonicidade.
+- Escolhida: (b).
+- Por quê: (a) é destrutiva por um cabo USB. `organizavel` é usada em
+  `classification/engine.py:890` para APAGAR sugestões pendentes de tudo que
+  não é acervo — com a fonte na definição, desmontar um disco e gerar
+  sugestões apagaria as sugestões pendentes das fotos dele (2.566 hoje, o
+  acervo inteiro no dia em que o NAS estiver desligado), e o agrupamento em
+  viagens/eventos mudaria de forma conforme o que estivesse montado. Estado
+  transitório não pode redefinir classificação permanente — é o mesmo
+  princípio do invariante 8. (c) mantém na tela um funil que pode deixar de
+  afunilar, e o defeito relatado (fotos "organizáveis" que não abrem)
+  continuaria. (b) resolve os dois descasamentos de uma vez: o terceiro
+  degrau passa a sair da mesma passada de `levantar()`, na mesma unidade
+  (foto) e com a mesma resposta sobre quais fontes respondem — a
+  monotonicidade vira propriedade de construção, não coincidência a testar.
+  A regra de "é acervo" continua com dono único (`MediaFile.organizavel`), e
+  `levantar()` a lê como coluna SQL em vez de reescrevê-la; o que se soma é
+  o alcance, que é justamente o que aquele módulo já sabe responder.
+  Para não recriar o defeito original (dois números para a mesma palavra), o
+  filtro "Organizáveis" da grade recebeu o mesmo critério
+  (`_acervo_ao_alcance()` em `fotoorganizer/repositories/media.py`), e
+  "faltantes" continua sendo exatamente o complemento.
+- O que muda na tela: funil 26.023 → **21.989** organizáveis; filtro
+  "Organizáveis" da Biblioteca 26.023 → **23.457** registros (a diferença
+  entre 21.989 e 23.457 é foto contada uma vez contra célula desenhada duas,
+  e o degrau "no filtro" agora diz isso no título). Panorama, revisão,
+  motor de sugestões e planner ficam intactos: continuam vendo os 26.023 de
+  acervo, montado ou não.
+- O que NÃO mudou, de propósito:
+  - `operations/planner.py` continua planejando as 143 sugestões aprovadas
+    de fonte desmontada. Omitir trabalho já aprovado pelo dono seria pior que
+    falhar na frente dele: o dry-run já recusa item por item com "origem
+    indisponível" (`operations/executor.py:83`) antes de qualquer cópia.
+  - `Source.disponivel` responde pela RAIZ da fonte, não por arquivo. Como
+    `/Users/acamerini` é fonte e responde, os registros gêmeos das fotos do
+    Dubai continuam contados como alcançáveis mesmo com o arquivo apagado.
+    Corrigir isso é outro trabalho (revarredura marcando `arquivo_ausente`),
+    e um `stat` por miniatura na grade está descartado pelo custo — ver o
+    comentário em `server/app.py:231`.
+- Como reverter: `git revert` do commit desta entrada. Nada foi migrado nem
+  reescrito no catálogo — a mudança é de leitura, e as contagens antigas
+  voltam inteiras.
+- Status: decidido

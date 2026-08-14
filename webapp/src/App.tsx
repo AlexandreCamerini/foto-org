@@ -342,8 +342,8 @@ export default function App() {
                         chave === "tudo"
                           ? "tudo que o app conhece, inclusive sem arquivo local"
                           : chave === "organizaveis"
-                            ? "só o que dá para revisar e copiar agora"
-                            : "só o que está no iCloud ou em volume desmontado"
+                            ? "acervo seu com o arquivo ao alcance agora — o que dá para revisar e copiar"
+                            : "o resto: no iCloud, em volume desmontado, ou miniatura de outro app"
                       }
                       className={`px-3 py-1 ${
                         alcance === chave

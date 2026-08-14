@@ -163,9 +163,14 @@ export default function Panorama({
     <div className="flex-1 overflow-y-auto px-4 py-3">
       {inventario && <OAcervo inv={inventario} />}
 
+      {/* Este total é o ACERVO — montado ou não —, e por isso é maior que o
+          degrau "organizáveis" do funil acima, que só conta o que responde
+          agora. A frase diz de qual conjunto fala: uma foto no HD da gaveta
+          continua sem data, e esconder essa lacuna até o disco voltar seria
+          esconder trabalho que existe (D-068). */}
       <p className="mb-3 text-texto-2">
-        As lacunas abaixo são das {data.total} fotos que dá para organizar
-        agora.{" "}
+        As lacunas abaixo são das {data.total} fotos do seu acervo, estejam
+        elas ao alcance agora ou não.{" "}
         {comLacuna.length === 0
           ? "Nenhuma lacuna — tudo que o motor precisa está preenchido."
           : "Clique numa para trabalhar só naquele conjunto."}
