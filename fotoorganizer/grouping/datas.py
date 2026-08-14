@@ -85,6 +85,15 @@ _PADROES: tuple[re.Pattern[str], ...] = (
     re.compile(
         rf"\b(?P<dia>\d{{1,2}}){_SEP}(?P<mes>\d{{1,2}}){_SEP}(?P<ano>{_ANO})\b"
     ),
+    # 29 de outubro de 2016, 5 de janeiro de 2014 — por extenso, dia primeiro.
+    # Sem este padrão, só a cauda "outubro de 2016" casava no padrão de
+    # baixo e "29 de" sobrava como se fosse nome (D-073) — 303 fotos reais
+    # tinham destino tipo "Eventos/2016/29 de".
+    re.compile(
+        rf"\b(?P<dia>\d{{1,2}}){_SEP}de{_SEP}(?P<mes_nome>{_MES_ALT}){_SEP}"
+        rf"de{_SEP}(?P<ano>{_ANO})\b",
+        re.IGNORECASE,
+    ),
     # Abril 2015, Jul.2023, Julho de 2023, Abril/2015
     re.compile(
         rf"\b(?P<mes_nome>{_MES_ALT})\.?{_SEP}?(?:de{_SEP})?(?P<ano>{_ANO})\b",
@@ -94,6 +103,19 @@ _PADROES: tuple[re.Pattern[str], ...] = (
     re.compile(rf"\b(?P<ano>{_ANO})[-_.](?P<mes>\d{{1,2}})\b"),
     # 2015
     re.compile(rf"\b(?P<ano>{_ANO})\b"),
+)
+
+# "novembro 30", "julho 15" — mês por extenso + dia, SEM ano: o ano mora na
+# pasta-mãe ("2009/novembro 30" — estrutura por dia dentro do ano), não
+# neste segmento. Não vira `DataDaPasta` (não há ano pra relatar aqui; quem
+# precisa do ano cruzado com a árvore é `data_no_caminho`, que já lê o
+# segmento-pai à parte), mas o segmento também não é nome de coisa nenhuma —
+# sem isto, virava "nome de álbum" e podia ser promovido a evento falso pela
+# regra 6 da cascata (`grouping/classifier.py`). Âncora no segmento inteiro
+# (`^...$`) de propósito: "Viagem novembro 30" é nome de verdade que só
+# CONTÉM a palavra, não deve ser esvaziado.
+_MES_DIA_SEM_ANO = re.compile(
+    rf"^(?P<mes_nome>{_MES_ALT}){_SEP}(?P<dia>\d{{1,2}})$", re.IGNORECASE
 )
 
 # Sobras de separador nas bordas depois de remover a data.
@@ -140,6 +162,17 @@ def separar_data(segmento: str) -> tuple[str, DataDaPasta | None]:
                 continue  # 2015-13 não é ano-mês; tenta o próximo padrão
             resto = f"{segmento[:m.start()]} {segmento[m.end():]}"
             return _limpar(resto), data
+    # Segmento inteiro é só "mês dia", sem ano — não dá pra montar
+    # `DataDaPasta` (falta o ano), mas ainda assim é reconhecido como data,
+    # não como nome. Valida a faixa do dia como `_montar` já faz pros
+    # outros padrões (1-31): sem isto, "Mar 15" ou "Julho 85" — que não são
+    # dia nenhum — seriam engolidos do mesmo jeito, perdendo o nome à toa.
+    # `.strip()` só aqui (os outros padrões usam `\b`/`finditer`, que não
+    # se importam com espaço na borda) porque este é `^...$` — âncora de
+    # string inteira, então espaço sobrando faria o match falhar à toa.
+    m = _MES_DIA_SEM_ANO.match(segmento.strip())
+    if m and 1 <= int(m.group("dia")) <= 31:
+        return "", None
     return _limpar(segmento), None
 
 

@@ -23,6 +23,10 @@ from fotoorganizer.grouping.eventos import extrair_evento, nome_de_album
         ("2025_05_24", "", 2025, 5, 24),
         ("2026", "", 2026, None, None),
         ("Natal 2019", "Natal", 2019, None, None),
+        # D-073: "dia de mês de ano" por extenso — sem este padrão, só a
+        # cauda "outubro de 2016" casava e "29 de" sobrava como nome.
+        ("29 de outubro de 2016", "", 2016, 10, 29),
+        ("5 de janeiro de 2014", "", 2014, 1, 5),
     ],
 )
 def test_separa_nome_e_data(segmento, nome, ano, mes, dia):
@@ -53,6 +57,61 @@ def test_data_no_caminho_reconhece_marco_em_nfd(forma):
     data = data_no_caminho(caminho)
     assert data is not None
     assert (data.ano, data.mes) == (2019, 3)
+
+
+@pytest.mark.parametrize(
+    "segmento",
+    [
+        "novembro 30", "julho 15", "setembro 06", "março 20", "dezembro 07",
+    ],
+)
+def test_mes_dia_sem_ano_esvazia_o_nome(segmento):
+    """D-073 (achado 5 de D-069): pasta cronológica por dia dentro do ano
+    ("2009/novembro 30") — o ano mora na pasta-mãe, não neste segmento, mas
+    o segmento continua sendo data, não nome. Sem isto, virava "nome de
+    álbum" e a regra 6 da cascata promovia a evento falso — 3.220 fotos
+    reais do acervo (grupos como "Eventos/2009/novembro 30")."""
+    nome, data = separar_data(segmento)
+    assert nome == ""
+    # Não há ano neste segmento para montar `DataDaPasta` — quem cruza com
+    # o ano da pasta-mãe é `data_no_caminho`, não este teste.
+    assert data is None
+
+
+def test_mes_dia_sem_ano_so_esvazia_o_segmento_inteiro():
+    """Âncora no segmento inteiro, de propósito: um nome de verdade que só
+    CONTÉM "mês dia" não pode ser esvaziado por acidente."""
+    nome, data = separar_data("Viagem novembro 30")
+    assert nome == "Viagem novembro 30"
+    assert data is None
+
+
+def test_marco_em_nfd_bate_nos_padroes_novos_tambem():
+    """D-073: macOS normaliza nome de pasta pra NFD ("marc" + cedilha
+    combinante, não o "ç" precomposto que `_MESES` usa) — visualmente
+    idêntico, byte a byte diferente. Sem normalizar, era o único mês do
+    calendário que sobrevivia ao resto do fix (todos os outros são ASCII
+    puro): 586 fotos reais tinham destino tipo "Eventos/2007/março 10"
+    mesmo depois do fix de "mês sem ano" já estar no ar."""
+    nfd = unicodedata.normalize("NFD", "março 10")
+    assert nfd != "março 10"  # a premissa do teste: são bytes diferentes
+    assert separar_data(nfd) == ("", None)
+
+    nfd_longo = unicodedata.normalize("NFD", "17 de março de 2015")
+    nome, data = separar_data(nfd_longo)
+    assert nome == ""
+    assert data is not None and (data.ano, data.mes, data.dia) == (2015, 3, 17)
+
+
+@pytest.mark.parametrize("segmento", ["Julho 85", "Dezembro 99", "Maio 32"])
+def test_mes_dia_sem_ano_valida_faixa_do_dia(segmento):
+    """Achado da revisão fresh-eyes: sem validar 1-31, "Julho 85" (não é
+    dia nenhum) seria engolido do mesmo jeito que uma data de verdade —
+    perdendo o nome à toa. Mesma faixa que `_montar` já valida pros outros
+    padrões."""
+    nome, data = separar_data(segmento)
+    assert nome == segmento
+    assert data is None
 
 
 @pytest.mark.parametrize(
