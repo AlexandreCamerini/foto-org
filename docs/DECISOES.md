@@ -2051,3 +2051,49 @@ uma fatia
 - Como reverter: `git revert 6efde4e` — commit único e isolado.
 - Status: decidido (implementado e commitado, `6efde4e`). Decisão 3 do
   gate (D-061) está fechada tanto na decisão quanto na implementação.
+
+## D-065 — Badge "Mapa" no card de Viagens/Eventos corrige D-050
+
+- Fase: pós-gate (achado de UX, D-050) — primeira fatia de `webapp/src/**`
+  desta sessão, fronteira aberta a pedido explícito do dono
+- Classe: A — execução de achado já registrado, sem decisão de produto
+  em aberto
+- Data: 2026-08-13
+- Contexto: D-050 registrou que o mapa do lugar estimado existe e
+  funciona desde a fase 9, mas é inacessível na prática — 3 passos sem
+  nenhuma affordance visual. Candidato óbvio já apontado ali: "badge/
+  ícone de mapa no card da aba Viagens quando o grupo tem lugar
+  estimado ou lido".
+- Implementado: `webapp/src/components/Trips.tsx` ganhou um badge
+  "Mapa" sempre visível (não só hover) em todo card de Viagens/Eventos,
+  que abre o grupo direto na visão de mapa — não implementei a variante
+  condicional ("só quando tem lugar"), porque exigiria mudança de
+  backend (a resposta de `/api/viagens`/`/api/eventos` não carrega essa
+  informação hoje) e o mapa vazio já tem estado tratado ("nenhuma foto
+  deste grupo tem lugar estimado") — mostrar sempre é mais simples e
+  resolve o mesmo problema de descoberta.
+- Dois achados da revisão com olhos frescos, corrigidos antes do commit:
+  1. O card virou `<div role="button">` pra caber o badge dentro, mas a
+     primeira versão colocava o badge como FILHO do card — botão
+     aninhado em `role="button"` é anti-padrão ARIA. Corrigido: badge e
+     card viraram IRMÃOS dentro de um wrapper `relative`, sem
+     `stopPropagation` (não são mais descendente/ancestral).
+  2. Card deixou de ser `<button>` nativo — operabilidade por teclado
+     (Enter/Espaço) passou a depender de `onKeyDown` escrito nesta
+     fatia, sem nenhum teste cobrindo, num app que se declara
+     teclado-first (`CLAUDE.md`). Adicionado teste de teclado antes do
+     commit.
+  3. (Separado, achado e corrigido durante a implementação, não pela
+     revisão): `App.tsx` tinha um efeito que resetava a visão pra
+     "lista" a cada troca de recorte — sobrescrevia a intenção de abrir
+     direto no mapa no mesmo ciclo de render. Corrigido com
+     `vistaPendente` (`useRef`), gravado antes de `setRecorte` e
+     consumido pelo efeito.
+- Verificação: `scripts/verificar.sh` verde (701 testes, 17/17
+  benchmark, 113 testes de UI, build); provado no dev server contra o
+  catálogo real — clique no badge do card "Gana" abre direto no mapa,
+  ponto plotado, painel "Neste lugar" explicando a evidência.
+- Branch novo (`claude/mapa-descoberta-d050`), não `handoff-fase-14-
+  gate-da711b` — aquele já foi mergeado e a branch remota apagada.
+- Como reverter: `git revert d0f215d` — commit único e isolado.
+- Status: decidido (implementado e commitado, `d0f215d`). D-050 fechado.
