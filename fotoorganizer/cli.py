@@ -19,28 +19,155 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-from fotoorganizer.config import load_settings
+from fotoorganizer.config import UNSET, aplicar_overrides, load_settings
+
+# Prefixo das env vars que espelham os flags globais abaixo — mesma
+# terceira camada de precedência que os flags, então convivem sem conflito:
+# se os dois forem passados na mesma invocação, o flag de CLI vence, porque
+# é ainda mais explícito que a env var (decisão local a este módulo, não do
+# `aplicar_overrides()`, que só recebe o resultado já resolvido).
+_ENV_PREFIX = "FOTOORG_"
+
+_ENV_BOOL_VERDADEIRO = ("1", "true", "verdadeiro", "sim", "yes", "on")
+_ENV_BOOL_FALSO = ("0", "false", "falso", "nao", "não", "no", "off")
+
+
+class ErroDeUso(Exception):
+    """Erro de uso vindo de env var — sai pelo mesmo caminho do argparse.
+
+    `main()` converte isto em `parser.error()`, então uma env var inválida
+    produz exatamente a saída que o flag equivalente já produzia (usage +
+    mensagem no stderr, código 2) em vez de um traceback cru.
+    """
+
+
+def _env_bruta(nome: str) -> str | None:
+    """Valor da env var já normalizado, ou `None` quando ela não conta.
+
+    Variável ausente e variável exportada vazia (`FOTOORG_DATA_DIR=`) são a
+    mesma coisa aqui: nenhuma das duas é o usuário pedindo algo. Tratar `""`
+    como valor explícito fazia `data_dir` virar `Path('.')` — um `scan`
+    criava catálogo, cache e logs novos no diretório corrente do shell e
+    indexava ali, enquanto o catálogo real ficava intacto e simplesmente
+    não aparecia.
+    """
+    valor = os.environ.get(f"{_ENV_PREFIX}{nome}")
+    if valor is None:
+        return None
+    return valor.strip() or None
+
+
+def _bool_env(nome: str):
+    valor = _env_bruta(nome)
+    if valor is None:
+        return UNSET
+    normalizado = valor.lower()
+    if normalizado in _ENV_BOOL_VERDADEIRO:
+        return True
+    if normalizado in _ENV_BOOL_FALSO:
+        return False
+    # Não adivinhar: um valor irreconhecível virando `False` em silêncio
+    # vencia um `true` do TOML sem o usuário saber por quê.
+    raise ErroDeUso(
+        f"argument {_ENV_PREFIX}{nome}: invalid bool value: {valor!r} "
+        f"(use {'/'.join(_ENV_BOOL_VERDADEIRO)} ou "
+        f"{'/'.join(_ENV_BOOL_FALSO)})"
+    )
+
+
+def _valor_env(nome: str, tipo):
+    valor = _env_bruta(nome)
+    if valor is None:
+        return UNSET
+    try:
+        return tipo(valor)
+    except (TypeError, ValueError) as exc:
+        raise ErroDeUso(
+            f"argument {_ENV_PREFIX}{nome}: invalid {tipo.__name__} "
+            f"value: {valor!r}"
+        ) from exc
+
+
+def _overrides_de_cli_e_env(
+    args: argparse.Namespace | None,
+) -> tuple[dict, dict]:
+    """Monta os dicts de config (formato de seções do TOML) a partir dos
+    flags globais explicitamente passados nesta invocação, com fallback
+    para a env var equivalente quando o flag não veio. Campos não tocados
+    por nenhuma das duas fontes simplesmente não entram no dict — é isso
+    que faz `aplicar_overrides()` deixá-los no valor herdado (TOML/default).
+
+    Devolve `(overrides, derivados)`: o primeiro é o que o usuário pediu
+    de verdade e vence o TOML; o segundo é o que a CLI *deduziu* de outro
+    flag e por isso tem precedência abaixo do TOML. Ver `aplicar_overrides()`.
+    """
+
+    def escolhido(campo: str, env_nome: str, tipo):
+        do_cli = getattr(args, campo, UNSET)
+        if do_cli is not UNSET:
+            return do_cli
+        return _bool_env(env_nome) if tipo is bool else _valor_env(env_nome, tipo)
+
+    geral: dict = {}
+    scanner: dict = {}
+    privacidade: dict = {}
+    derivados: dict = {}
+
+    data_dir = escolhido("data_dir", "DATA_DIR", str)
+    cache_dir = escolhido("cache_dir", "CACHE_DIR", str)
+    if data_dir is not UNSET:
+        geral["data_dir"] = data_dir
+        # `--data-dir`/`FOTOORG_DATA_DIR` sozinho também isola o cache,
+        # senão a varredura fica com o catálogo em `data_dir` mas os
+        # thumbnails caindo no cache real do usuário — comportamento
+        # herdado de antes desta camada existir. Isto é *dedução*, não
+        # pedido: vai no dict de derivados, que perde para um `cache_dir`
+        # escrito no TOML e para `--cache-dir`/`FOTOORG_CACHE_DIR`.
+        derivados["cache_dir"] = str(Path(data_dir).expanduser() / "cache")
+    if cache_dir is not UNSET:
+        geral["cache_dir"] = cache_dir
+
+    workers = escolhido("workers", "WORKERS", int)
+    if workers is not UNSET:
+        scanner["workers"] = workers
+    incluir_ocultos = escolhido("incluir_ocultos", "INCLUIR_OCULTOS", bool)
+    if incluir_ocultos is not UNSET:
+        scanner["incluir_ocultos"] = incluir_ocultos
+    seguir_symlinks = escolhido("seguir_symlinks", "SEGUIR_SYMLINKS", bool)
+    if seguir_symlinks is not UNSET:
+        scanner["seguir_symlinks"] = seguir_symlinks
+
+    servicos_externos = escolhido("servicos_externos", "SERVICOS_EXTERNOS", bool)
+    if servicos_externos is not UNSET:
+        privacidade["servicos_externos"] = servicos_externos
+
+    overrides = {}
+    if geral:
+        overrides["geral"] = geral
+    if scanner:
+        overrides["scanner"] = scanner
+    if privacidade:
+        overrides["privacidade"] = privacidade
+    return overrides, ({"geral": derivados} if derivados else {})
 
 
 def _settings(args: argparse.Namespace | None = None):
-    """Config do TOML, com `--data-dir` sobrepondo o catálogo padrão.
+    """Config nas camadas: defaults < derivado < TOML < CLI/env desta
+    invocação.
 
-    Sem isso não há como rodar contra um catálogo limpo sem editar a config
-    real do usuário — o que torna qualquer diagnóstico de suporte invasivo.
+    `--data-dir` (ou `FOTOORG_DATA_DIR`) é o caso mais usado — sobrepor o
+    catálogo padrão sem editar a config real do usuário, essencial para
+    testar ou diagnosticar sem tocar no catálogo de produção.
     """
-    from dataclasses import replace
-
     settings = load_settings()
-    data_dir = getattr(args, "data_dir", None)
-    if data_dir:
-        raiz = Path(data_dir).expanduser()
-        settings = replace(settings, data_dir=raiz, cache_dir=raiz / "cache")
-    return settings
+    overrides, derivados = _overrides_de_cli_e_env(args)
+    return aplicar_overrides(settings, overrides, derivados)
 
 
 def _abrir_catalogo(args: argparse.Namespace | None = None):
@@ -57,7 +184,11 @@ def _abrir_catalogo(args: argparse.Namespace | None = None):
     return settings, create_session_factory(create_db_engine(settings.db_path))
 
 
-def _build_scanner(db_path: Path, settings=None):
+def _build_scanner(db_path: Path, settings):
+    """`settings` é obrigatório de propósito: enquanto era opcional e caía
+    num `load_settings()` interno, quem esquecesse de passá-lo rodava só com
+    defaults+TOML, pulando a camada de CLI/env sem nenhum sinal — foi assim
+    que `bench` passou a ignorar `--workers`."""
     from fotoorganizer.database import (
         create_db_engine,
         create_session_factory,
@@ -67,7 +198,6 @@ def _build_scanner(db_path: Path, settings=None):
     from fotoorganizer.scanner import CatalogScanner
     from fotoorganizer.thumbnails import ThumbnailCache
 
-    settings = settings or load_settings()
     upgrade_to_head(db_path)
     engine = create_db_engine(db_path)
     factory = create_session_factory(engine)
@@ -452,11 +582,19 @@ def cmd_bench(args: argparse.Namespace) -> int:
             sub.mkdir(exist_ok=True)
             _jpeg_sintetico(sub / f"img_{i:05d}.jpg", seed=i)
 
+        # Pelo mesmo caminho de config dos outros comandos: sem isto,
+        # `fotoorganizer --workers 16 bench` media o `workers` do TOML/default,
+        # não o que foi pedido — um benchmark que ignora o parâmetro que se
+        # quer medir.
         cache_dir = (
-            Path(args.cache_dir).expanduser() if args.cache_dir
+            Path(args.bench_cache_dir).expanduser() if args.bench_cache_dir
             else tmp_path / "cache"
         )
-        settings = replace(load_settings(), cache_dir=cache_dir)
+        # O DB continua no temporário, nunca no de produção; o cache segue
+        # a mesma regra, isolado por padrão (mesmo cuidado do bench.db) —
+        # `--cache-dir` do bench é opt-in explícito pra medir contra o
+        # cache real de propósito.
+        settings = replace(_settings(args), cache_dir=cache_dir)
         scanner = _build_scanner(tmp_path / "bench.db", settings)
 
         inicio = time.monotonic()
@@ -544,15 +682,51 @@ def cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.WARNING)
+def _build_parser() -> argparse.ArgumentParser:
+    """Fatorado de `main()` para os testes poderem exercitar o parser real
+    (flags globais + subcomandos) sem rodar o comando inteiro — é o que
+    permite testar a camada de overrides de CLI/env com um Namespace
+    genuíno, em vez de um `argparse.Namespace(...)` montado à mão."""
     parser = argparse.ArgumentParser(prog="fotoorganizer")
+    # Flags globais: terceira camada de precedência sobre `Settings`
+    # (defaults < TOML < aqui). `default=UNSET` é o que permite distinguir
+    # "flag não passado" de "passado com valor vazio/zero/false" — sem
+    # isto, `--workers 0` ou `--no-seguir-symlinks` seriam indistinguíveis
+    # de omitir o flag. Ver `fotoorganizer/config/settings.py`.
     parser.add_argument(
-        "--data-dir", metavar="PASTA",
+        "--data-dir", metavar="PASTA", default=UNSET,
         help="usa outro catálogo em vez do padrão (~/Library/Application "
              "Support/FotoOrganizer) — para testar ou isolar um problema "
-             "sem tocar no catálogo real",
+             "sem tocar no catálogo real (env: FOTOORG_DATA_DIR)",
     )
+    parser.add_argument(
+        "--cache-dir", metavar="PASTA", default=UNSET,
+        help="usa outro cache de thumbnails em vez do padrão "
+             "(env: FOTOORG_CACHE_DIR)",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=UNSET,
+        help="workers paralelos do scanner (env: FOTOORG_WORKERS)",
+    )
+    parser.add_argument(
+        "--incluir-ocultos", action=argparse.BooleanOptionalAction, default=UNSET,
+        help="varre arquivos/pastas ocultos (env: FOTOORG_INCLUIR_OCULTOS)",
+    )
+    parser.add_argument(
+        "--seguir-symlinks", action=argparse.BooleanOptionalAction, default=UNSET,
+        help="atravessa symlinks durante a varredura — desligado por padrão "
+             "(env: FOTOORG_SEGUIR_SYMLINKS)",
+    )
+    parser.add_argument(
+        "--servicos-externos", action=argparse.BooleanOptionalAction, default=UNSET,
+        help="permite serviços externos opt-in (env: FOTOORG_SERVICOS_EXTERNOS)",
+    )
+    # `privacidade.reconhecimento_facial` fica de fora desta camada de
+    # propósito: é o único campo que continua só em defaults + TOML. Ligar
+    # reconhecimento facial (invariante 6) tem de ser uma decisão escrita na
+    # config do usuário, não algo que um script de CI, um alias de shell ou
+    # uma env var herdada do ambiente consigam ligar de passagem. Se um dia
+    # ganhar superfície de CLI, que seja com confirmação explícita.
     sub = parser.add_subparsers(dest="comando", required=True)
 
     p_scan = sub.add_parser("scan", help="varre pastas para o catálogo (read-only)")
@@ -652,11 +826,27 @@ def main(argv: list[str] | None = None) -> int:
     p_bench = sub.add_parser("bench", help="benchmark de indexação com fixtures")
     p_bench.add_argument("-n", "--quantidade", type=int, default=500)
     p_bench.add_argument(
-        "--cache-dir", metavar="PASTA",
+        "--cache-dir", dest="bench_cache_dir", metavar="PASTA",
         help="grava as miniaturas do benchmark aqui em vez de um diretório "
-             "temporário — para medir com o cache real do usuário de propósito",
+             "temporário — para medir com o cache real do usuário de "
+             "propósito. `dest` próprio (não `cache_dir`) para não colidir "
+             "com o `--cache-dir` global, que é outra coisa: aquele troca o "
+             "cache de produção da invocação inteira; este só isola (ou "
+             "não) as miniaturas sintéticas do benchmark.",
     )
     p_bench.set_defaults(func=cmd_bench)
 
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING)
+    parser = _build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ErroDeUso as exc:
+        # `parser.error()` levanta SystemExit(2) depois de imprimir usage +
+        # mensagem no stderr: env var inválida sai igualzinho ao flag
+        # equivalente inválido, em vez de traceback.
+        parser.error(str(exc))
