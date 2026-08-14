@@ -22,7 +22,7 @@ describe("Trips", () => {
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
     montar(<Trips onAbrir={vi.fn()} />);
 
-    const img = (await screen.findByText("Dubai")).closest("button")!
+    const img = (await screen.findByText("Dubai")).closest('[role="button"]')!
       .querySelector("img")!;
     expect(img.getAttribute("src")).toBe("/api/midia/48910/thumb");
   });
@@ -48,10 +48,58 @@ describe("Trips", () => {
     });
     montar(<Trips onAbrir={vi.fn()} />);
 
-    const img = (await screen.findByText("Pantanal")).closest("button")!
+    const img = (await screen.findByText("Pantanal")).closest('[role="button"]')!
       .querySelector("img")!;
     fireEvent.error(img);
 
     expect(screen.getByText("capa fora de alcance")).toBeInTheDocument();
+  });
+
+  it("badge Mapa abre o grupo direto na vista de mapa, sem também disparar o clique do card (D-050)", async () => {
+    servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
+    const onAbrir = vi.fn();
+    montar(<Trips onAbrir={onAbrir} />);
+
+    fireEvent.click(await screen.findByTitle("ver onde este grupo aconteceu"));
+
+    expect(onAbrir).toHaveBeenCalledTimes(1);
+    expect(onAbrir).toHaveBeenCalledWith({ trip_id: 1 }, "Dubai", "mapa");
+  });
+
+  it("clicar no card fora do badge abre na vista padrão (lista)", async () => {
+    servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
+    const onAbrir = vi.fn();
+    montar(<Trips onAbrir={onAbrir} />);
+
+    fireEvent.click(await screen.findByText("Dubai"));
+
+    expect(onAbrir).toHaveBeenCalledTimes(1);
+    expect(onAbrir).toHaveBeenCalledWith({ trip_id: 1 }, "Dubai", undefined);
+  });
+
+  it.each(["Enter", " "])(
+    "card abre por teclado com %s — não é <button> nativo, o app é teclado-first",
+    async (tecla) => {
+      servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
+      const onAbrir = vi.fn();
+      montar(<Trips onAbrir={onAbrir} />);
+
+      const card = (await screen.findByText("Dubai")).closest(
+        '[role="button"]',
+      )!;
+      fireEvent.keyDown(card, { key: tecla });
+
+      expect(onAbrir).toHaveBeenCalledTimes(1);
+      expect(onAbrir).toHaveBeenCalledWith({ trip_id: 1 }, "Dubai", undefined);
+    },
+  );
+
+  it("badge Mapa não é descendente do card — foco/Tab alcança os dois independentemente", async () => {
+    servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    const card = (await screen.findByText("Dubai")).closest('[role="button"]')!;
+    const badge = screen.getByTitle("ver onde este grupo aconteceu");
+    expect(card.contains(badge)).toBe(false);
   });
 });

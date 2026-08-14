@@ -81,6 +81,11 @@ export default function App() {
   // Viagens, lacuna ou faceta no Panorama. Um só, e sempre visível como
   // chip removível — filtro escondido é filtro que confunde.
   const [recorte, setRecorte] = useState<Recorte | null>(null);
+  // Vista pedida para o PRÓXIMO recorte (badge "Mapa" do card em Viagens,
+  // D-050) — consumida pelo efeito abaixo e limpa em seguida. Não é state
+  // porque não deve disparar re-render nem sobreviver além do próximo
+  // recorte: é um recado de uma escrita pra outra, não algo pra tela ler.
+  const vistaPendente = useRef<"lista" | "mapa" | null>(null);
   // O dono importou 44.661 fotos do Apple Fotos e a Biblioteca respondia (0):
   // elas não têm arquivo local e ficavam invisíveis. Agora aparecem por
   // padrão, marcadas, e este controle isola o que é acionável.
@@ -123,9 +128,14 @@ export default function App() {
     setLoupeAberto(false);
   }, [busca, fonte, ordenacao, recorte, alcance, mes]);
 
-  // Recorte novo volta para a lista: um mapa de outro grupo herdado do
-  // anterior seria a tela certa respondendo pela viagem errada.
-  useEffect(() => setVisaoGrupo("lista"), [recorte]);
+  // Recorte novo volta para a lista por padrão: um mapa de outro grupo
+  // herdado do anterior seria a tela certa respondendo pela viagem errada.
+  // Exceção explícita: o badge "Mapa" do card em Viagens (D-050) grava a
+  // vista pretendida em `vistaPendente` antes de trocar o recorte.
+  useEffect(() => {
+    setVisaoGrupo(vistaPendente.current ?? "lista");
+    vistaPendente.current = null;
+  }, [recorte]);
 
   const navegar = useCallback(
     (destino: number) => {
@@ -263,8 +273,9 @@ export default function App() {
           {aba === "Viagens" && (
             <Trips
               fonte={fonte ?? undefined}
-              onAbrir={(filtro, nome) => {
+              onAbrir={(filtro, nome, vista) => {
                 setBusca("");
+                vistaPendente.current = vista ?? null;
                 setRecorte({ ...filtro, nome });
                 setAba("Biblioteca");
               }}
