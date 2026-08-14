@@ -10,6 +10,7 @@ const NIVEIS = [
   ["exato", "Idênticos"],
   ["conteudo", "Mesmo conteúdo"],
   ["visual", "Parecidos"],
+  ["variante", "RAW + JPEG"],
   ["sequencia", "Sequências"],
 ] as const;
 
@@ -40,8 +41,10 @@ export default function Duplicates({ job }: { job: Job }) {
     (g) => nivel === "todos" || g.nivel === nivel,
   );
   const grupo = visiveis.find((g) => g.id === grupoId) ?? visiveis[0] ?? null;
+  // sequencia (rajada) e variante (RAW+JPEG) não têm bytes "recuperáveis" —
+  // nos dois casos o normal é manter todos os membros, não descartar.
   const recuperavel = (grupos ?? [])
-    .filter((g) => g.nivel !== "sequencia")
+    .filter((g) => g.nivel !== "sequencia" && g.nivel !== "variante")
     .reduce((soma, g) => soma + g.bytes_recuperaveis, 0);
 
   return (
@@ -88,7 +91,9 @@ export default function Duplicates({ job }: { job: Job }) {
               <div className="flex items-center justify-between">
                 <span
                   className={
-                    g.nivel === "sequencia" ? "text-atencao" : undefined
+                    g.nivel === "sequencia" || g.nivel === "variante"
+                      ? "text-atencao"
+                      : undefined
                   }
                 >
                   {g.rotulo}
@@ -98,7 +103,9 @@ export default function Duplicates({ job }: { job: Job }) {
               <div className="text-texto-2">
                 {g.nivel === "sequencia"
                   ? "escolha o melhor frame"
-                  : `${tamanhoLegivel(g.bytes_recuperaveis)} recuperáveis`}
+                  : g.nivel === "variante"
+                    ? "RAW + JPEG — normalmente mantenha os dois"
+                    : `${tamanhoLegivel(g.bytes_recuperaveis)} recuperáveis`}
                 {g.n_fontes > 1 ? ` · em ${g.n_fontes} fontes` : ""}
                 {g.resolvido_automaticamente
                   ? " · resolvido automaticamente"
@@ -138,7 +145,9 @@ export default function Duplicates({ job }: { job: Job }) {
                 ? "Cópia idêntica (SHA-256) — o algoritmo já marcou a principal. Escolha outra se discordar."
                 : grupo.nivel === "sequencia"
                   ? "Rajada da mesma câmera — marque o melhor frame como principal."
-                  : "Marque a cópia a manter como principal."}
+                  : grupo.nivel === "variante"
+                    ? "RAW + JPEG do mesmo clique — normalmente mantenha os dois; marcar uma exclui a outra do plano."
+                    : "Marque a cópia a manter como principal."}
             </span>
             <Botao tamanho="sm"
               onClick={() =>
@@ -189,10 +198,17 @@ export default function Duplicates({ job }: { job: Job }) {
                             body: { media_id: m.media_id },
                           })
                         }
+                        title={
+                          grupo.nivel === "variante"
+                            ? "A outra versão (RAW ou JPEG) sai do plano de cópia — continua no disco de origem, mas não vai para o destino organizado."
+                            : undefined
+                        }
             className="bg-transparent hover:border-ok hover:text-ok">
                         {grupo.nivel === "sequencia"
                           ? "Melhor frame"
-                          : "Manter esta"}
+                          : grupo.nivel === "variante"
+                            ? "Manter só esta"
+                            : "Manter esta"}
                       </Botao>
                     )}
                   </div>

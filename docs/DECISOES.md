@@ -2285,3 +2285,154 @@ inteiro passa a ser contado numa passada só
   reescrito no catálogo — a mudança é de leitura, e as contagens antigas
   voltam inteiras.
 - Status: decidido
+
+## D-069 — Auditoria pós-gate da fase 5: 18 achados medidos, nenhum é regressão desta sessão
+
+- Fase: pós-gate — auditoria disparada pelo dono testando a UI depois do
+  merge de PR #4/#5/#6 e reportando "caos" (fotos que não carregam, filtros
+  confusos, classificações erradas)
+- Classe: B — 18 candidatos a decisão, nenhuma implementação feita
+- Data: 2026-08-14
+- Contexto: quatro achados da revisão ao vivo (Teatro→Viagens, Bezerros→
+  Eventos, badge "Alta" enganoso em "Não classificadas", "2013/Gana" sem
+  prefixo) motivaram uma auditoria mais ampla, em duas frentes: (A) medir a
+  extensão real desses padrões e auditar as demais telas vivas (Panorama,
+  Biblioteca, Viagens, Revisão, Duplicatas, Operações); (B) checar se
+  PhotoPrism/Immich (já auditados em profundidade na fase 14,
+  `docs/referencia-photoprism/`, `docs/referencia-immich/`) têm mecanismo
+  para inspirar solução.
+- Gate obrigatório antes de investigar: `git diff 48c4378 HEAD` (commit
+  anterior à sessão inteira → HEAD) mostra ZERO diferenças em
+  `grouping/classifier.py`, `grouping/eventos.py`, `classification/
+  lexico.py` — o código que decide Teatro/Bezerros já existia, inalterado.
+  `engine.py` mudou só em `_categoria` (nova regra 2b, D-057, abaixo da
+  checagem que decide esses casos) e `_resolver_locations` (geo cedo,
+  D-051/052/058, pode ter mudado a CONTAGEM do achado "Gana" sem mudar a
+  regra). **Nenhum dos 18 achados é regressão desta sessão.**
+- **Atualização (mesmo dia):** a comparação empírica (rodar `gerar()` real
+  com o código de 48c4378 contra cópia do catálogo, ~1h22 de CPU) terminou
+  e confirma o diff sem nenhuma divergência — media_id 233091 e 454553
+  produzem, com o código pré-sessão, exatamente o mesmo destino/nível/
+  evidência que produzem hoje. Fecha a dúvida por completo.
+- Frente B fechada sem scrape novo do demo do PhotoPrism: a auditoria de
+  código-fonte da fase 14 já mostra que nem PhotoPrism nem Immich têm
+  confiança por campo/inferência (só origem, enum fixo) nem categorização
+  automática por nome de pasta — confirmado por busca externa
+  (WebSearch/WebFetch) sem achar isso em nenhum produto de mercado
+  (Lightroom, Mylio, Synology Photos). Badge enganoso e categoria ambígua
+  são problemas sem precedente nos produtos de referência, não há
+  mecanismo de terceiro para citar — a solução é original do
+  foto-organizer. Onde havia mecanismo relevante (achado 9, lote
+  assimétrico — clipboard.vue do PhotoPrism), está citado com
+  `arquivo:linha`.
+- Os 18 achados, com evidência (query SQL real ou `arquivo:linha`), volume
+  medido e severidade, estão em
+  `docs/auditoria-pos-gate-fase5.md`. Resumo por tier:
+  - **Tier 1 (risco de dado / bloqueio de uso básico)**: duplicata VARIANTE
+    pode levar a excluir RAW ou JPEG do plano de cópia sem aviso (2.514
+    conjuntos candidatos, 1 já confirmado classificado errado — toca o
+    invariante de segurança #8 do `CLAUDE.md`); badge "Alta" reflete só
+    confiança da data em 29,6% do acervo (28.635 fotos, 97,8% do maior
+    bucket "Não classificadas"); aba Viagens falsamente vazia por
+    50–120+s (N+1 de query, provável causa direta do "caos" relatado);
+    confiança agregada contradiz as evidências de que depende no próprio
+    popover "por quê?".
+  - **Tier 2 (misclassificação/falha real, escala moderada)**:
+    categorização "Eventos" 100% por heurística fraca, nunca por
+    vocabulário literal (11.492 fotos); ações de duplicata falham em
+    silêncio; inventário por pasta O(n²), vai travar visivelmente na maior
+    pasta real (7.618 fotos); Panorama mostra dois números "organizáveis"
+    diferentes (96.692 vs 92.792); "Rejeitar em lote" não existe, só
+    "Aprovar em lote".
+  - **Tier 3 (inconsistência visual/nomenclatura, sem risco de dado)**:
+    destino sem prefixo de categoria (668 fotos); mesma viagem fragmentada
+    em 5 grafias/categorias na fila de Revisão; 23 de 60 cards de viagem
+    chamados "Brasil"; rótulo da sidebar da Biblioteca não bate com o
+    total do filtro (5x de diferença); painel "O acervo" sem loading
+    state (13–20s de silêncio); plano preso em "executando" após crash
+    nunca reconcilia; sem timestamp de última detecção de duplicata.
+  - **Tier 4**: grupos de duplicata não explicam por quê foram agrupados.
+- Como cheguei aqui: 3 agentes de domínio em paralelo (`agente-arquivos` →
+  Operações/Duplicatas; `agente-imagem` → classificação/geolocalização,
+  medição da extensão dos 4 achados originais; `agente-ux` → Panorama/
+  Biblioteca/Viagens/Revisão, rodando contra o servidor real em
+  `127.0.0.1:8765`), mesmo padrão de auditoria paralela por especialidade
+  que já produziu `docs/referencia-photoprism/` na fase 14.
+- Opções levadas ao dono: (a) revisar os 18 achados e aprovar a ordem de
+  correção tier a tier, abrindo a fronteira (`fotoorganizer/**`,
+  `webapp/src/**`) achado a achado como de costume; (b) priorizar só o
+  Tier 1 (risco de dado + os dois achados de maior escala) para uma
+  próxima fatia imediata; (c) tratar como backlog e seguir noutra frente
+  primeiro.
+- Recomendada: (b) — o achado 1 (VARIANTE) é o único desta lista que toca
+  um invariante de segurança do projeto, não só qualidade de sugestão; os
+  achados 2-4 do Tier 1 são os de maior volume/visibilidade e explicam a
+  maior parte do "caos" relatado.
+- Como reverter: nada a reverter — auditoria somente leitura, nenhum
+  arquivo de código tocado. `docs/auditoria-pos-gate-fase5.md` e esta
+  entrada são aditivos.
+- Status: aguardando (classe B — 18 candidatos a decisão, dono escolhe
+  ordem e escopo de correção).
+
+## D-070 — Fatia #1 de D-069: UI de duplicata VARIANTE não avisa mais ao excluir RAW ou JPEG
+
+- Fase: pós-gate — primeira fatia do achado 1 (Tier 1) de D-069, fronteira
+  aberta a pedido explícito do dono para esta fatia especificamente
+- Classe: A — execução de achado já registrado, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: D-069 achado 1 — `webapp/src/components/Duplicates.tsx` tratava
+  um grupo VARIANTE (RAW+JPEG do mesmo clique) como duplicata comum
+  ("marque a cópia a manter como principal"), quando `fotoorganizer/
+  duplicates/detector.py` já documenta que "o dono quase sempre quer os
+  dois". Investiguei o backend antes de mexer na UI: `escolher_principal`
+  (`repositories/duplicates.py:149-165`) é indiferente ao nível — marcar
+  uma como principal marca a outra `VERSAO` para QUALQUER nível, e
+  `planner.py:78-86` exclui `VERSAO` do plano de cópia. `_herdar_metadados`
+  já protege contra perda de metadado (o invariante 8 não é violado — nada
+  é apagado), mas nada avisava que essa é uma decisão diferente para um
+  par RAW+JPEG.
+- Implementado, só em `Duplicates.tsx` (nenhuma mudança de backend — a
+  detecção e a proteção de metadado já estavam corretas):
+  1. Filtro novo "RAW + JPEG" na barra de níveis (`NIVEIS`).
+  2. Texto de orientação distinto para `variante`, avisando que
+     normalmente os dois devem ficar e que marcar uma como principal
+     exclui a outra do plano.
+  3. Bytes de `variante` fora do total "recuperáveis" do cabeçalho (mesmo
+     tratamento que `sequencia` já tinha, e pela mesma razão: não é espaço
+     a recuperar quando o normal é manter todos os membros).
+  4. Botão por membro: label "Manter só esta" (em vez de "Manter esta") e
+     `title` explicando a consequência exata ("a outra versão sai do plano
+     de cópia — continua no disco de origem").
+  5. Rótulo do grupo na lista lateral ganha a mesma cor de alerta
+     (`text-atencao`) que `sequencia` já tinha — mesma classe de risco,
+     mesmo sinal visual.
+- Não fiz nesta fatia (fora de escopo, ver D-069 nota do achado): rodar
+  nova detecção de duplicatas no catálogo real para reclassificar o par já
+  confirmado como CONTEUDO por estar desatualizado (grupo id 4880,
+  `IMG_3588.CR2`+`.jpg`) — é ação de escrita no catálogo de produção,
+  fica para quando o dono clicar "Detectar" normalmente.
+- Revisão com olhos frescos (subagente `agente-ux`, contexto isolado, só o
+  diff) achou um bug real antes do commit: a primeira versão do texto de
+  orientação (163 caracteres) estourava o `truncate` de uma linha do
+  `<span>` que o carrega — testado ao vivo contra a página real, cortava
+  em "...Ignorar gr" e nunca chegava ao aviso "marcar uma exclui a outra",
+  que é o motivo da fatia existir. Corrigido: texto reduzido para 94
+  caracteres (perto do precedente de `exato`, 89 caracteres, confirmado
+  que cabe). A revisão também achou a inconsistência de cor (item 5 acima,
+  incorporado).
+- Achado extra durante a verificação na UI real, fora do escopo desta
+  fatia, registrado em `docs/auditoria-pos-gate-fase5.md` §2.1 como achado
+  19: `/api/duplicatas` devolve os 41.996 grupos do catálogo real numa
+  resposta só (58 MB), sem paginação — a tela fica em branco por alguns
+  segundos, sem loading state, ao abrir a aba Duplicatas.
+- Verificação: `scripts/verificar.sh` verde (701 testes, 17/17 benchmark,
+  115 testes de UI — 5 no arquivo desta fatia, 2 novos); provado no dev
+  server (`foto-organizer-web-fase-5-audit`, porta 8405) contra o catálogo
+  real — filtro "RAW + JPEG" isola corretamente (0 grupos hoje, como
+  esperado — a última detecção rodou antes da feature existir), demais
+  níveis (`Mesmo conteúdo` testado ao vivo) sem regressão.
+- Como reverter: `git revert` do commit desta fatia — só toca
+  `Duplicates.tsx`/`.test.tsx`, sem migração nem mudança de schema.
+- Status: decidido (implementado e commitado). D-069 achado 1 fechado; os
+  outros 17 achados de D-069 continuam aguardando.
