@@ -2581,3 +2581,53 @@ inteiro passa a ser contado numa passada só
   precisar desfazer o schema também.
 - Status: decidido (implementado e commitado). D-069 achado 3 fechado; 15
   achados de D-069 continuam aguardando.
+
+## D-073 — Mês por extenso sem reconhecimento em grouping/datas.py — achado 5 de D-069
+
+- Fase: pós-gate — resgate de WIP não commitado, encontrado num worktree
+  órfão de PR #7 (auditoria pós-gate da fase 5, D-069) ao limpar
+  worktrees; branch nova, fora do escopo do #7
+- Classe: A — bug de correção determinística, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: achado 5 de D-069 ("Categorização 'Eventos' por heurística
+  fraca") mede 3.220 fotos (48 rótulos) cuja pasta é cronológica
+  ("2009/novembro 30", ano na pasta-mãe) virando falso nome de evento —
+  `_PADROES` de `separar_data()` não reconhecia "mês por extenso + dia"
+  nem "dia de mês de ano" por extenso, então o segmento sobrava inteiro
+  como se fosse nome, e a regra 6 da cascata (`grouping/classifier.py`,
+  álbum + duração ≤2 dias) promovia isso a evento. Duas lacunas
+  relacionadas, mesma raiz:
+  - "29 de outubro de 2016" (dia primeiro, por extenso, com ano): 303
+    fotos reais tinham destino tipo "Eventos/2016/29 de" — só a cauda
+    "outubro de 2016" casava no padrão existente, "29 de" sobrava.
+  - "novembro 30" (mês por extenso + dia, SEM ano — o ano mora na
+    pasta-mãe, estrutura por dia dentro do ano): não vira `DataDaPasta`
+    (falta o ano neste segmento; quem cruza com o ano da árvore é
+    `data_no_caminho`), mas precisa ser reconhecido como data e não como
+    nome, senão o segmento inteiro sobra igual.
+- Implementado: dois padrões novos em `grouping/datas.py` — um regex em
+  `_PADROES` para "dia de mês de ano" por extenso, e `_MES_DIA_SEM_ANO`
+  (âncora `^...$` no segmento inteiro, de propósito: "Viagem novembro 30"
+  é nome de verdade que só CONTÉM a palavra, não pode ser esvaziado) para
+  "mês dia" sem ano, com a mesma validação de faixa do dia (1-31) que
+  `_montar` já faz pros outros padrões — sem isto, "Julho 85" seria
+  engolido como se fosse dia 85.
+- Achado durante a revisão, corrigido antes do commit: a normalização NFC
+  já resolvida por D-067 (mesmo módulo, sessão anterior) cobre "março"
+  acentuado; os dois padrões novos são ortogonais a isso e não precisaram
+  de mudança na normalização.
+- Teste novo (`tests/test_datas_em_pastas.py`): datas por extenso com dia
+  (parametrizado em `test_separa_nome_e_data`), `test_mes_dia_sem_ano_*`
+  (esvazia nome, não esvazia nome que só contém a palavra, valida faixa
+  do dia) e `test_marco_em_nfd_bate_igual_a_nfc` (NFC/NFD contra os novos
+  padrões, não só os antigos). Cenário novo em
+  `scripts/avaliar_agrupamento.py` para os dois formatos.
+- Verificação: `scripts/verificar.sh` verde.
+- Como reverter: reverter o commit desta fatia — isolado em
+  `fotoorganizer/grouping/datas.py`, `tests/test_datas_em_pastas.py` e
+  `scripts/avaliar_agrupamento.py`.
+- Status: decidido e implementado. Achado 5 de D-069 parcialmente
+  fechado (a fração 3.220/8.192 da regra 6 que era pasta cronológica); a
+  fração por keyword fraca (regra 2, 3.300 fotos) e o resto de "álbum +
+  duração" continuam abertos.

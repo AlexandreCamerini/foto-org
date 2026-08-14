@@ -127,7 +127,7 @@ def classificar(
     # NFKD+ascii, não só lower(): o Finder/APFS grava pasta acentuada em NFD
     # (marcador combinante intercalado entre letras), que não bate como
     # substring nem contra a forma acentuada nem contra a sem-acento — mesma
-    # causa raiz do D-070 em grouping/datas.py.
+    # causa raiz do D-067 em grouping/datas.py.
     pasta_baixa = _normalizar(pasta)
     tem_camera = _tem_assinatura_de_camera(make, model, lente, exposicao)
 

@@ -60,7 +60,7 @@ class TestReconhece:
     def test_pasta_transferencias_bate_em_nfc_e_nfd(self, forma):
         """"Transferências" é o nome real do Downloads no macOS em PT-BR, e o
         APFS grava pasta acentuada em NFD (marcador combinante intercalado
-        entre letras) — mesma causa raiz do D-070 em grouping/datas.py."""
+        entre letras) — mesma causa raiz do D-067 em grouping/datas.py."""
         pasta = unicodedata.normalize(forma, "/Users/eu/Transferências")
         v = _cls(nome="banner.jpg", pasta=pasta)
         assert v.tipo == BAIXADA

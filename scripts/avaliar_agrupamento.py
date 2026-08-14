@@ -53,6 +53,15 @@ CENARIOS = [
     Cenario("pasta técnica de data, 2h",
             _sessao(["/Users/a/Pictures/2025_05_24/[Originals]"], horas=2),
             "neutra"),
+    # D-073: pasta cronológica (mês por extenso + dia, ano na pasta-mãe)
+    # virava "nome de álbum" e a regra 6 promovia a evento falso — achado
+    # 5 de D-069, 3.220 fotos reais do acervo.
+    Cenario("pasta cronológica 'mês dia' sem ano, 2h",
+            _sessao(["/Users/a/Pictures/2009/novembro 30"], horas=2),
+            "neutra"),
+    Cenario("pasta cronológica 'dia de mês de ano' por extenso, 2h",
+            _sessao(["/Users/a/Pictures/2016/29 de outubro de 2016"], horas=2),
+            "neutra"),
     # — viagens —
     Cenario("pasta Viagens/, 1 dia",
             _sessao(["/fotos/Viagens/Praia"], dias=1), "viagem"),
