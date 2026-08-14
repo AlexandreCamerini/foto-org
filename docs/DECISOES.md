@@ -1929,3 +1929,30 @@ uma fatia
 - Como reverter: uma linha (`MODELO_PADRAO`) mais o comentário —
   `git revert` do commit isolado.
 - Status: decidido pelo dono. Decisão 1 do gate fechada.
+
+## D-061 — Decisão 3 do gate fechada: inventário por pasta entra antes do lançamento
+
+- Fase: 5 (revisão do plano, decisão 3 do gate — segue D-055, fecha o gate)
+- Classe: B
+- Data: 2026-08-13
+- Contexto: `docs/PLANO_IA_E_PRODUTO.md` §8 já recomendava "antes, é
+  barato agora e caro depois" para o inventário por pasta
+  (`inventario.json`+`INVENTARIO.md` por pasta de destino, evidência por
+  foto). A trava com o Item B (protecao-julgamento) não existia de
+  verdade (D-055) — a única pendência real era o dono confirmar o
+  timing.
+- Recomendação dada: manter "antes", especificamente antes da primeira
+  aprovação de execução física real — nenhuma cópia ainda rodou no
+  acervo do dono (D-011), então o custo de retrofit ainda não começou a
+  se acumular, e o histórico do próprio projeto (D-026, D-035, D-036,
+  D-037) mostra retrofit como fonte real de dor, não hipótese.
+- Decisão do dono: confirma "antes do lançamento".
+- Consequência: as três decisões do gate da fase 5 estão fechadas —
+  decisão 1 (Sonnet 5, D-060), decisão 2 (visão/rostos só local, sem
+  pendência), decisão 3 (inventário antes do lançamento, aqui). O que
+  falta não é mais decisão, é plano de implementação: schema exato de
+  `inventario.json`/`INVENTARIO.md`, e onde no pipeline de
+  `operations/executor.py` ele entra — não desenhado nesta sessão, fica
+  para quando o dono priorizar essa fatia.
+- Como reverter: registro de decisão, não código — não se aplica.
+- Status: decidido pelo dono. Gate da fase 5 fechado nas três decisões.
