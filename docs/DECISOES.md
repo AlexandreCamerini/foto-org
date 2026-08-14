@@ -2436,3 +2436,83 @@ inteiro passa a ser contado numa passada só
   `Duplicates.tsx`/`.test.tsx`, sem migração nem mudança de schema.
 - Status: decidido (implementado e commitado). D-069 achado 1 fechado; os
   outros 17 achados de D-069 continuam aguardando.
+
+- Status: decidido (implementado e commitado). D-069 achado 1 fechado; os
+  outros 17 achados de D-069 continuam aguardando.
+
+## D-071 — Fatia #2 de D-069: badge "Alta" em "Não classificadas" vira "Sem categoria"
+
+- Fase: pós-gate — segunda fatia de D-069 (achado 2, Tier 1, o maior em
+  extensão numérica da auditoria — 28.635 fotos, 29,6% do acervo), fronteira
+  aberta a pedido explícito do dono para esta fatia especificamente
+- Classe: A — execução de achado já registrado, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: D-069 achado 2 — sugestões com destino "Não classificadas/..."
+  (nenhuma evidência de categoria/viagem/evento, só a data EXIF, score 0.95)
+  mostravam badge de confiança "Alta", implicando confiança numa
+  classificação que não existe.
+- Decisão de desenho, antes de tocar em qualquer código: **não mexer no
+  cálculo de `nivel`**. Lido `docs/CONFIANCA.md` e
+  `fotoorganizer/classification/confidence.py`/`engine.py::_salvar_sugestao`
+  — a regra "elo mais fraco entre os campos USADOS NO DESTINO" está correta
+  por definição: para esses casos, o único campo usado É a data, e 0.95 é a
+  confiança real da data. O bug não é o score, é a PRESENTAÇÃO — o badge
+  "Alta" ao lado de "Não classificadas" implica classificação confiável, que
+  simplesmente não existe. Mudar o score seria inventar uma régua nova, na
+  contramão do que `docs/CONFIANCA.md` já resolveu; a fatia ficou só em UI.
+- Achado relacionado, decidido deixar de fora (achado 4 de D-069, agregado
+  contradiz evidência — ex. "Teatro": país/região Média, viagem/categoria
+  Alta): investigado e é uma questão DIFERENTE — a exclusão de país/região do
+  cálculo quando há viagem/evento é decisão de produto já documentada e
+  deliberada (`engine.py`, comentário "UMA VIAGEM É UMA PASTA": a geocodificação
+  cobre só uma fração do acervo, então deixar a hierarquia de lugar descer
+  fragmentava a viagem em várias pastas por acidente de qual foto tinha GPS).
+  Rediscutir essa régua é fatia própria, não bug de badge — fica de fora.
+- Implementado:
+  1. `webapp/src/sugestoes.ts` (novo): `DESTINO_NAO_CLASSIFICADO` (mesma
+     string de `classification/templates.py`) e `naoClassificado(destino)`.
+  2. `webapp/src/components/Confianca.tsx`: prop `naoClassificado` — quando
+     true, troca os 3 segmentos "Alta/Média/Baixa" por um estado distinto
+     "Sem categoria" (3 segmentos vazios — mesma gramática visual, quantidade
+     não cor, D-017), com tooltip explicando que a data é confiável mas não
+     há categoria.
+  3. `webapp/src/components/Review.tsx`: os dois pontos que renderizavam
+     `<Confianca nivel={...} />` (cabeçalho do grupo e linha da foto) passam
+     `naoClassificado={naoClassificado(destino)}`.
+  4. `webapp/src/components/Inspector.tsx`: mesmo ponto (painel de 3 colunas,
+     seleção direta na grade) — achado pela revisão fresh-eyes, não pela
+     auditoria original (ver abaixo).
+  5. Evidência individual (`ev.nivel` no popover "por quê?" e no Inspetor)
+     **não muda** — "data: ... Confiança Alta" continua correto: é a
+     confiança daquela evidência específica, não do destino agregado.
+- Revisão com olhos frescos achou um bug real antes do commit: o Inspetor
+  (`Inspector.tsx:100`) renderizava o mesmo badge e tinha ficado de fora da
+  primeira versão da fatia — é o caminho mais direto (selecionar foto na
+  grade, sem abrir Revisão) e provavelmente o mais percorrido. Corrigido:
+  `naoClassificado`/`DESTINO_NAO_CLASSIFICADO` extraídos para
+  `webapp/src/sugestoes.ts` (antes viviam só em `Review.tsx`) e aplicados
+  também no Inspetor, com teste dedicado.
+- Risco identificado e aceito conscientemente: `naoClassificado()` casa a
+  string `destino` contra a constante Python duplicada no TS. Hoje é seguro
+  (string única, sem parametrização, batida contra `templates.py`/
+  `engine.py`), mas nada no CI quebra se a constante do lado Python mudar —
+  o sintoma seria o mesmo bug desta fatia voltando em silêncio. Não bloqueou
+  a fatia (comentário rastreável ao arquivo/símbolo de origem já reduz o
+  risco); um teste de contrato entre backend e frontend fica como debt
+  registrado, não resolvido aqui.
+- Verificação: `scripts/verificar.sh` verde (701 testes, 17/17 benchmark,
+  118 testes de UI — 3 novos: 2 em `Review.test.tsx`, 1 em
+  `Inspector.test.tsx`); provado no dev server (porta 8405) contra o
+  catálogo real — a linha exata do achado ("20140719-144517 → Não
+  classificadas/2014/jul.2014 · 1.784 fotos") mostra "Sem categoria"; casos
+  genuinamente classificados ("Teatro → Viagens/2026 - Brasil") continuam
+  "Alta" sem regressão; API `/api/midia/450691` confirmada com o mesmo
+  contrato que o teste do Inspetor usa.
+- Como reverter: `git revert` do commit desta fatia — só toca
+  `Confianca.tsx`, `Review.tsx`, `Inspector.tsx`, `sugestoes.ts` (novo) e os
+  testes; sem migração, sem mudança de schema, sem tocar em
+  `classification/**`.
+- Status: decidido (implementado e commitado). D-069 achado 2 fechado; 16
+  achados de D-069 continuam aguardando (achado 4 explicitamente NÃO
+  resolvido por esta fatia — ver acima).

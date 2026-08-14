@@ -338,6 +338,75 @@ describe("Review", () => {
   });
 });
 
+describe("badge de confiança em 'Não classificadas'", () => {
+  // D-071: sem nenhuma evidência de categoria/viagem/evento, o nível vem só
+  // da confiança da DATA (EXIF, 0.95 → "alta") — mostrar "Alta" ao lado de
+  // "Não classificadas" mentia sobre existir uma classificação.
+  const SUGESTOES_SEM_CATEGORIA = {
+    contagens: { pendente: 2 },
+    total: 2,
+    itens: [
+      {
+        id: 1, media_id: 21, nome: "20140719-144517.jpg", pasta: "/fotos/nov",
+        destino: "Não classificadas/2014/jul.2014", nivel: "alta",
+        status: "pendente", data_capturada: "2014-07-19T14:45:17",
+        camera: null, gps_estimado: false,
+      },
+      {
+        id: 2, media_id: 22, nome: "IMG_9100.jpg", pasta: "/fotos/iPhone",
+        destino: "Viagens/2024 - França", nivel: "alta", status: "pendente",
+        data_capturada: "2024-05-04T10:30:00", camera: "Apple iPhone 15 Pro",
+        gps_estimado: false,
+      },
+    ],
+  };
+  const GRUPOS_SEM_CATEGORIA = [
+    {
+      destino: "Não classificadas/2014/jul.2014", total: 1, nivel: "alta",
+      estimadas: 0, fora_de_alcance: 0,
+      origens: [{ pasta: "/fotos/nov", fotos: 1 }],
+    },
+    {
+      destino: "Viagens/2024 - França", total: 1, nivel: "alta",
+      estimadas: 0, fora_de_alcance: 0,
+      origens: [{ pasta: "/fotos/iPhone", fotos: 1 }],
+    },
+  ];
+
+  it("grupo 'Não classificadas' com nível alta mostra 'Sem categoria', não 'Alta'", async () => {
+    servirApi({
+      "/api/sugestoes": SUGESTOES_SEM_CATEGORIA,
+      "/api/sugestoes/grupos": GRUPOS_SEM_CATEGORIA,
+    });
+    montar(<Review job={jobParado()} />);
+
+    await screen.findByText("Não classificadas/2014/jul.2014");
+    // Os dois grupos nascem fechados: o rótulo do cabeçalho é o único
+    // "Sem categoria"/"Alta" visível sem abrir nada.
+    expect(screen.getByText("Sem categoria")).toBeInTheDocument();
+    // O grupo classificado (Viagens), mesmo nível "alta" no fixture,
+    // continua mostrando "Alta" normalmente — não é regressão geral.
+    expect(screen.getByText("Alta")).toBeInTheDocument();
+  });
+
+  it("linha 'Não classificadas' também troca o badge — não só o cabeçalho do grupo",
+    async () => {
+      servirApi({
+        "/api/sugestoes": SUGESTOES_SEM_CATEGORIA,
+        "/api/sugestoes/grupos": GRUPOS_SEM_CATEGORIA,
+      });
+      const usuario = userEvent.setup();
+      montar(<Review job={jobParado()} />);
+
+      await abrirGrupo(usuario, "Não classificadas/2014/jul.2014");
+      await screen.findByText("20140719-144517.jpg");
+
+      // Cabeçalho do grupo + linha da foto: os dois pontos que usavam
+      // <Confianca nivel={...}> têm que refletir a troca.
+      expect(screen.getAllByText("Sem categoria").length).toBeGreaterThanOrEqual(2);
+    });
+});
+
 describe("foto fora de alcance", () => {
   it("a linha diz por quê em vez de desenhar imagem quebrada", async () => {
     // O primeiro grupo da fila de um acervo real estava inteiro num volume

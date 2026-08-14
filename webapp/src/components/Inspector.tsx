@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { api, type Media, type MediaDetalhe } from "../api";
 import { formatarData } from "../data";
+import { naoClassificado } from "../sugestoes";
 import { Confianca } from "./Confianca";
 import Botao from "../ui/Botao";
 
@@ -97,7 +98,10 @@ export default function Inspector({ media }: { media: Media | null }) {
             <div className="mt-3 border-t border-borda pt-3">
               <div className="titulo-painel mb-2 flex items-center justify-between px-0">
                 <span>Sugestão</span>
-                <Confianca nivel={detalhe.sugestao.nivel} />
+                <Confianca
+                  nivel={detalhe.sugestao.nivel}
+                  naoClassificado={naoClassificado(detalhe.sugestao.destino)}
+                />
               </div>
               <div className="mb-2 break-all rounded-md bg-cartao px-2 py-1.5">
                 {detalhe.sugestao.destino}

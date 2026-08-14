@@ -107,6 +107,33 @@ describe("Inspector", () => {
       .not.toBeInTheDocument();
   });
 
+  it("sugestão 'Não classificadas' mostra 'Sem categoria', não 'Alta' (D-071)", async () => {
+    // Mesmo bug do achado em Review.tsx, achado pela revisão fresh-eyes
+    // daquela fatia: o Inspetor é o painel mais direto (seleciona a foto na
+    // grade, sem precisar abrir Revisão) e tinha ficado de fora.
+    servirApi({
+      "/api/midia/7": {
+        ...DETALHE_HERDADO,
+        sugestao: {
+          id: 3, destino: "Não classificadas/2014/jul.2014", nivel: "alta",
+          status: "pendente",
+          evidencias: [{
+            campo: "data", origem: "exif", valor: "2014-07-19T14:45:17",
+            nivel: "alta", score: 0.95,
+            justificativa: "data de captura lida do EXIF (DateTimeOriginal)",
+          }],
+        },
+      },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    await screen.findByText("Não classificadas/2014/jul.2014");
+    expect(screen.getByText("Sem categoria")).toBeInTheDocument();
+    // A evidência individual continua legitimamente "Alta" — é a confiança
+    // da DATA, correta e sem relação com a ausência de categoria.
+    expect(screen.getByText(/data: 2014-07-19T14:45:17/)).toBeInTheDocument();
+  });
+
   it("sem sugestão, a estimativa ainda se explica", async () => {
     servirApi({ "/api/midia/7": { ...DETALHE_HERDADO, sugestao: null } });
     montar(<Inspector media={MEDIA} />);
