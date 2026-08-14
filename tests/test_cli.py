@@ -111,3 +111,41 @@ def test_data_dir_isola_o_catalogo_do_padrao(tmp_path, capsys):
     # E o padrão do usuário não foi tocado.
     from fotoorganizer.config import paths
     assert paths.default_data_dir() not in alternativo.parents
+
+
+def test_bench_nao_grava_miniaturas_no_cache_real_do_usuario(
+    monkeypatch, tmp_path, capsys
+):
+    """`bench` usa um banco temporário (`tmp_path / "bench.db"`) para não
+    tocar no catálogo real — o cache de miniaturas tinha o mesmo objetivo
+    mas caía no padrão de `Settings` quando ``--cache-dir`` não era passado,
+    misturando miniaturas sintéticas ao cache de produção."""
+    from fotoorganizer.config.settings import Settings
+
+    import fotoorganizer.cli as cli
+
+    cache_real = tmp_path / "cache-real-do-usuario"
+    settings = Settings(data_dir=tmp_path / "dados", cache_dir=cache_real)
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+
+    assert main(["bench", "-n", "3"]) == 0
+
+    assert not cache_real.exists()
+
+
+def test_bench_com_cache_dir_explicito_usa_a_pasta_escolhida(
+    monkeypatch, tmp_path, capsys
+):
+    """``--cache-dir`` é para medir com o cache real de propósito — quando
+    passado, o benchmark deve respeitar a escolha em vez de isolar."""
+    from fotoorganizer.config.settings import Settings
+
+    import fotoorganizer.cli as cli
+
+    cache_alvo = tmp_path / "cache-de-teste"
+    settings = Settings(data_dir=tmp_path / "dados", cache_dir=tmp_path / "nao-usado")
+    monkeypatch.setattr(cli, "load_settings", lambda: settings)
+
+    assert main(["bench", "-n", "3", "--cache-dir", str(cache_alvo)]) == 0
+
+    assert cache_alvo.exists()

@@ -434,7 +434,14 @@ def _jpeg_sintetico(path: Path, seed: int) -> None:
 
 
 def cmd_bench(args: argparse.Namespace) -> int:
-    """Benchmark com arquivos sintéticos: indexação a frio e re-scan."""
+    """Benchmark com arquivos sintéticos: indexação a frio e re-scan.
+
+    Sem ``--cache-dir``, as miniaturas sintéticas vão para um diretório
+    temporário — nunca para o cache real do usuário (mesmo padrão do
+    ``bench.db``, que também não toca no catálogo real).
+    """
+    from dataclasses import replace
+
     with tempfile.TemporaryDirectory(prefix="fotobench-") as tmp:
         tmp_path = Path(tmp)
         fotos = tmp_path / "fotos"
@@ -445,7 +452,12 @@ def cmd_bench(args: argparse.Namespace) -> int:
             sub.mkdir(exist_ok=True)
             _jpeg_sintetico(sub / f"img_{i:05d}.jpg", seed=i)
 
-        scanner = _build_scanner(tmp_path / "bench.db")
+        cache_dir = (
+            Path(args.cache_dir).expanduser() if args.cache_dir
+            else tmp_path / "cache"
+        )
+        settings = replace(load_settings(), cache_dir=cache_dir)
+        scanner = _build_scanner(tmp_path / "bench.db", settings)
 
         inicio = time.monotonic()
         _, m1 = scanner.scan_source(fotos)
@@ -639,6 +651,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_bench = sub.add_parser("bench", help="benchmark de indexação com fixtures")
     p_bench.add_argument("-n", "--quantidade", type=int, default=500)
+    p_bench.add_argument(
+        "--cache-dir", metavar="PASTA",
+        help="grava as miniaturas do benchmark aqui em vez de um diretório "
+             "temporário — para medir com o cache real do usuário de propósito",
+    )
     p_bench.set_defaults(func=cmd_bench)
 
     args = parser.parse_args(argv)
