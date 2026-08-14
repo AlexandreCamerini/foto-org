@@ -1990,3 +1990,21 @@ uma fatia
   alterado.
 - Status: aguardando aprovação do dono para virar fatia de implementação
   (escopo próprio, fora do que D-056 abriu)
+
+## D-063 — Dono aprova a implementação do inventário por pasta
+
+- Fase: 5 (segue D-062)
+- Classe: B — decisão do dono, registrada
+- Data: 2026-08-13
+- Contexto: D-062 entregou o desenho técnico completo. Faltava aprovação
+  explícita para abrir `fotoorganizer/operations/**` — escopo que D-056
+  não cobria (aquele foi só para as Fases A/B' do diagnóstico de "Gerar
+  sugestões").
+- Decisão do dono: aprova implementar, exatamente como desenhado em
+  D-062/`docs/desenho-inventario-por-pasta.md`.
+- Escopo tratado como aprovado: `fotoorganizer/operations/inventario.py`
+  (novo) + hook em `executor.py::_executar_item` + testes. Não inclui
+  nenhuma mudança em `planner.py`, `classification/**`, nem migração
+  Alembic — o próprio desenho já exclui essas três coisas.
+- Como reverter: commit isolado da fatia, revertível sozinho.
+- Status: decidido pelo dono
