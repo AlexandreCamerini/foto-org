@@ -25,6 +25,7 @@ from fotoorganizer.grouping.origens import (
     PASTAS_CAPTURA,
     PASTAS_RECEBIDA,
 )
+from fotoorganizer.geolocation.folder_names import _normalizar
 from dataclasses import dataclass
 
 # Tipos. `foto` é o padrão e o que o resto do motor organiza por viagem.
@@ -123,7 +124,11 @@ def classificar(
     (ausência de EXIF), porque um sinal fraco sozinho nunca deve condenar.
     """
     base = nome.rsplit(".", 1)[0]
-    pasta_baixa = pasta.lower()
+    # NFKD+ascii, não só lower(): o Finder/APFS grava pasta acentuada em NFD
+    # (marcador combinante intercalado entre letras), que não bate como
+    # substring nem contra a forma acentuada nem contra a sem-acento — mesma
+    # causa raiz do D-070 em grouping/datas.py.
+    pasta_baixa = _normalizar(pasta)
     tem_camera = _tem_assinatura_de_camera(make, model, lente, exposicao)
 
     # GPS é atestado de origem: nenhum app de mensagem devolve coordenada.
@@ -145,11 +150,11 @@ def classificar(
 
     # 2) Pasta dedicada.
     for marca in _PASTAS_RECEBIDA:
-        if marca in pasta_baixa:
+        if _normalizar(marca) in pasta_baixa:
             return Veredito(RECEBIDA, 0.85,
                             f"está numa pasta de mensageiro ('{marca}')")
     for marca in _PASTAS_CAPTURA:
-        if marca in pasta_baixa:
+        if _normalizar(marca) in pasta_baixa:
             return Veredito(CAPTURA, 0.85,
                             f"está numa pasta de capturas ('{marca}')")
 
@@ -163,7 +168,7 @@ def classificar(
 
     # 4) Download: pasta OU nome genérico, sem câmera.
     if not tem_camera:
-        if any(m in pasta_baixa for m in _PASTAS_BAIXADA):
+        if any(_normalizar(m) in pasta_baixa for m in _PASTAS_BAIXADA):
             return Veredito(BAIXADA, 0.80,
                             "está na pasta de downloads e não tem dado de câmera")
         if _RE_BAIXADA.match(base):

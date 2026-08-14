@@ -5,6 +5,8 @@ lixo custa mais caro que deixar um screenshot passar. Vários testes aqui
 existem para garantir justamente que o detector NÃO condena.
 """
 
+import unicodedata
+
 import pytest
 
 from fotoorganizer.classification.tipo_imagem import (
@@ -53,6 +55,21 @@ class TestReconhece:
     def test_download_por_pasta(self):
         v = _cls(nome="banner.jpg", pasta="/Users/eu/Downloads")
         assert v.tipo == BAIXADA
+
+    @pytest.mark.parametrize("forma", ["NFC", "NFD"])
+    def test_pasta_transferencias_bate_em_nfc_e_nfd(self, forma):
+        """"Transferências" é o nome real do Downloads no macOS em PT-BR, e o
+        APFS grava pasta acentuada em NFD (marcador combinante intercalado
+        entre letras) — mesma causa raiz do D-070 em grouping/datas.py."""
+        pasta = unicodedata.normalize(forma, "/Users/eu/Transferências")
+        v = _cls(nome="banner.jpg", pasta=pasta)
+        assert v.tipo == BAIXADA
+
+    @pytest.mark.parametrize("forma", ["NFC", "NFD"])
+    def test_pasta_captura_de_tela_bate_em_nfc_e_nfd(self, forma):
+        pasta = unicodedata.normalize(forma, "/Users/eu/Capturas de Tela")
+        v = _cls(nome="a.png", pasta=pasta, extensao="png")
+        assert v.tipo == CAPTURA
 
     def test_download_por_nome_generico(self):
         assert _cls(nome="image (3).png", extensao="png").tipo == BAIXADA
