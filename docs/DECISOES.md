@@ -2097,3 +2097,106 @@ uma fatia
   gate-da711b` — aquele já foi mergeado e a branch remota apagada.
 - Como reverter: `git revert d0f215d` — commit único e isolado.
 - Status: decidido (implementado e commitado, `d0f215d`). D-050 fechado.
+
+## D-066 — Pasta acentuada em NFD não batia como "downloads"/"capturas" no detector de tipo
+
+- Fase: pós-gate — achado reportado de fora da sessão (auditoria de código),
+  primeira fatia de `fotoorganizer/classification/**` desta sessão
+- Classe: A — bug de correção determinística, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: `tipo_imagem.py:126` fazia só `pasta.lower()` antes de testar
+  substring contra `PASTAS_BAIXADA = ("downloads", "transferências",
+  "transferencias")` (`grouping/origens.py`). "Transferências" é o nome
+  real do Downloads no macOS em PT-BR, e o Finder/APFS grava pasta
+  acentuada em NFD — forma decomposta, com o marcador combinante (ex.
+  U+0302) intercalado entre as letras-base. Em NFD, nem `"transferencias"
+  in pasta` nem `"transferências" in pasta` batem, porque o `in` de
+  substring exige contiguidade que o combinante quebra. Resultado: uma
+  foto salva em `~/Transferências` (NFD) caía no branch padrão do
+  classificador e virava `foto` normal em vez de `baixada` — perdendo o
+  sinal "sem dado de câmera + pasta de download" que a regra 4 existe para
+  capturar.
+  - A mesma constante `PASTAS_BAIXADA` já era usada corretamente em
+    `grouping/albuns.py:58`, via `_normalizar()` (NFKD + strip de acento,
+    `geolocation/folder_names.py`) — imune a NFC/NFD por construção. Só o
+    uso em `classification/tipo_imagem.py` ficara de fora.
+  - Correção **não** confere com um precedente citado no relatório que
+    originou este achado: não existe decisão D-070 neste `DECISOES.md`,
+    e `grouping/datas.py` **não** normaliza Unicode antes de comparar
+    contra `_MESES` — o comentário do próprio módulo (linhas 22–24)
+    explica que a normalização foi deliberadamente evitada ali porque
+    mudaria o comprimento do texto e estragaria os índices usados para
+    recortar o nome que sobra depois da data; a cobertura de "março" é
+    feita com as duas grafias como chaves literais do dict, não por
+    normalização. Ou seja: pasta de mês acentuado em NFD (`.../Março
+    2024/`) **continua** sem bater em `_MESES` hoje — bug real, mas
+    diferente deste, fora de escopo aqui porque a correção não é um
+    `_normalizar()` de uma linha (quebraria o recorte por índice) e não
+    foi pedida.
+- Implementado: `tipo_imagem.py` passou a normalizar `pasta` com o
+  `_normalizar()` já existente em `geolocation/folder_names.py` (reuso,
+  sem duplicar) antes das três comparações de pasta dedicada (mensageiro,
+  captura, download); o `marca` de cada lista também é normalizado no
+  ponto de comparação, mantendo a grafia original na justificativa
+  (`"está na pasta de downloads..."` continua citando `'transferências'`
+  como veio da constante).
+- Teste novo (`tests/test_tipo_imagem.py`): dois casos parametrizados
+  NFC/NFD para pasta de downloads e de capturas de tela, escritos e
+  confirmados falhando (NFD) antes do fix, verdes depois.
+- Verificação: `scripts/verificar.sh` verde (705 testes, 17/17 benchmark,
+  113 testes de UI, build).
+- Como reverter: reverter o commit desta fatia — isolado em
+  `fotoorganizer/classification/tipo_imagem.py` e
+  `tests/test_tipo_imagem.py`.
+- Status: decidido e implementado. Achado de escopo relacionado (mês
+  acentuado em NFD não bate em `grouping/datas.py`) registrado acima,
+  corrigido em D-067 logo abaixo.
+
+## D-067 — Mês acentuado em NFD não batia em grouping/datas.py
+
+- Fase: pós-gate — segunda fatia do mesmo achado (D-066), agora em
+  `grouping/datas.py`
+- Classe: A — bug de correção determinística, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: `_MESES` (`datas.py:25`) tem `"março"` como chave literal
+  digitada em NFC. `separar_data` casava o regex `_MES_ALT` (construído a
+  partir das chaves de `_MESES`) direto contra o `segmento` cru, sem
+  normalizar. Pasta gravada pelo Finder/APFS em NFD (marcador combinante
+  decomposto, ex. "c" + U+0327 em vez do "ç" precomposto) tem comprimento
+  diferente da forma NFC — o literal "março" do regex simplesmente não
+  casa contra a sequência decomposta, então uma pasta como "Chapada dos
+  Guimarães Março 2019" em NFD perdia o mês inteiro (só o ano sobrevivia,
+  via o padrão mais fraco de fallback).
+  - O comentário original do módulo (removido por este commit) explicava
+    por que a normalização tinha sido evitada: mudaria o comprimento do
+    texto e estragaria os índices (`m.start()`/`m.end()`) usados para
+    recortar o nome que sobra depois da data. Essa preocupação é real
+    SE a normalização for aplicada só na comparação, mantendo os índices
+    presos ao texto original não-normalizado — mas deixa de ser um
+    problema se a normalização for feita uma única vez, no início da
+    função, sobre a string inteira: daí em diante, casamento e
+    fatiamento operam sobre a MESMA string (a já normalizada), então
+    índice e conteúdo nunca dessincronizam.
+- Implementado: `separar_data()` normaliza `segmento` para NFC
+  (`unicodedata.normalize("NFC", segmento)`) como primeiro passo, antes
+  de qualquer `_PADROES`. `data_no_caminho()` não precisou de mudança —
+  já delega a cada segmento via `separar_data()`. Mantidas as duas
+  chaves "março"/"marco" no dict (ortogonal ao NFC/NFD: cobre quem
+  digitou sem cedilha, não forma de codificação Unicode). Comentário do
+  módulo reescrito para explicar a normalização de string inteira em vez
+  de alegar que normalização "estragaria os índices" — não estraga,
+  desde que seja global e no início.
+- Teste novo (`tests/test_datas_em_pastas.py`): `test_marco_em_nfd_bate_
+  igual_a_nfc` (NFC/NFD via `separar_data`) e
+  `test_data_no_caminho_reconhece_marco_em_nfd` (NFC/NFD via
+  `data_no_caminho`, caminho completo). Confirmados falhando em NFD
+  antes do fix (`git stash` do arquivo de produção, teste vermelho,
+  `git stash pop`, teste verde) — sem regressão nos 7 casos preexistentes
+  de `test_separa_nome_e_data`.
+- Verificação: `scripts/verificar.sh` verde (709 testes, 17/17
+  benchmark, 113 testes de UI, build).
+- Como reverter: reverter o commit desta fatia — isolado em
+  `fotoorganizer/grouping/datas.py` e `tests/test_datas_em_pastas.py`.
+- Status: decidido e implementado. D-066 (achado relacionado) fechado.

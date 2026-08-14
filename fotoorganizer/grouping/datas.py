@@ -16,12 +16,22 @@ só mês e ano — melhor perder precisão do que afirmar o que não se sabe.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 
-# Só "março" tem acento entre os nomes de mês, então as duas grafias
-# cobrem o caso sem depender de normalização (que muda o comprimento do
-# texto e estragaria os índices usados para recortar o resto).
+# Só "março" tem acento entre os nomes de mês. "marco" (sem acento) é grafia
+# alternativa de quem digitou sem cedilha — cobrimos as duas como chaves
+# literais no dict. Isso é ortogonal ao NFC/NFD do Unicode: o Finder/APFS
+# grava pasta acentuada em NFD (marcador combinante decomposto, ex. "c" +
+# U+0327 em vez do "ç" precomposto), que não bate contra a chave "março"
+# (NFC, como foi digitada aqui). `separar_data` normaliza o segmento inteiro
+# para NFC antes de casar qualquer padrão — normalizar só na hora de
+# comparar, mantendo os índices de fatiamento presos ao texto original,
+# estragaria o recorte porque NFC/NFD têm comprimentos diferentes; ao
+# normalizar a string inteira uma vez, no início, índice e fatiamento
+# passam a se referir sempre à mesma string (a normalizada), então nunca
+# dessincronizam.
 _MESES: dict[str, int] = {
     "janeiro": 1, "jan": 1, "january": 1,
     "fevereiro": 2, "fev": 2, "february": 2, "feb": 2,
@@ -122,6 +132,7 @@ def separar_data(segmento: str) -> tuple[str, DataDaPasta | None]:
     "2025_05_24"                    → ("", 2025-05-24)
     "Serena 15 Anos"                → ("Serena 15 Anos", None)
     """
+    segmento = unicodedata.normalize("NFC", segmento)
     for padrao in _PADROES:
         for m in padrao.finditer(segmento):
             data = _montar(m)

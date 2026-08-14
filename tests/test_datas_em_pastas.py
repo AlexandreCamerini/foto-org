@@ -5,6 +5,8 @@ como o evento "Portfolio" — o contêiner ganhava da folha e a data era
 descartada inteira.
 """
 
+import unicodedata
+
 import pytest
 
 from fotoorganizer.grouping.datas import data_no_caminho, separar_data
@@ -28,6 +30,29 @@ def test_separa_nome_e_data(segmento, nome, ano, mes, dia):
     assert obtido == nome
     assert data is not None
     assert (data.ano, data.mes, data.dia) == (ano, mes, dia)
+
+
+@pytest.mark.parametrize("forma", ["NFC", "NFD"])
+def test_marco_em_nfd_bate_igual_a_nfc(forma):
+    """O Finder/APFS grava pasta acentuada em NFD (marcador combinante
+    decomposto, ex. "c" + U+0327 em vez do "ç" precomposto). "Março" em NFD
+    precisa continuar reconhecido como mês, igual à forma NFC digitada no
+    dict de `_MESES`."""
+    segmento = unicodedata.normalize(forma, "Chapada dos Guimarães Março 2019")
+    nome, data = separar_data(segmento)
+    assert data is not None
+    assert (data.ano, data.mes) == (2019, 3)
+    assert nome == unicodedata.normalize("NFC", "Chapada dos Guimarães")
+
+
+@pytest.mark.parametrize("forma", ["NFC", "NFD"])
+def test_data_no_caminho_reconhece_marco_em_nfd(forma):
+    caminho = unicodedata.normalize(
+        forma, "/Volumes/photo/Viagens/Chapada dos Guimarães Março 2019"
+    )
+    data = data_no_caminho(caminho)
+    assert data is not None
+    assert (data.ano, data.mes) == (2019, 3)
 
 
 @pytest.mark.parametrize(
