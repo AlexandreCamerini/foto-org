@@ -86,7 +86,7 @@ def test_mes_dia_sem_ano_so_esvazia_o_segmento_inteiro():
     assert data is None
 
 
-def test_marco_em_nfd_bate_igual_a_nfc():
+def test_marco_em_nfd_bate_nos_padroes_novos_tambem():
     """D-073: macOS normaliza nome de pasta pra NFD ("marc" + cedilha
     combinante, não o "ç" precomposto que `_MESES` usa) — visualmente
     idêntico, byte a byte diferente. Sem normalizar, era o único mês do
