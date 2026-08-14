@@ -2151,4 +2151,52 @@ uma fatia
   `tests/test_tipo_imagem.py`.
 - Status: decidido e implementado. Achado de escopo relacionado (mês
   acentuado em NFD não bate em `grouping/datas.py`) registrado acima,
-  não corrigido nesta fatia.
+  corrigido em D-067 logo abaixo.
+
+## D-067 — Mês acentuado em NFD não batia em grouping/datas.py
+
+- Fase: pós-gate — segunda fatia do mesmo achado (D-066), agora em
+  `grouping/datas.py`
+- Classe: A — bug de correção determinística, sem decisão de produto em
+  aberto
+- Data: 2026-08-14
+- Contexto: `_MESES` (`datas.py:25`) tem `"março"` como chave literal
+  digitada em NFC. `separar_data` casava o regex `_MES_ALT` (construído a
+  partir das chaves de `_MESES`) direto contra o `segmento` cru, sem
+  normalizar. Pasta gravada pelo Finder/APFS em NFD (marcador combinante
+  decomposto, ex. "c" + U+0327 em vez do "ç" precomposto) tem comprimento
+  diferente da forma NFC — o literal "março" do regex simplesmente não
+  casa contra a sequência decomposta, então uma pasta como "Chapada dos
+  Guimarães Março 2019" em NFD perdia o mês inteiro (só o ano sobrevivia,
+  via o padrão mais fraco de fallback).
+  - O comentário original do módulo (removido por este commit) explicava
+    por que a normalização tinha sido evitada: mudaria o comprimento do
+    texto e estragaria os índices (`m.start()`/`m.end()`) usados para
+    recortar o nome que sobra depois da data. Essa preocupação é real
+    SE a normalização for aplicada só na comparação, mantendo os índices
+    presos ao texto original não-normalizado — mas deixa de ser um
+    problema se a normalização for feita uma única vez, no início da
+    função, sobre a string inteira: daí em diante, casamento e
+    fatiamento operam sobre a MESMA string (a já normalizada), então
+    índice e conteúdo nunca dessincronizam.
+- Implementado: `separar_data()` normaliza `segmento` para NFC
+  (`unicodedata.normalize("NFC", segmento)`) como primeiro passo, antes
+  de qualquer `_PADROES`. `data_no_caminho()` não precisou de mudança —
+  já delega a cada segmento via `separar_data()`. Mantidas as duas
+  chaves "março"/"marco" no dict (ortogonal ao NFC/NFD: cobre quem
+  digitou sem cedilha, não forma de codificação Unicode). Comentário do
+  módulo reescrito para explicar a normalização de string inteira em vez
+  de alegar que normalização "estragaria os índices" — não estraga,
+  desde que seja global e no início.
+- Teste novo (`tests/test_datas_em_pastas.py`): `test_marco_em_nfd_bate_
+  igual_a_nfc` (NFC/NFD via `separar_data`) e
+  `test_data_no_caminho_reconhece_marco_em_nfd` (NFC/NFD via
+  `data_no_caminho`, caminho completo). Confirmados falhando em NFD
+  antes do fix (`git stash` do arquivo de produção, teste vermelho,
+  `git stash pop`, teste verde) — sem regressão nos 7 casos preexistentes
+  de `test_separa_nome_e_data`.
+- Verificação: `scripts/verificar.sh` verde (709 testes, 17/17
+  benchmark, 113 testes de UI, build).
+- Como reverter: reverter o commit desta fatia — isolado em
+  `fotoorganizer/grouping/datas.py` e `tests/test_datas_em_pastas.py`.
+- Status: decidido e implementado. D-066 (achado relacionado) fechado.
