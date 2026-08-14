@@ -36,6 +36,15 @@
         "cd /Users/acamerini/Claude/Projects/foto-organizer && .venv/bin/python -m fotoorganizer web --porta 8404"
       ],
       "port": 8404
+    },
+    {
+      "name": "foto-organizer-web-fase-5-audit",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/foto-organizer-fase-5-audit-3ece4b && .venv/bin/python -m fotoorganizer web --porta 8405"
+      ],
+      "port": 8405
     }
   ]
 }
