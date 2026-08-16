@@ -67,6 +67,11 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   classificadas), performance da aba Viagens de 50-120s+ para ~0,1s —
   D-070/D-071/D-072
 - ✓ `--data-dir` para suporte remoto — commit `7249318`
+- ✓ `tz_estimado` (fuso IANA estimado a partir do país já atribuído —
+  GPS próprio, herança temporal D-025, ou pasta), gravado direto em
+  `MediaFile` sem `Evidence`/revisão, recalculado incondicionalmente a
+  cada `gerar()` mesmo para mídia com sugestão já decidida — Validado na
+  Fase 1, 2026-08-16 (spec: `docs/prompts/fase-11-timezone-estimado.md`)
 
 ### Active
 
@@ -75,8 +80,6 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] Timezone estimado a partir do país herdado (fecha o último item
-  bloqueado por D-025, agora desbloqueado pelo mapa concluído)
 - [ ] Correção de 4 defeitos medidos (não hipótese) na rodada de UX de
   2026-08-06: SINAL órfão invisível, vídeo não lido pelo scanner, filtro
   "Tudo" sem WHERE, assimetria Evento×Viagem no advisor
@@ -197,4 +200,4 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
 
 ---
-*Last updated: 2026-08-16 after initial project setup (new-project-from-ingest)*
+*Last updated: 2026-08-16 — Phase 1 (Timezone estimado) complete*
