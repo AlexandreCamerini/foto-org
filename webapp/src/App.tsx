@@ -207,7 +207,13 @@ export default function App() {
         {ABAS.map((nome) => (
           <button
             key={nome}
-            onClick={() => setAba(nome)}
+            onClick={() => {
+              // Reclicar a aba em que já se está é no-op — apagar a busca
+              // recém-digitada porque nada navegou destruiria trabalho do
+              // usuário sem motivo. Trocar de aba de fato sempre limpa.
+              if (nome !== aba) setBusca("");
+              setAba(nome);
+            }}
             className={`rounded-full px-3.5 py-1 transition-colors duration-[var(--dur-micro)] hover:bg-cartao ${
               aba === nome ? "bg-cartao text-texto" : "text-texto-2"
             }`}
@@ -230,6 +236,7 @@ export default function App() {
             pastaAtual={pasta}
             onSelecionarPasta={(p) => {
               setPasta(p);
+              setBusca("");
               // Escolher pasta é escolher um conjunto: manter a seleção de
               // uma foto que pode não estar mais na grade deixaria o inspetor
               // descrevendo algo que sumiu da tela.
@@ -436,6 +443,7 @@ export default function App() {
         // grade não está na tela e o número seria de outra pergunta.
         noFiltro={aba === "Biblioteca" ? total : undefined}
         aoIrPara={(novo) => {
+          setBusca("");
           setAba("Biblioteca");
           setAlcance(novo);
           setRecorte(null);
