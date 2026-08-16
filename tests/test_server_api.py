@@ -887,6 +887,22 @@ def test_detalhe_traz_a_foto_que_doou_a_coordenada(client, migrated_engine):
     }
 
 
+def test_detalhe_traz_o_tz_estimado(client, migrated_engine):
+    """tz_estimado é passthrough direto de MediaFile em _media_json —
+    grade e detalhe, sem query extra (D-03: não é Evidence)."""
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        media.tz_estimado = "America/Sao_Paulo"
+        media_id = media.id
+        session.commit()
+
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["tz_estimado"] == "America/Sao_Paulo"
+
+
 def test_lacuna_sem_coordenada_ignora_quem_tem_estimativa(client, migrated_engine):
     """Mandar o usuário procurar GPS numa foto cujo lugar o sistema já
     estimou é trabalho inventado. A estimativa vira lacuna própria."""
