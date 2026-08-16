@@ -30,7 +30,7 @@ para exatamente uma fase.
 
 ### Geolocalização (TZ)
 
-- [ ] **TZ-01**: Sistema infere `tz_estimado` a partir do país já atribuído
+- [x] **TZ-01**: Sistema infere `tz_estimado` a partir do país já atribuído
   à foto (GPS próprio, herança temporal — janela de 12h de D-025 — ou nome
   de pasta), em vez de depender de GPS+hora local (que só alcançaria 4 dos
   25 anos do acervo). Gravado direto em `MediaFile`, sem `Evidence`/revisão
@@ -191,7 +191,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TZ-01 | Phase 1 | Pending |
+| TZ-01 | Phase 1 | Complete |
 | BUG-01 | Phase 2 | Pending |
 | BUG-02 | Phase 2 | Pending |
 | BUG-03 | Phase 2 | Pending |

@@ -297,6 +297,9 @@ def _media_json(m: MediaFile, fontes_off: frozenset[int] = frozenset()) -> dict:
         "gps_estimado": m.coordenada_estimada,
         "gps_lat_efetivo": m.coordenada[0] if m.coordenada else None,
         "gps_lon_efetivo": m.coordenada[1] if m.coordenada else None,
+        # Fuso IANA estimado a partir do país já atribuído (D-038); dado
+        # técnico auxiliar, não passa por Evidence/revisão (D-03).
+        "tz_estimado": m.tz_estimado,
         "source_id": m.source_id,
         "trip_id": m.trip_id,
         "event_id": m.event_id,
