@@ -29,7 +29,7 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
   (`tz_estimado`) a partir do país já atribuído, gravado direto sem revisão
 - [x] **Phase 2: Correção de dados medidos** - Filtro "Tudo" da Biblioteca (completed 2026-08-16)
   para de esconder SINAL misturado com acervo sem `WHERE`
-- [ ] **Phase 3: Revisão acessível e consistente** - `texto-3` restante em
+- [x] **Phase 3: Revisão acessível e consistente** - `texto-3` restante em (completed 2026-08-16)
   conteúdo e busca não limpa em 3 pontos de navegação
 - [ ] **Phase 4: Consistência visual secundária** - Selos, estados de erro/
   vazio e tokens de peso/hover consistentes entre telas
@@ -123,14 +123,14 @@ mas já tratava REV-01/04/05 como feitos).
   2. `texto-3` usado como texto de conteúdo real (não decorativo, não
      desabilitado, não estado de carregamento) em Review/Inspector/
      Operations vira `texto-2`.
-**Plans:** 0/2 plans complete
+**Plans:** 2/2 plans complete
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md — REV-03: `setBusca("")` no botão de aba, em
+- [x] 03-01-PLAN.md — REV-03: `setBusca("")` no botão de aba, em
   `Sidebar.onSelecionarPasta` e em `StatusBar.aoIrPara`, + 4 testes de
   regressão (inclui a guarda de que reclicar a aba ativa não apaga a busca)
-- [ ] 03-02-PLAN.md — REV-02: 9 promoções `texto-3` → `texto-2` em
+- [x] 03-02-PLAN.md — REV-02: 9 promoções `texto-3` → `texto-2` em
   Review/Inspector/Operations pela lista fechada de D-02, com checkpoint
   visual de contraste
 
@@ -182,6 +182,6 @@ paralelo, sem dependência estrutural das demais)
 |-------|----------------|--------|-----------|
 | 1. Timezone estimado | 1/1 | Complete   | 2026-08-16 |
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
-| 3. Revisão acessível e consistente | 0/2 | Planned | - |
+| 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
 | 4. Consistência visual secundária | 0/TBD | Not started | - |
 | 5. Preparação para lançamento | 0/TBD | Not started | - |
