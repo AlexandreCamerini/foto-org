@@ -1129,6 +1129,51 @@ def test_tz_estimado_atualiza_ao_regenerar_sugestoes(migrated_engine):
         assert foto.tz_estimado is None
 
 
+def test_tz_estimado_atualiza_mesmo_com_sugestao_decidida(migrated_engine):
+    """CR-01: `_persistir_sugestao` (onde tz_estimado era calculado antes)
+    é pulada para mídia com sugestão já decidida — mas tz_estimado precisa
+    do MESMO padrão de recálculo incondicional de gps_lat_estimado
+    (`_persistir_herancas`), então não pode congelar no valor da última
+    rodada em que a sugestão ainda estava pendente."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "camera.jpg", "/fotos/desorganizadas", data=base,
+            gps=(43.95, 4.8083),
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "camera.jpg"))
+        assert foto.tz_estimado == TZ_POR_PAIS["França"]
+        sugestao = session.scalar(
+            select(Suggestion).where(Suggestion.media_id == foto.id)
+        )
+        sugestao.status = SuggestionStatus.APROVADA
+        # GPS muda para fora da cobertura do FakeGeocoder (deixa de
+        # resolver para qualquer país conhecido) — o país efetivo da foto
+        # mudou, mesmo com a sugestão da câmera já decidida.
+        foto.gps_lat, foto.gps_lon = 10.0, 10.0
+        session.commit()
+
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "camera.jpg"))
+        assert foto.tz_estimado is None
+        # A decisão do usuário continua preservada — só o dado técnico
+        # auxiliar (D-038) acompanha a mudança.
+        sugestao = session.scalar(
+            select(Suggestion).where(Suggestion.media_id == foto.id)
+        )
+        assert sugestao.status == SuggestionStatus.APROVADA
+
+
 def test_captura_de_tela_sai_do_fluxo_de_viagem(migrated_engine):
     """Captura de tela feita durante a viagem não pertence à pasta da
     viagem. Vai para ramo próprio, por tipo e ano, com a justificativa

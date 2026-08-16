@@ -303,6 +303,16 @@ class SuggestionEngine:
                 session, organizaveis, midias, sessoes, sessao_da_media
             )
 
+            # tz_estimado segue o mesmo padrão de recálculo incondicional
+            # dos campos gps_*_estimado (`_persistir_herancas`, acima):
+            # roda para TODA mídia organizável, inclusive a que já tem
+            # sugestão decidida e por isso nunca passa pelo loop abaixo
+            # (CR-01 — antes ficava congelado no valor da última rodada em
+            # que a sugestão ainda estava pendente).
+            self._atualizar_tz_estimado(
+                session, organizaveis, sessao_da_media, herancas, por_id,
+            )
+
             geradas = 0
             for media in organizaveis:
                 if media.id in decididas:
@@ -387,6 +397,58 @@ class SuggestionEngine:
             # sobreviver — sem isto a mídia ficava presa a um país que
             # ela não tem mais (WR-01).
             media.location_id = resolvidos[chave]
+
+    def _pais_efetivo(self, session: Session, media: MediaFile,
+                      sessao: "_Sessao | None",
+                      herancas: dict[int, Heranca],
+                      por_id: dict[int, MediaFile]) -> str | None:
+        """País efetivo desta mídia, pela MESMA cascata de `_evidencias_geo`
+        (GPS próprio > GPS herdado > pasta > vizinhança da sessão), mas sem
+        gravar Evidence/Suggestion — usado por `_atualizar_tz_estimado`
+        (CR-01) para recalcular `tz_estimado` incondicionalmente, inclusive
+        para mídia com sugestão já decidida (que nunca chama
+        `_evidencias_geo`). Duplicada em vez de compartilhada de propósito:
+        reaproveitar `_evidencias_geo` aqui arriscaria mudar o texto de
+        justificativa/score da evidência existente, fora do escopo deste
+        fix. Mantém o mesmo critério de parada de cada ramo do original:
+        GPS próprio decide sozinho assim que resolve (mesmo que
+        `location.pais` seja `None`), herdado só decide quando a janela de
+        tempo sustenta o campo país (`heranca.fator_de('pais')`)."""
+        if media.gps_lat is not None and self._resolver is not None:
+            location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
+            if location is not None:
+                return location.pais
+
+        heranca = herancas.get(media.id)
+        if heranca is not None and self._resolver is not None:
+            location = self._resolver.resolve(session, heranca.lat, heranca.lon)
+            if location is not None and heranca.fator_de("pais") is not None:
+                return location.pais
+
+        hierarquia = extrair_hierarquia_da_pasta(media.pasta)
+        if hierarquia.pais:
+            return hierarquia.pais
+
+        if sessao is not None and sessao.pais_dominante:
+            return sessao.pais_dominante
+
+        return None
+
+    def _atualizar_tz_estimado(self, session: Session, organizaveis,
+                               sessao_da_media: dict[int, "_Sessao"],
+                               herancas: dict[int, Heranca],
+                               por_id: dict[int, MediaFile]) -> None:
+        """tz_estimado segue o mesmo padrão de recálculo incondicional dos
+        campos gps_*_estimado em `_persistir_herancas`: roda para TODA mídia
+        organizável a cada `gerar()`, inclusive a que já tem sugestão
+        decidida (CR-01 — antes só era recalculado dentro de
+        `_persistir_sugestao`, que é pulada para mídia decidida, e o valor
+        ficava congelado para sempre)."""
+        for media in organizaveis:
+            pais = self._pais_efetivo(
+                session, media, sessao_da_media.get(media.id), herancas, por_id,
+            )
+            media.tz_estimado = TZ_POR_PAIS.get(pais) if pais else None
 
     # -- correlação entre fontes ---------------------------------------------
     @staticmethod
@@ -1064,16 +1126,11 @@ class SuggestionEngine:
             session.add(evidencia)
             evidencias[draft.campo] = evidencia
 
-        # tz_estimado: dado técnico auxiliar (D-038), gravado direto em
-        # MediaFile, sem Evidence/Suggestion nova e sem entrada em
-        # docs/CONFIANCA.md — mesmo padrão de gps_lat_estimado em
-        # _persistir_herancas. O `else None` (em vez do snippet literal do
-        # spec, que não tem `else`) garante que uma rodada futura de
-        # gerar() que não resolve mais "pais" para esta mídia não deixa
-        # sobreviver um tz_estimado obsoleto da rodada anterior.
-        media.tz_estimado = TZ_POR_PAIS.get(
-            evidencias["pais"].valor
-        ) if "pais" in evidencias else None
+        # tz_estimado NÃO é calculado aqui: esta função é pulada para mídia
+        # com sugestão já decidida (ver `gerar()`), e tz_estimado precisa do
+        # mesmo padrão de recálculo incondicional de gps_lat_estimado
+        # (CR-01) — quem grava é `_atualizar_tz_estimado`, chamado sobre
+        # TODA mídia organizável antes deste loop rodar.
 
         campos = {campo: ev.valor for campo, ev in evidencias.items()}
         if "data" in evidencias:
