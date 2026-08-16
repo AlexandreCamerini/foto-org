@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Phase 3 UI-SPEC approved
-last_updated: "2026-08-16T19:48:31.085Z"
+stopped_at: Phase 3 context gathered
+last_updated: "2026-08-16T20:05:54.057Z"
 last_activity: 2026-08-16
 progress:
   total_phases: 5
@@ -109,7 +109,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T19:48:31.070Z
-Stopped at: Phase 3 UI-SPEC approved
+Last session: 2026-08-16T20:05:54.040Z
+Stopped at: Phase 3 context gathered
 ingest de 25 documentos; nenhuma fase planejada em detalhe ainda.
-Resume file: .planning/phases/03-revis-o-acess-vel-e-consistente/03-UI-SPEC.md
+Resume file: .planning/phases/03-revis-o-acess-vel-e-consistente/03-CONTEXT.md
