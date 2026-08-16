@@ -25,13 +25,13 @@ passa por `Evidence`/`Suggestion`/revisão humana, não entra em
 ## Implementation Decisions
 
 ### Fonte de verdade e precedência de spec
-- **D-01:** `docs/prompts/fase-11-timezone-estimado.md` é o spec
+- **D-01 [informational]:** `docs/prompts/fase-11-timezone-estimado.md` é o spec
   autoritativo desta fase — mais detalhado e mais recente que o texto
   minerado em `docs/ROADMAP.md`/`AVALIACAO_UX.md` durante o ingest. Onde os
   dois divergem, `fase-11-timezone-estimado.md` vence. Decisão do dono,
   2026-08-16, após o ingest ter perdido esse doc por estar em
   `docs/prompts/` (fora do escopo de raiz do ingest).
-- **D-02:** `ROADMAP.md` e `REQUIREMENTS.md` (fase 1 / TZ-01) já foram
+- **D-02 [informational]:** `ROADMAP.md` e `REQUIREMENTS.md` (fase 1 / TZ-01) já foram
   corrigidos nesta sessão pra refletir esta decisão — Success Criteria e
   descrição do requisito reescritos, ver diff desses arquivos.
 
@@ -79,17 +79,17 @@ passa por `Evidence`/`Suggestion`/revisão humana, não entra em
 - **D-09:** Não converte `data_capturada`/`data_capturada_utc` para hora
   local em nenhuma tela. Esta fase só produz o dado; consumo (mostrar hora
   local em vez de naive) é decisão de UI separada, não pedida aqui.
-- **D-10:** Não lê `OffsetTimeOriginal`/o `Z` do QuickTime nos extratores
+- **D-10 [deferred]:** Não lê `OffsetTimeOriginal`/o `Z` do QuickTime nos extratores
   (`exiftool.py`/`purepython.py` já detectam e descartam esse dado hoje —
   `MediaMetadata.data_capturada_utc` já existe esperando, em `None`).
   Explicitamente adiado para fase futura que já vai mexer em fuso de novo.
-- **D-11:** Não corrige `sources/google_takeout.py:_data()` (monta hora
+- **D-11 [deferred]:** Não corrige `sources/google_takeout.py:_data()` (monta hora
   local no fuso da máquina que importou, não da foto). Mesmo motivo do
   item acima — adiado.
-- **D-12:** Nenhuma geometria coordenada→fuso (tipo `timezonefinder`).
+- **D-12 [deferred]:** Nenhuma geometria coordenada→fuso (tipo `timezonefinder`).
 
 ### Medição do "Aceite" contra catálogo zerado
-- **D-13:** `catalog.db` de produção foi zerado em 2026-08-16 (backup em
+- **D-13 [deferred]:** `catalog.db` de produção foi zerado em 2026-08-16 (backup em
   `catalog-antes-do-reset-20260816-013503.db`); a nova varredura completa
   ainda não rodou. O critério de pronto (Aceite) do `fase-11` pede medir
   contra o catálogo real quantas fotos ganhariam `tz_estimado` (~2.235
