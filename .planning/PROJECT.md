@@ -84,6 +84,13 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   real, mesma justificativa/confiança do caminho Evento —
   `engine.py:713-725` (BUG-04, achado de `docs/AVALIACAO_UX.md` §C.4;
   confirmado ainda válido em 2026-08-16)
+- ✓ Filtro "Tudo" da Biblioteca distingue acervo de testemunha —
+  `_ACERVO_OU_REFERENCIA` em `repositories/media.py` exclui testemunha
+  com arquivo local, preserva referência externa sem arquivo (feature do
+  commit `1b125f7`) — Validado na Fase 2, 2026-08-16 (BUG-03); decisão
+  corrigida duas vezes durante planejamento/execução, ver
+  `02-01-SUMMARY.md`. Verificação visual humana pendente (catálogo
+  zerado) — `02-HUMAN-UAT.md`.
 
 ### Active
 
@@ -92,10 +99,6 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] Filtro "Tudo" (`alcance=tudo`) da Biblioteca passa a filtrar de
-  fato — hoje mistura `SINAL` com o acervo (BUG-03; os outros 3 defeitos
-  da mesma rodada de UX de 2026-08-06 já estavam corrigidos antes desta
-  sessão — ver § Validated)
 - [ ] Revisão navegável 100% por teclado e consistente com
   `docs/DIRECAO_DE_ARTE.md` (7 achados de esforço P/M)
 - [ ] Consistência visual secundária (selos de fonte/álbum×evento, estado
@@ -213,4 +216,4 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
 
 ---
-*Last updated: 2026-08-16 — Phase 1 (Timezone estimado) complete*
+*Last updated: 2026-08-16 — Phase 2 (Correção de dados medidos) complete*
