@@ -75,7 +75,10 @@ ROADMAP.md/AVALIACAO_UX.md original). Ver também D-038 em
 leitura de `OffsetTimeOriginal`/`Z` do QuickTime nos extratores (item
 adiado, não esta fase); correção de `sources/google_takeout.py` (fuso da
 máquina do importador); qualquer mudança em `Evidence`/`docs/CONFIANCA.md`.
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — tabela TZ_POR_PAIS, persistência direta em MediaFile, serialização em GET /api/midia/{id}
 
 ### Phase 2: Correção de dados medidos
 **Goal**: Nenhuma foto real e única, nem vídeo válido, fica invisível por
@@ -163,7 +166,7 @@ paralelo, sem dependência estrutural das demais)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Timezone estimado | 0/TBD | Not started | - |
+| 1. Timezone estimado | 0/1 | Not started | - |
 | 2. Correção de dados medidos | 0/TBD | Not started | - |
 | 3. Revisão acessível e consistente | 0/TBD | Not started | - |
 | 4. Consistência visual secundária | 0/TBD | Not started | - |
