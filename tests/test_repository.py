@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 from fotoorganizer.database import create_session_factory
-from fotoorganizer.models import MediaFile, Source
+from fotoorganizer.models import MediaFile, MediaRole, Source
 from fotoorganizer.repositories import MediaFilters, MediaRepository
 
 
@@ -84,3 +84,63 @@ def test_estatisticas(repo):
 def test_ordenacao_tamanho(repo):
     maiores = repo.listar(MediaFilters(ordenacao="tamanho_desc"), 10, 0)
     assert [m.tamanho for m in maiores] == [300, 200, 100, 50]
+
+
+@pytest.fixture()
+def repo_com_testemunha(migrated_engine):
+    """Fonte disponível com três registros: acervo com arquivo, acervo sem
+    arquivo (referência de catálogo externo) e testemunha (miniatura de
+    outro app). Fixture dedicada — `repo` não tem SINAL nem ausente e é
+    reaproveitada por vários testes de ordenação que não devem mudar de
+    forma."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos/c")
+        session.add(fonte)
+        session.flush()
+        session.add_all([
+            MediaFile(
+                source_id=fonte.id, caminho="/fotos/c/acervo_ok.jpg",
+                pasta="/fotos/c", nome="acervo_ok.jpg", extensao="jpg",
+                tamanho=100,
+            ),
+            MediaFile(
+                source_id=fonte.id, caminho="/fotos/c/acervo_ausente.jpg",
+                pasta="/fotos/c", nome="acervo_ausente.jpg", extensao="jpg",
+                tamanho=0, arquivo_ausente=True,
+            ),
+            MediaFile(
+                source_id=fonte.id, caminho="/fotos/c/testemunha.jpg",
+                pasta="/fotos/c", nome="testemunha.jpg", extensao="jpg",
+                tamanho=50, papel=MediaRole.SINAL,
+            ),
+        ])
+        session.commit()
+    return MediaRepository(factory)
+
+
+def test_alcance_tudo_filtra_por_papel_puro_sem_testemunha(repo_com_testemunha):
+    # acervo_ok + acervo_ausente; testemunha (papel=SINAL) fica fora — é o
+    # próprio BUG-03.
+    assert repo_com_testemunha.contar(MediaFilters(alcance="tudo")) == 2
+    nomes_tudo = [
+        m.nome for m in
+        repo_com_testemunha.listar(MediaFilters(alcance="tudo"), 10, 0)
+    ]
+    assert "testemunha.jpg" not in nomes_tudo
+
+
+def test_alcance_organizaveis_inalterado(repo_com_testemunha):
+    assert repo_com_testemunha.contar(MediaFilters(alcance="organizaveis")) == 1
+
+
+def test_alcance_faltantes_inclui_testemunha_de_proposito(repo_com_testemunha):
+    # Não-objetivo travado (ver <phase_scope> do plano): ALCANCES["faltantes"]
+    # promete "não é acervo", e testemunha é exatamente isso — tirá-la daqui
+    # contradiria o próprio rótulo. `faltantes` não muda nesta fase.
+    assert repo_com_testemunha.contar(MediaFilters(alcance="faltantes")) == 2
+    nomes_faltantes = [
+        m.nome for m in
+        repo_com_testemunha.listar(MediaFilters(alcance="faltantes"), 10, 0)
+    ]
+    assert "testemunha.jpg" in nomes_faltantes
