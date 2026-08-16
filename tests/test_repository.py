@@ -88,11 +88,13 @@ def test_ordenacao_tamanho(repo):
 
 @pytest.fixture()
 def repo_com_testemunha(migrated_engine):
-    """Fonte disponível com três registros: acervo com arquivo, acervo sem
-    arquivo (referência de catálogo externo) e testemunha (miniatura de
-    outro app). Fixture dedicada — `repo` não tem SINAL nem ausente e é
-    reaproveitada por vários testes de ordenação que não devem mudar de
-    forma."""
+    """Fonte disponível com quatro registros: acervo com arquivo, acervo sem
+    arquivo, referência externa (SINAL sem arquivo local — ex. Apple Fotos
+    iCloud-only, a feature do commit 1b125f7) e testemunha com arquivo local
+    real (SINAL com arquivo — miniatura/derivado dentro de pacote, o caso
+    medido em docs/AVALIACAO_UX.md §C.2). Fixture dedicada — `repo` não tem
+    SINAL nem ausente e é reaproveitada por vários testes de ordenação que
+    não devem mudar de forma."""
     factory = create_session_factory(migrated_engine)
     with factory() as session:
         fonte = Source(caminho="/fotos/c")
@@ -110,37 +112,54 @@ def repo_com_testemunha(migrated_engine):
                 tamanho=0, arquivo_ausente=True,
             ),
             MediaFile(
-                source_id=fonte.id, caminho="/fotos/c/testemunha.jpg",
-                pasta="/fotos/c", nome="testemunha.jpg", extensao="jpg",
-                tamanho=50, papel=MediaRole.SINAL,
+                source_id=fonte.id, caminho="apple://UUID-1",
+                pasta="/fotos/c", nome="referencia_externa.jpg",
+                extensao="jpg", tamanho=0,
+                arquivo_ausente=True, papel=MediaRole.SINAL,
+            ),
+            MediaFile(
+                source_id=fonte.id,
+                caminho="/fotos/c/testemunha_com_arquivo.jpg",
+                pasta="/fotos/c", nome="testemunha_com_arquivo.jpg",
+                extensao="jpg", tamanho=50, papel=MediaRole.SINAL,
             ),
         ])
         session.commit()
     return MediaRepository(factory)
 
 
-def test_alcance_tudo_filtra_por_papel_puro_sem_testemunha(repo_com_testemunha):
-    # acervo_ok + acervo_ausente; testemunha (papel=SINAL) fica fora — é o
-    # próprio BUG-03.
-    assert repo_com_testemunha.contar(MediaFilters(alcance="tudo")) == 2
+def test_alcance_tudo_inclui_acervo_e_referencia_sem_testemunha_com_arquivo(
+    repo_com_testemunha,
+):
+    # acervo_ok + acervo_ausente + referencia_externa; testemunha_com_arquivo
+    # (papel=SINAL, arquivo local real) fica fora — é o próprio BUG-03.
+    # referencia_externa (papel=SINAL, sem arquivo local) continua dentro —
+    # é a feature do commit 1b125f7 (referência do iCloud não "some" da
+    # grade e faz o import parecer que "o sistema esqueceu").
+    assert repo_com_testemunha.contar(MediaFilters(alcance="tudo")) == 3
     nomes_tudo = [
         m.nome for m in
         repo_com_testemunha.listar(MediaFilters(alcance="tudo"), 10, 0)
     ]
-    assert "testemunha.jpg" not in nomes_tudo
+    assert "testemunha_com_arquivo.jpg" not in nomes_tudo
+    assert "referencia_externa.jpg" in nomes_tudo
 
 
 def test_alcance_organizaveis_inalterado(repo_com_testemunha):
     assert repo_com_testemunha.contar(MediaFilters(alcance="organizaveis")) == 1
 
 
-def test_alcance_faltantes_inclui_testemunha_de_proposito(repo_com_testemunha):
+def test_alcance_faltantes_inclui_os_dois_tipos_de_testemunha(
+    repo_com_testemunha,
+):
     # Não-objetivo travado (ver <phase_scope> do plano): ALCANCES["faltantes"]
-    # promete "não é acervo", e testemunha é exatamente isso — tirá-la daqui
-    # contradiria o próprio rótulo. `faltantes` não muda nesta fase.
-    assert repo_com_testemunha.contar(MediaFilters(alcance="faltantes")) == 2
+    # promete "não é acervo", e os dois tipos de SINAL são exatamente isso —
+    # tirá-los daqui contradiria o próprio rótulo. `faltantes` não muda
+    # nesta fase.
+    assert repo_com_testemunha.contar(MediaFilters(alcance="faltantes")) == 3
     nomes_faltantes = [
         m.nome for m in
         repo_com_testemunha.listar(MediaFilters(alcance="faltantes"), 10, 0)
     ]
-    assert "testemunha.jpg" in nomes_faltantes
+    assert "testemunha_com_arquivo.jpg" in nomes_faltantes
+    assert "referencia_externa.jpg" in nomes_faltantes
