@@ -79,28 +79,28 @@ aberto. -->
 docs/AVALIACAO_UX.md (medido em 2026-08-06) durante o ingest, mas já
 tinham sido corrigidos no código antes desta sessão — confirmado por
 leitura direta + git log (commits `ae60319`, `a7d6e5e`) em 2026-08-16.
-Ver PROJECT.md § Validated. Só REV-02 (parcial) e REV-03 (parcial)
-seguem abertos. -->
+Ver PROJECT.md § Validated. REV-02 e REV-03 (então parciais) fechados
+na Fase 3, 2026-08-16. -->
 
 - [x] **REV-01**: ~~Cabeçalho de grupo em Revisão navegável por
   teclado~~ — já corrigido: `role="button"`, `tabIndex={0}`,
   `onKeyDown` (Enter/Espaço) já em `Review.tsx`
   [docs/AVALIACAO_UX.md, A.1 — achado já resolvido]
-- [ ] **REV-02 [parcial]**: `texto-3` (contraste ≈3,46:1) deixa de ser
-  usado como texto de conteúdo em Review/Inspector/Operations — troca
-  para `texto-2` (≈6,1:1), reservando `texto-3` para o de fato
-  desabilitado. Commit `ae60319` (06/08) já trocou as 4 instâncias
-  citadas no achado original (subtítulo de sugestão em Review.tsx,
-  rótulo de campo no Inspetor, 2 linhas em Operations). **Restam outras
-  instâncias de `texto-3`** (contagens, "classificado por você", estados
-  de carregamento) cuja classificação como violação real vs. uso
-  legítimo de terciário/desabilitado precisa de julgamento — não
-  auditado linha a linha ainda [docs/AVALIACAO_UX.md, B.1]
-- [ ] **REV-03 [parcial]**: Busca de texto é limpa ao trocar de
-  grupo/aba — 2 de 5 pontos de entrada já limpam (`Panorama→Biblioteca`,
-  `Viagens→Biblioteca`, `App.tsx`). **Faltam 3 pontos nomeados**: botão
-  de troca de aba, `Sidebar.onSelecionarPasta`, `StatusBar.aoIrPara`
-  [docs/AVALIACAO_UX.md, A.2]
+- [x] **REV-02**: ~~`texto-3` (contraste ≈3,46:1) deixa de ser usado
+  como texto de conteúdo em Review/Inspector/Operations~~ — já
+  corrigido: commit `ae60319` (06/08) tratou as 4 instâncias originais;
+  as 9 restantes (total da fila, nome de arquivo, estados vazios,
+  rótulo "desfazer", namespace/chave de metadado, progresso de cópia,
+  veredito de dry-run) promovidas a `texto-2` na Fase 3, pela lista
+  fechada de D-02 (03-CONTEXT.md), com aprovação visual do dono contra
+  dado real (03-02-SUMMARY.md § Checkpoint Verdict). 10 usos legítimos
+  de `texto-3` preservados [docs/AVALIACAO_UX.md, B.1]
+- [x] **REV-03**: ~~Busca de texto é limpa ao trocar de grupo/aba~~ —
+  já corrigido: 2 de 5 pontos já limpavam (`Panorama→Biblioteca`,
+  `Viagens→Biblioteca`); os 3 restantes (botão de troca de aba,
+  `Sidebar.onSelecionarPasta`, `StatusBar.aoIrPara`) fechados na Fase 3
+  com `setBusca("")` e 4 testes de regressão, incluindo a guarda de que
+  reclicar a aba já ativa não apaga a busca [docs/AVALIACAO_UX.md, A.2]
 - [x] **REV-04**: ~~Modais usam `rounded-lg` em vez de `rounded-md`~~ —
   já corrigido: zero ocorrências de `rounded-lg` em
   `webapp/src/components/*.tsx`
@@ -230,8 +230,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUG-03 | Phase 2 | Complete (human verification pending) |
 | BUG-04 | — | Already validated (pre-session) |
 | REV-01 | — | Already validated (pre-session) |
-| REV-02 | Phase 3 | Pending (partial) |
-| REV-03 | Phase 3 | Pending (partial) |
+| REV-02 | Phase 3 | Complete |
+| REV-03 | Phase 3 | Complete |
 | REV-04 | — | Already validated (pre-session) |
 | REV-05 | — | Already validated (pre-session) |
 | REV-06 | — | Already validated (commit ae60319, pre-session) |
