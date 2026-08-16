@@ -40,24 +40,35 @@ para exatamente uma fase.
 
 ### Correção de dados medidos (BUG)
 
-- [ ] **BUG-01**: Registros `papel='SINAL'` dentro de `originals/`
+<!-- BUG-01, BUG-02 e BUG-04 foram minerados de docs/AVALIACAO_UX.md
+(medido em 2026-08-06) durante o ingest, mas já tinham sido corrigidos no
+código antes desta sessão — confirmado por leitura direta + testes
+existentes em 2026-08-16. Ver PROJECT.md § Validated. Só BUG-03 segue
+aberto. -->
+
+- [x] **BUG-01**: ~~Registros `papel='SINAL'` dentro de `originals/`
   (Apple Fotos) ou `Masters/` (Aperture) sem cópia `ACERVO` equivalente
-  (8.419 medidos) deixam de ficar invisíveis em Revisão/Viagens/Operações —
-  `dentro_de_pacote()` passa a diferenciar o subcaminho real
-  (`originals/`/`Masters/`) do derivado (`resources/derivatives/`)
-  [docs/AVALIACAO_UX.md, §C.2, medido]
-- [ ] **BUG-02**: Scanner de arquivo passa a descobrir e catalogar vídeo
-  (`.mov`/`.mp4`/`.mpg`, hoje ausente de `PILLOW_EXTENSIONS`/
-  `HEIF_EXTENSIONS`/`RAW_EXTENSIONS`) — arquivo ilegível é registrado como
-  erro, nunca fica invisível [docs/AVALIACAO_UX.md, §C.3, medido]
+  ficam invisíveis~~ — já corrigido, commit `5c7b36d` (2026-08-06):
+  `dentro_de_pacote()` diferencia `originals/`/`Masters/` do derivado.
+  Teste: `tests/test_discovery.py:211-212`
+  [docs/AVALIACAO_UX.md, §C.2 — achado já resolvido]
+- [x] **BUG-02**: ~~Scanner de arquivo não descobre vídeo~~ — já
+  corrigido: `VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi"}` existe
+  em `fotoorganizer/metadata/purepython.py:51`, incluído na descoberta
+  [docs/AVALIACAO_UX.md, §C.3 — achado já resolvido]
 - [ ] **BUG-03**: Filtro "Tudo" (`alcance=tudo`) da Biblioteca passa a
-  filtrar de fato — hoje `select(MediaFile)` sem `WHERE` mistura 353.480
-  `SINAL` com o acervo [docs/AVALIACAO_UX.md, §C.2, medido]
-- [ ] **BUG-04**: Quando o advisor LLM responde `categoria="Viagens"` para
-  uma sessão neutra, o motor cria/junta a sessão a uma Viagem com a mesma
-  justificativa e confiança que já dá ao caminho `evento` — hoje só
-  `resultado.evento` promove a sessão, criando assimetria não testada
-  [docs/AVALIACAO_UX.md, §C.4, medido]
+  filtrar de fato — hoje `select(MediaFile)` sem `WHERE`
+  (`fotoorganizer/repositories/media.py:203-204`) mistura `SINAL` com o
+  acervo, apesar do comentário no código dizer o contrário. **Único item
+  ainda aberto desta categoria** — confirmado por leitura direta,
+  2026-08-16 [docs/AVALIACAO_UX.md, §C.2, medido]
+- [x] **BUG-04**: ~~Quando o advisor LLM responde `categoria="Viagens"`,
+  a sessão não cria/junta a uma Viagem~~ — já corrigido:
+  `engine.py:713-725` já cria/junta `Trip` com a mesma justificativa do
+  caminho `evento`, comentário no código cita a própria seção C.4.
+  Testes: `test_advisor_llm_promove_sessao_neutra_a_viagem`,
+  `test_advisor_llm_viagem_sem_nome_usa_pais_dominante`
+  [docs/AVALIACAO_UX.md, §C.4 — achado já resolvido]
 
 ### Revisão acessível e consistente (REV)
 
@@ -192,10 +203,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | TZ-01 | Phase 1 | Complete |
-| BUG-01 | Phase 2 | Pending |
-| BUG-02 | Phase 2 | Pending |
+| BUG-01 | — | Already validated (commit `5c7b36d`, pre-session) |
+| BUG-02 | — | Already validated (pre-session) |
 | BUG-03 | Phase 2 | Pending |
-| BUG-04 | Phase 2 | Pending |
+| BUG-04 | — | Already validated (pre-session) |
 | REV-01 | Phase 3 | Pending |
 | REV-02 | Phase 3 | Pending |
 | REV-03 | Phase 3 | Pending |

@@ -27,8 +27,8 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
 
 - [x] **Phase 1: Timezone estimado** - Fotos ganham fuso horário estimado (completed 2026-08-16)
   (`tz_estimado`) a partir do país já atribuído, gravado direto sem revisão
-- [ ] **Phase 2: Correção de dados medidos** - SINAL órfão, vídeo, filtro
-  "Tudo" e assimetria Evento×Viagem do advisor param de esconder dado real
+- [ ] **Phase 2: Correção de dados medidos** - Filtro "Tudo" da Biblioteca
+  para de esconder SINAL misturado com acervo sem `WHERE`
 - [ ] **Phase 3: Revisão acessível e consistente** - Tela de Revisão operável
   só de teclado e alinhada ao design system
 - [ ] **Phase 4: Consistência visual secundária** - Selos, estados de erro/
@@ -81,22 +81,19 @@ Plans:
 - [x] 01-01-PLAN.md — tabela TZ_POR_PAIS, persistência direta em MediaFile, serialização em GET /api/midia/{id}
 
 ### Phase 2: Correção de dados medidos
-**Goal**: Nenhuma foto real e única, nem vídeo válido, fica invisível por
-efeito colateral de um filtro ou classificação — e a resposta do advisor
-para "Viagens" pesa tanto quanto a resposta para "Evento".
+**Goal**: O filtro "Tudo" da Biblioteca distingue `SINAL` de `ACERVO` em
+vez de misturar os dois numa tabela sem `WHERE`.
 **Depends on**: Nothing
-**Requirements**: BUG-01, BUG-02, BUG-03, BUG-04
+**Requirements**: BUG-03
+**Scope note (2026-08-16):** dos 4 defeitos medidos originalmente em
+`docs/AVALIACAO_UX.md` §C (2026-08-06), BUG-01 (`5c7b36d`), BUG-02
+(`VIDEO_EXTENSIONS`) e BUG-04 (`engine.py:713-725`) já estavam corrigidos
+no código antes desta sessão — confirmado por leitura direta + testes
+existentes, movidos para PROJECT.md § Validated. Só BUG-03 segue aberto;
+o escopo desta fase foi reduzido de acordo.
 **Success Criteria** (what must be TRUE):
-  1. Os registros `SINAL` sem cópia `ACERVO` equivalente dentro de
-     `originals/`/`Masters/` deixam de ser tratados como derivado/miniatura
-     — usuário consegue alcançá-los em Revisão/Viagens/Operações.
-  2. Um arquivo `.mov`/`.mp4`/`.mpg` colocado numa pasta escaneada aparece
-     no catálogo (ou gera erro registrado) — nunca desaparece em silêncio.
-  3. O filtro "Tudo" da Biblioteca distingue `SINAL` de `ACERVO` em vez de
+  1. O filtro "Tudo" da Biblioteca distingue `SINAL` de `ACERVO` em vez de
      devolver a tabela inteira sem `WHERE`.
-  4. Quando o advisor LLM responde `categoria="Viagens"` para uma sessão
-     neutra, uma Viagem é criada/associada com a mesma confiança e
-     justificativa que o caminho `evento` já tem hoje.
 **Plans**: TBD
 
 ### Phase 3: Revisão acessível e consistente

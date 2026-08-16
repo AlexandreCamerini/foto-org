@@ -72,6 +72,18 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   `MediaFile` sem `Evidence`/revisão, recalculado incondicionalmente a
   cada `gerar()` mesmo para mídia com sugestão já decidida — Validado na
   Fase 1, 2026-08-16 (spec: `docs/prompts/fase-11-timezone-estimado.md`)
+- ✓ Original dentro de pacote (`originals/`/`Masters/`) deixa de ser
+  rebaixado a testemunha — `dentro_de_pacote()` diferencia do derivado —
+  commit `5c7b36d`, 2026-08-06 (BUG-01, achado de `docs/AVALIACAO_UX.md`
+  §C.2; confirmado ainda válido em 2026-08-16 antes de planejar a Fase 2)
+- ✓ Scanner de arquivo descobre e cataloga vídeo (`.mov`/`.mp4`/`.m4v`/
+  `.avi`) — `VIDEO_EXTENSIONS` em `metadata/purepython.py` (BUG-02,
+  achado de `docs/AVALIACAO_UX.md` §C.3; confirmado ainda válido em
+  2026-08-16)
+- ✓ Advisor LLM respondendo "Viagens" cria/junta a sessão a uma Viagem
+  real, mesma justificativa/confiança do caminho Evento —
+  `engine.py:713-725` (BUG-04, achado de `docs/AVALIACAO_UX.md` §C.4;
+  confirmado ainda válido em 2026-08-16)
 
 ### Active
 
@@ -80,9 +92,10 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] Correção de 4 defeitos medidos (não hipótese) na rodada de UX de
-  2026-08-06: SINAL órfão invisível, vídeo não lido pelo scanner, filtro
-  "Tudo" sem WHERE, assimetria Evento×Viagem no advisor
+- [ ] Filtro "Tudo" (`alcance=tudo`) da Biblioteca passa a filtrar de
+  fato — hoje mistura `SINAL` com o acervo (BUG-03; os outros 3 defeitos
+  da mesma rodada de UX de 2026-08-06 já estavam corrigidos antes desta
+  sessão — ver § Validated)
 - [ ] Revisão navegável 100% por teclado e consistente com
   `docs/DIRECAO_DE_ARTE.md` (7 achados de esforço P/M)
 - [ ] Consistência visual secundária (selos de fonte/álbum×evento, estado
