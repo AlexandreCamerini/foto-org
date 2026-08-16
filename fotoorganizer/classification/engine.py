@@ -381,9 +381,12 @@ class SuggestionEngine:
             if chave not in resolvidos:
                 location = self._resolver.resolve(session, *coordenada)
                 resolvidos[chave] = location.id if location is not None else None
-            location_id = resolvidos[chave]
-            if location_id is not None:
-                media.location_id = location_id
+            # Grava sempre, inclusive None: se a coordenada deixou de
+            # resolver nesta rodada (doadora mudou, provider rejeitou o
+            # ponto), o location_id de uma coordenada antiga não pode
+            # sobreviver — sem isto a mídia ficava presa a um país que
+            # ela não tem mais (WR-01).
+            media.location_id = resolvidos[chave]
 
     # -- correlação entre fontes ---------------------------------------------
     @staticmethod
