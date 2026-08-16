@@ -25,8 +25,8 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Timezone estimado** - Fotos sem GPS próprio ganham fuso
-  horário estimado a partir do país herdado
+- [ ] **Phase 1: Timezone estimado** - Fotos ganham fuso horário estimado
+  (`tz_estimado`) a partir do país já atribuído, gravado direto sem revisão
 - [ ] **Phase 2: Correção de dados medidos** - SINAL órfão, vídeo, filtro
   "Tudo" e assimetria Evento×Viagem do advisor param de esconder dado real
 - [ ] **Phase 3: Revisão acessível e consistente** - Tela de Revisão operável
@@ -39,22 +39,42 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
 ## Phase Details
 
 ### Phase 1: Timezone estimado
-**Goal**: Fotos sem GPS próprio ganham `tz_estimado` a partir do país
-herdado (janela de 12h de D-025), fechando o último item da trinca
-lugar/hora/fuso para o acervo que não tem GPS nenhum — agora desbloqueado
-porque o mapa do lugar estimado (que este item dependia) já está concluído.
-**Depends on**: Nothing (mapa/raio de incerteza já validado — ver PROJECT.md)
+**Goal**: Fotos ganham `tz_estimado` — fuso IANA estimado a partir do país
+já atribuído à foto por qualquer origem (GPS próprio, herança temporal de
+D-025, ou nome de pasta) — fechando o modelo de dois instantes de D-038:
+`tz_estimado IS NOT NULL` passa a ser o sinal de "fuso conhecido" do
+catálogo.
+**Depends on**: Nothing (mapa/raio de incerteza já validado; país já é
+atribuído pelo motor de classificação — ver PROJECT.md)
 **Requirements**: TZ-01
+**Canonical spec**: `docs/prompts/fase-11-timezone-estimado.md` (spec
+detalhado desta fase, mais autoritativo que a formulação abaixo — decisão
+do dono em 2026-08-16: seguir este doc, não o texto minerado do
+ROADMAP.md/AVALIACAO_UX.md original). Ver também D-038 em
+`docs/DECISOES.md` (modelo de dois instantes).
 **Success Criteria** (what must be TRUE):
-  1. Uma foto sem GPS próprio, cujo país foi herdado dentro da janela de
-     D-025, mostra `tz_estimado` com evidência de origem/confiança no
-     Inspetor.
-  2. `tz_estimado` só é preenchido quando o raio de incerteza da mesma
-     cadeia de evidência já está calculado — sem empilhar inferência sobre
-     inferência em silêncio.
-  3. A justificativa da evidência nomeia a foto doadora e a janela usada,
-     no mesmo formato do restante do modelo de confiança
-     (`docs/CONFIANCA.md`).
+  1. Tabela estática `TZ_POR_PAIS` (nova, `fotoorganizer/geolocation/
+     timezones.py`) cobre os 98 países de `PAISES_PT`; todo valor é um
+     identificador IANA válido, validado em teste contra
+     `zoneinfo.available_timezones()`.
+  2. Uma foto cujo país foi resolvido — por GPS próprio, herança temporal
+     (D-025) ou nome de pasta — ganha `tz_estimado` gravado direto em
+     `MediaFile` dentro de `_persistir_sugestao` após `gerar()`, **sem**
+     passar por `Evidence`/`Suggestion`/revisão humana e **sem** entrada em
+     `docs/CONFIANCA.md` — mesmo padrão não revisado de `gps_lat_estimado`.
+  3. `GET /api/midia/{id}` devolve o campo `tz_estimado`.
+  4. Sem país conhecido (ou país fora da tabela), `tz_estimado` fica
+     `None` — nunca inventa, nunca lança erro.
+  5. País com mais de um fuso oficial (Brasil, EUA, Rússia...) resolve para
+     o fuso da capital ou de maior população — aproximação deliberada,
+     documentada em comentário na própria tabela.
+  6. Escrever `tz_estimado` não reescreve `data_capturada`/
+     `data_capturada_utc` — conversão para hora local exibida em UI é
+     decisão separada, fora desta fase.
+**Explicitly out of scope**: geometria coordenada→fuso (`timezonefinder`);
+leitura de `OffsetTimeOriginal`/`Z` do QuickTime nos extratores (item
+adiado, não esta fase); correção de `sources/google_takeout.py` (fuso da
+máquina do importador); qualquer mudança em `Evidence`/`docs/CONFIANCA.md`.
 **Plans**: TBD
 
 ### Phase 2: Correção de dados medidos

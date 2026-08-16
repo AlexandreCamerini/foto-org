@@ -30,10 +30,13 @@ para exatamente uma fase.
 
 ### Geolocalização (TZ)
 
-- [ ] **TZ-01**: Sistema infere `tz_estimado` a partir do país herdado
-  (janela de 12h de D-025) para fotos sem GPS próprio, em vez de depender
-  de GPS+hora local (que só alcançaria 4 dos 25 anos do acervo)
-  [docs/ROADMAP.md, item v2 #5]
+- [ ] **TZ-01**: Sistema infere `tz_estimado` a partir do país já atribuído
+  à foto (GPS próprio, herança temporal — janela de 12h de D-025 — ou nome
+  de pasta), em vez de depender de GPS+hora local (que só alcançaria 4 dos
+  25 anos do acervo). Gravado direto em `MediaFile`, sem `Evidence`/revisão
+  — mesmo padrão de `gps_lat_estimado` [docs/ROADMAP.md, item v2 #5;
+  spec detalhado e autoritativo em
+  `docs/prompts/fase-11-timezone-estimado.md`, decisão do dono 2026-08-16]
 
 ### Correção de dados medidos (BUG)
 
