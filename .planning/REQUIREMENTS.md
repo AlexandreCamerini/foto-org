@@ -75,29 +75,48 @@ aberto. -->
 
 ### Revisão acessível e consistente (REV)
 
-- [ ] **REV-01**: Cabeçalho de grupo em Revisão navegável por teclado
-  (`role="button"`, `tabIndex={0}`, `onKeyDown` para Enter/Espaço) — hoje
-  só abre com mouse [docs/AVALIACAO_UX.md, A.1]
-- [ ] **REV-02**: `texto-3` (contraste ≈3,46:1) deixa de ser usado como
-  texto de conteúdo em Review/Inspector/Operations — troca para `texto-2`
-  (≈6,1:1), reservando `texto-3` para o de fato desabilitado
-  [docs/AVALIACAO_UX.md, B.1]
-- [ ] **REV-03**: Busca de texto é limpa (ou os filtros ativos aparecem
-  como chips removíveis) ao trocar de grupo/aba — hoje sobrevive à troca e
-  mostra "0 no filtro" com a mensagem genérica de biblioteca vazia
+<!-- REV-01, REV-04, REV-05, REV-06 e REV-07 foram minerados de
+docs/AVALIACAO_UX.md (medido em 2026-08-06) durante o ingest, mas já
+tinham sido corrigidos no código antes desta sessão — confirmado por
+leitura direta + git log (commits `ae60319`, `a7d6e5e`) em 2026-08-16.
+Ver PROJECT.md § Validated. Só REV-02 (parcial) e REV-03 (parcial)
+seguem abertos. -->
+
+- [x] **REV-01**: ~~Cabeçalho de grupo em Revisão navegável por
+  teclado~~ — já corrigido: `role="button"`, `tabIndex={0}`,
+  `onKeyDown` (Enter/Espaço) já em `Review.tsx`
+  [docs/AVALIACAO_UX.md, A.1 — achado já resolvido]
+- [ ] **REV-02 [parcial]**: `texto-3` (contraste ≈3,46:1) deixa de ser
+  usado como texto de conteúdo em Review/Inspector/Operations — troca
+  para `texto-2` (≈6,1:1), reservando `texto-3` para o de fato
+  desabilitado. Commit `ae60319` (06/08) já trocou as 4 instâncias
+  citadas no achado original (subtítulo de sugestão em Review.tsx,
+  rótulo de campo no Inspetor, 2 linhas em Operations). **Restam outras
+  instâncias de `texto-3`** (contagens, "classificado por você", estados
+  de carregamento) cuja classificação como violação real vs. uso
+  legítimo de terciário/desabilitado precisa de julgamento — não
+  auditado linha a linha ainda [docs/AVALIACAO_UX.md, B.1]
+- [ ] **REV-03 [parcial]**: Busca de texto é limpa ao trocar de
+  grupo/aba — 2 de 5 pontos de entrada já limpam (`Panorama→Biblioteca`,
+  `Viagens→Biblioteca`, `App.tsx`). **Faltam 3 pontos nomeados**: botão
+  de troca de aba, `Sidebar.onSelecionarPasta`, `StatusBar.aoIrPara`
   [docs/AVALIACAO_UX.md, A.2]
-- [ ] **REV-04**: Modais usam `rounded-md` (6px) — hoje alguns usam
-  `rounded-lg`, contra a regra explícita de `docs/DIRECAO_DE_ARTE.md`
-  [docs/AVALIACAO_UX.md, B.2]
-- [ ] **REV-05**: Data no Inspetor é formatada em pt-BR com
-  `formatarData()` — hoje é ISO cru, divergindo de Loupe e Revisão
-  [docs/AVALIACAO_UX.md, A.5]
-- [ ] **REV-06**: Par Aprovar/Rejeitar tem peso visual único (neutro-até-
-  hover) em cabeçalho e linha — hoje o cabeçalho é neutro e a linha
-  individual é colorida em repouso [docs/AVALIACAO_UX.md, B.4]
-- [ ] **REV-07**: `text-acento` deixa de ser cor permanente de coluna/lista
-  inteira (Operations, TemplateEditor) — troca para `font-medium` neutro,
-  já que acento é reservado a estado [docs/AVALIACAO_UX.md, B.5]
+- [x] **REV-04**: ~~Modais usam `rounded-lg` em vez de `rounded-md`~~ —
+  já corrigido: zero ocorrências de `rounded-lg` em
+  `webapp/src/components/*.tsx`
+  [docs/AVALIACAO_UX.md, B.2 — achado já resolvido]
+- [x] **REV-05**: ~~Data no Inspetor em ISO cru~~ — já corrigido:
+  `Inspector.tsx` já importa e usa `formatarData()`
+  [docs/AVALIACAO_UX.md, A.5 — achado já resolvido]
+- [x] **REV-06**: ~~Par Aprovar/Rejeitar com pesos visuais diferentes em
+  cabeçalho e linha~~ — já corrigido, commit `ae60319` (06/08):
+  cabeçalho e linha individual usam o mesmo padrão neutro-até-hover
+  [docs/AVALIACAO_UX.md, B.4 — achado já resolvido]
+- [x] **REV-07**: ~~`text-acento` como cor permanente de coluna/lista
+  inteira~~ — já corrigido, commit `a7d6e5e`: `TemplateEditor.tsx` usa
+  `font-medium`; `Operations.tsx` usa `CORES_STATUS` (cor por estado via
+  dict, não decoração permanente)
+  [docs/AVALIACAO_UX.md, B.5 — achado já resolvido]
 
 ### Consistência visual secundária (CONS)
 
@@ -210,13 +229,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUG-02 | — | Already validated (pre-session) |
 | BUG-03 | Phase 2 | Complete (human verification pending) |
 | BUG-04 | — | Already validated (pre-session) |
-| REV-01 | Phase 3 | Pending |
-| REV-02 | Phase 3 | Pending |
-| REV-03 | Phase 3 | Pending |
-| REV-04 | Phase 3 | Pending |
-| REV-05 | Phase 3 | Pending |
-| REV-06 | Phase 3 | Pending |
-| REV-07 | Phase 3 | Pending |
+| REV-01 | — | Already validated (pre-session) |
+| REV-02 | Phase 3 | Pending (partial) |
+| REV-03 | Phase 3 | Pending (partial) |
+| REV-04 | — | Already validated (pre-session) |
+| REV-05 | — | Already validated (pre-session) |
+| REV-06 | — | Already validated (commit ae60319, pre-session) |
+| REV-07 | — | Already validated (commit a7d6e5e, pre-session) |
 | CONS-01 | Phase 4 | Pending |
 | CONS-02 | Phase 4 | Pending |
 | CONS-03 | Phase 4 | Pending |

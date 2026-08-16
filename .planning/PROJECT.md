@@ -91,6 +91,22 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   corrigida duas vezes durante planejamento/execução, ver
   `02-01-SUMMARY.md`. Verificação visual humana pendente (catálogo
   zerado) — `02-HUMAN-UAT.md`.
+- ✓ Cabeçalho de grupo em Revisão navegável por teclado
+  (`role`/`tabIndex`/`onKeyDown`) — `Review.tsx` (REV-01, achado de
+  `docs/AVALIACAO_UX.md` A.1; confirmado ainda válido em 2026-08-16)
+- ✓ Modais usam `rounded-md`, nunca `rounded-lg` — zero ocorrências no
+  webapp (REV-04, achado de `docs/AVALIACAO_UX.md` B.2; confirmado ainda
+  válido em 2026-08-16)
+- ✓ Data no Inspetor formatada em pt-BR com `formatarData()`, igual
+  Loupe/Revisão — `Inspector.tsx` (REV-05, achado de
+  `docs/AVALIACAO_UX.md` A.5; confirmado ainda válido em 2026-08-16)
+- ✓ Par Aprovar/Rejeitar com peso visual único (neutro-até-hover) em
+  cabeçalho e linha — commit `ae60319`, 2026-08-06 (REV-06, achado de
+  `docs/AVALIACAO_UX.md` B.4; confirmado ainda válido em 2026-08-16)
+- ✓ `text-acento` deixou de ser cor permanente de coluna (Operations
+  usa `CORES_STATUS` por estado, TemplateEditor usa `font-medium`) —
+  commit `a7d6e5e` (REV-07, achado de `docs/AVALIACAO_UX.md` B.5;
+  confirmado ainda válido em 2026-08-16)
 
 ### Active
 
@@ -99,8 +115,10 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] Revisão navegável 100% por teclado e consistente com
-  `docs/DIRECAO_DE_ARTE.md` (7 achados de esforço P/M)
+- [ ] `texto-3` restante em conteúdo (Review/Inspector/Operações) e
+  busca não limpa em 3 pontos de navegação restantes (REV-02/REV-03;
+  os outros 5 achados desta rodada já estavam corrigidos antes desta
+  sessão — ver § Validated)
 - [ ] Consistência visual secundária (selos de fonte/álbum×evento, estado
   de erro de imagem, estados vazios com ação, hover/peso de texto
   tokenizado) — 8 achados restantes

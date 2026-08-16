@@ -29,8 +29,8 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
   (`tz_estimado`) a partir do país já atribuído, gravado direto sem revisão
 - [x] **Phase 2: Correção de dados medidos** - Filtro "Tudo" da Biblioteca (completed 2026-08-16)
   para de esconder SINAL misturado com acervo sem `WHERE`
-- [ ] **Phase 3: Revisão acessível e consistente** - Tela de Revisão operável
-  só de teclado e alinhada ao design system
+- [ ] **Phase 3: Revisão acessível e consistente** - `texto-3` restante em
+  conteúdo e busca não limpa em 3 pontos de navegação
 - [ ] **Phase 4: Consistência visual secundária** - Selos, estados de erro/
   vazio e tokens de peso/hover consistentes entre telas
 - [ ] **Phase 5: Preparação para lançamento** - Empacotamento assinado,
@@ -101,23 +101,28 @@ Plans:
   rótulo/tooltip corrigidos, auditoria das contagens vizinhas (D-03)
 
 ### Phase 3: Revisão acessível e consistente
-**Goal**: A tela onde as decisões em lote acontecem pode ser operada do
-início ao fim sem mouse, e não contradiz visualmente o próprio design
-system que o resto do app segue.
+**Goal**: A busca de texto não vaza entre grupos/abas, e `texto-3`
+restante em conteúdo real (não decorativo/desabilitado) vira `texto-2`.
 **Depends on**: Phase 2 (corrige o dado que a Revisão exibe antes de
 polir a interação sobre ele)
-**Requirements**: REV-01, REV-02, REV-03, REV-04, REV-05, REV-06, REV-07
+**Requirements**: REV-02, REV-03
+**Scope note (2026-08-16):** dos 7 achados desta rodada
+(`docs/AVALIACAO_UX.md` A.1-A.2/B.1-B.5, medido 2026-08-06), REV-01
+(commit pré-sessão), REV-04, REV-05, REV-06 (commit `ae60319`) e REV-07
+(commit `a7d6e5e`) já estavam corrigidos no código antes desta sessão —
+confirmado por leitura direta + `git log`, movidos para PROJECT.md §
+Validated. Só REV-02 (parcial) e REV-03 (parcial) seguem abertos; o
+escopo desta fase foi reduzido de acordo. **UI-SPEC.md desta fase já
+reflete o escopo restrito** (aprovado antes desta correção de escopo,
+mas já tratava REV-01/04/05 como feitos).
 **Success Criteria** (what must be TRUE):
-  1. Usuário abre um grupo em Revisão e aprova/rejeita cada foto dele só
-     com teclado (Enter/Espaço no cabeçalho, atalhos já existentes na
-     linha).
-  2. Trocar de grupo ou aba nunca mostra um "0 no filtro" falso por causa
-     de busca antiga sobrevivendo à navegação.
-  3. Modais, contraste de texto de conteúdo e peso visual de
-     Aprovar/Rejeitar seguem `docs/DIRECAO_DE_ARTE.md` de forma uniforme
-     em Review/Inspector/Operations.
-  4. Data no Inspetor aparece no mesmo formato pt-BR usado em Loupe e
-     Revisão.
+  1. Trocar de grupo ou aba nunca mostra um "0 no filtro" falso por causa
+     de busca antiga sobrevivendo à navegação — nos 3 pontos de entrada
+     ainda não cobertos (botão de troca de aba, `Sidebar.onSelecionarPasta`,
+     `StatusBar.aoIrPara`).
+  2. `texto-3` usado como texto de conteúdo real (não decorativo, não
+     desabilitado, não estado de carregamento) em Review/Inspector/
+     Operations vira `texto-2`.
 **Plans**: TBD
 **UI hint**: yes
 
