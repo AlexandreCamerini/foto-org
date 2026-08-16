@@ -56,12 +56,15 @@ aberto. -->
   corrigido: `VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi"}` existe
   em `fotoorganizer/metadata/purepython.py:51`, incluído na descoberta
   [docs/AVALIACAO_UX.md, §C.3 — achado já resolvido]
-- [ ] **BUG-03**: Filtro "Tudo" (`alcance=tudo`) da Biblioteca passa a
-  filtrar de fato — hoje `select(MediaFile)` sem `WHERE`
-  (`fotoorganizer/repositories/media.py:203-204`) mistura `SINAL` com o
-  acervo, apesar do comentário no código dizer o contrário. **Único item
-  ainda aberto desta categoria** — confirmado por leitura direta,
-  2026-08-16 [docs/AVALIACAO_UX.md, §C.2, medido]
+- [x] **BUG-03**: ~~Filtro "Tudo" (`alcance=tudo`) da Biblioteca não
+  filtrava de fato~~ — corrigido na Fase 2 (2026-08-16):
+  `_ACERVO_OU_REFERENCIA` em `fotoorganizer/repositories/media.py`
+  exclui testemunha com arquivo local, preservando referência externa
+  sem arquivo (feature do commit `1b125f7`). Testes:
+  `tests/test_repository.py` (3 novos), tripwire
+  `tests/test_sources_importer.py:428-430` intocado. Verificação humana
+  visual pendente (catálogo zerado) — ver `02-HUMAN-UAT.md`
+  [docs/AVALIACAO_UX.md, §C.2, medido]
 - [x] **BUG-04**: ~~Quando o advisor LLM responde `categoria="Viagens"`,
   a sessão não cria/junta a uma Viagem~~ — já corrigido:
   `engine.py:713-725` já cria/junta `Trip` com a mesma justificativa do
@@ -205,7 +208,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TZ-01 | Phase 1 | Complete |
 | BUG-01 | — | Already validated (commit `5c7b36d`, pre-session) |
 | BUG-02 | — | Already validated (pre-session) |
-| BUG-03 | Phase 2 | Pending |
+| BUG-03 | Phase 2 | Complete (human verification pending) |
 | BUG-04 | — | Already validated (pre-session) |
 | REV-01 | Phase 3 | Pending |
 | REV-02 | Phase 3 | Pending |
