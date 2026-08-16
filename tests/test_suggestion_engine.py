@@ -8,6 +8,7 @@ from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.classification.confidence import nivel_para_score
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.geolocation import GeoResult, LocationResolver
+from fotoorganizer.geolocation.timezones import TZ_POR_PAIS
 from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.models import (
     ConfidenceLevel,
@@ -1054,6 +1055,78 @@ def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):
         assert cam.gps_lat_estimado is None
         assert cam.gps_estimado_de_id is None
         assert cam.coordenada_estimada is False
+
+
+def test_tz_estimado_de_gps_proprio(ambiente):
+    """País vindo de GPS próprio grava tz_estimado direto em MediaFile —
+    sem Evidence nova, sem entrada em docs/CONFIANCA.md (D-03)."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    with factory() as session:
+        franca = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_0.jpg")
+        )
+        assert franca.tz_estimado == TZ_POR_PAIS["França"]
+
+
+def test_tz_estimado_de_pais_herdado(ambiente):
+    """País só por herança temporal (sem GPS próprio, D-025) também grava
+    tz_estimado — mesmo resultado do GPS próprio."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    with factory() as session:
+        sem_gps = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "sem_gps.jpg")
+        )
+        assert sem_gps.gps_lat is None
+        assert sem_gps.tz_estimado == TZ_POR_PAIS["França"]
+
+
+def test_tz_estimado_none_sem_pais_conhecido(ambiente):
+    """Sem nenhum país conhecido, tz_estimado fica None — nunca inventa,
+    nunca lança erro (D-04)."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    with factory() as session:
+        misteriosa = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "misteriosa.jpg")
+        )
+        assert misteriosa.tz_estimado is None
+
+
+def test_tz_estimado_atualiza_ao_regenerar_sugestoes(migrated_engine):
+    """Regenerar sugestões não pode deixar um tz_estimado obsoleto de uma
+    rodada anterior — mesmo padrão de
+    test_estimativa_some_quando_a_foto_ganha_gps_proprio, mas para
+    tz_estimado: a foto perde o país que tinha (pasta renomeada) e a
+    segunda gerar() precisa refletir isso, não preservar o valor velho."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "toquio.jpg", "/fotos/Japão/Tóquio", data=base,
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "toquio.jpg"))
+        assert foto.tz_estimado == TZ_POR_PAIS["Japão"]
+        foto.pasta = "/fotos/sem_pais_no_nome"
+        foto.caminho = "/fotos/sem_pais_no_nome/toquio.jpg"
+        session.commit()
+
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "toquio.jpg"))
+        assert foto.tz_estimado is None
 
 
 def test_captura_de_tela_sai_do_fluxo_de_viagem(migrated_engine):
