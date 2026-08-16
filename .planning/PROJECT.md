@@ -107,6 +107,14 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   usa `CORES_STATUS` por estado, TemplateEditor usa `font-medium`) —
   commit `a7d6e5e` (REV-07, achado de `docs/AVALIACAO_UX.md` B.5;
   confirmado ainda válido em 2026-08-16)
+- ✓ Busca de texto não vaza entre grupos/abas nos 3 pontos de navegação
+  restantes (botão de troca de aba com guarda `nome !== aba`,
+  `Sidebar.onSelecionarPasta`, `StatusBar.aoIrPara`) — REV-03,
+  `App.tsx`, 4 testes de regressão — Validado na Fase 3, 2026-08-16
+- ✓ `texto-3` de conteúdo real (não decorativo/desabilitado) vira
+  `texto-2` em Review/Inspector/Operations — 9 promoções pela lista
+  fechada de D-02, 10 usos legítimos preservados, aprovação visual do
+  dono contra dado real — REV-02, Validado na Fase 3, 2026-08-16
 
 ### Active
 
@@ -115,10 +123,6 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] `texto-3` restante em conteúdo (Review/Inspector/Operações) e
-  busca não limpa em 3 pontos de navegação restantes (REV-02/REV-03;
-  os outros 5 achados desta rodada já estavam corrigidos antes desta
-  sessão — ver § Validated)
 - [ ] Consistência visual secundária (selos de fonte/álbum×evento, estado
   de erro de imagem, estados vazios com ação, hover/peso de texto
   tokenizado) — 8 achados restantes
@@ -234,4 +238,4 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
 
 ---
-*Last updated: 2026-08-16 — Phase 2 (Correção de dados medidos) complete*
+*Last updated: 2026-08-16 — Phase 3 (Revisão acessível e consistente) complete*
