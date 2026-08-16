@@ -31,22 +31,22 @@ key-decisions:
 
 patterns-established: []
 
-requirements-completed: []  # REV-02 pende aprovação visual do checkpoint (Task 2) antes de fechar
+requirements-completed: [REV-02]
 
 # Metrics
-duration: ~20min (até o checkpoint; Task 2 aguarda o dono)
+duration: ~20min (Task 1) + checkpoint visual do dono
 completed: 2026-08-16
 ---
 
-# Phase 03 Plan 02: Promoção de contraste texto-3→texto-2 (REV-02) — parcial, aguardando checkpoint
+# Phase 03 Plan 02: Promoção de contraste texto-3→texto-2 (REV-02)
 
-**9 trocas de classe Tailwind `text-texto-3`→`text-texto-2` em Review.tsx/Inspector.tsx/Operations.tsx, contagens e diff programaticamente conferidos contra a lista fechada de D-02; falta a aprovação visual do dono (Task 2, checkpoint bloqueante).**
+**9 trocas de classe Tailwind `text-texto-3`→`text-texto-2` em Review.tsx/Inspector.tsx/Operations.tsx, contagens e diff programaticamente conferidos contra a lista fechada de D-02, com aprovação visual do dono confirmada em conteúdo real.**
 
 ## Performance
 
-- **Duration:** ~20 min (Task 1 completa; Task 2 é checkpoint humano, não contabilizado)
+- **Duration:** ~20 min (Task 1) + checkpoint visual do dono
 - **Completed (Task 1):** 2026-08-16T17:54:38-03:00
-- **Tasks:** 1/2 completos (Task 2 é `checkpoint:human-verify`, aguardando o dono)
+- **Tasks:** 2/2 completos
 - **Files modified:** 3
 
 ## Accomplishments
@@ -59,9 +59,26 @@ completed: 2026-08-16
 Each task was committed atomically:
 
 1. **Task 1: Promover as 9 linhas de conteúdo a texto-2** - `1798df7` (feat)
-2. **Task 2: Checkpoint — verificação visual de contraste nas 3 telas** - pendente (checkpoint humano, sem commit até resposta do dono)
+2. **Task 2: Checkpoint — verificação visual de contraste nas 3 telas** - aprovado pelo dono (ver "Checkpoint Verdict" abaixo); este commit fecha o plano.
 
-**Plan metadata:** pendente — o commit final `docs(03-02): complete` só acontece depois que o checkpoint for respondido.
+**Plan metadata:** este commit (`docs(03-02): complete`) fecha o plano depois da aprovação.
+
+## Checkpoint Verdict
+
+O catálogo de produção estava zerado no momento do checkpoint (ver "Issues Encountered"). O dono escolheu rodar uma varredura real antes de aprovar: o orquestrador gerou uma biblioteca sintética via `scripts/gerar_demo.py` (59 arquivos, nenhuma foto pessoal), rodou `fotoorganizer scan` contra o catálogo de produção, disparou `POST /api/sugestoes/gerar` (59 sugestões, 2 viagens, 1 evento) e verificou as 3 telas com conteúdo real — inclusive aprovando um grupo, criando um plano, rodando dry-run e executando uma cópia de 18 arquivos sintéticos para uma pasta de scratch, para exercitar também a linha de progresso "N/M copiados".
+
+Confirmado por CSS computado (não só inspeção visual), `getComputedStyle(...).color`, contra o token `--color-texto-2` (`rgb(148, 153, 162)` / `#9499a2`):
+
+| Tela | Elemento (D-02) | Resultado |
+|------|------------------|-----------|
+| Revisão | Total da fila ("59 em 6 grupos") | `texto-2` confirmado |
+| Revisão | Caret `▾`/`▸`, seta `→`, ícone `✎` | `texto-3` preservado |
+| Inspetor | Namespace de metadado ("EXIF (gravado pela câmera)") | `texto-2` confirmado |
+| Inspetor | Chave de metadado ("DateTimeOriginal") | `texto-2` confirmado |
+| Operações | Veredito do dry-run ("18 prontos, sem problemas") | `texto-2` confirmado |
+| Operações | Progresso ("Concluído: 18 processados") | `texto-2` confirmado |
+
+Dono aprovou explicitamente ("Aprovado") sem apontar ajuste em nenhuma tela ou linha — nenhuma reabertura de escopo necessária.
 
 ## Files Created/Modified
 - `webapp/src/components/Review.tsx` — linhas 145 (total da fila), 253 (nome do arquivo na miniatura de comparação), 447 ("Sem evidência registrada para esta sugestão.")
@@ -77,16 +94,16 @@ None - plan executado exatamente como escrito na Task 1. Nenhum arquivo fora da 
 
 ## Issues Encountered
 
-O catálogo de produção (`~/Library/Application Support/FotoOrganizer/catalog.db`) está zerado (`PROJECT.md`: reset em 2026-08-16, nova varredura ainda não rodou — confirmado via `GET /api/status` retornando `total: 0`). Os servidores de verificação (backend FastAPI em `http://127.0.0.1:8765` e Vite em `http://localhost:5173`) foram deixados no ar para o checkpoint, mas a fila de Revisão, o Inspetor e a lista de Operações vão renderizar em estado vazio — o dono não vai conseguir ver as 9 linhas promovidas com conteúdo real sem antes rodar uma varredura (`scan`) ou apontar `--data-dir` para um catálogo populado. Isso não bloqueia a Task 1 (contagem/diff/testes já provam a correção da troca de classe), mas limita a verificação visual da Task 2 até o dono decidir como quer contornar (rodar scan, apontar outro catálogo, ou aceitar a inspeção do diff/grep como suficiente).
+O catálogo de produção (`~/Library/Application Support/FotoOrganizer/catalog.db`) estava zerado no início do checkpoint (reset em 2026-08-16, nova varredura ainda não tinha rodado). Resolvido durante o checkpoint: orquestrador gerou dados sintéticos e rodou uma varredura real (ver "Checkpoint Verdict") — não bloqueou a Task 1 (contagem/diff/testes já provavam a correção da troca de classe antes disso), só adiou a verificação visual da Task 2 até o catálogo ter conteúdo.
 
 ## User Setup Required
 
-None - nenhuma configuração de serviço externo. Servidores de dev já em execução para a verificação do checkpoint (ver acima sobre catálogo vazio).
+None - nenhuma configuração de serviço externo.
 
 ## Next Phase Readiness
 
-Task 1 fechada e comitada (`1798df7`). Task 2 (checkpoint humano) aguarda resposta do dono — ver seção "Issues Encountered" sobre o catálogo vazio antes de aprovar. Depois da aprovação (ou de ajustes aprovados e reconferidos), falta apenas o commit de metadados do plano e o fechamento de REV-02 em REQUIREMENTS.md/STATE.md/ROADMAP.md, que ficam a cargo do orquestrador.
+Task 1 e Task 2 fechadas. REV-02 completo — orquestrador segue para o fechamento de REQUIREMENTS.md/STATE.md/ROADMAP.md.
 
 ---
 *Phase: 03-revis-o-acess-vel-e-consistente*
-*Completed: parcial — 2026-08-16 (Task 1); Task 2 pendente*
+*Completed: 2026-08-16*
