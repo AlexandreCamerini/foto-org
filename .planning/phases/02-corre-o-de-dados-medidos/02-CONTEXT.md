@@ -25,26 +25,37 @@ aberto.
 ## Implementation Decisions
 
 ### Definição de "Tudo"
-- **D-01 [corrigido pelo pattern-mapper, 2026-08-16]:** "Tudo" passa a
-  significar `MediaFile.papel == MediaRole.ACERVO` **puro** — NÃO
-  `_ACERVO`/`organizavel` (que é mais estrito: também exige
-  `not arquivo_ausente and not arquivo_offline`). A redação original
-  desta decisão dizia "mesmo critério de `_ACERVO`", o que estava
-  **errado** — `_ACERVO = MediaFile.organizavel` excluiria registros
-  ACERVO sem arquivo local, quebrando o teste existente
-  `tests/test_sources_importer.py:428`
-  (`test_referencia_aparece_na_biblioteca_e_fica_fora_do_organizavel`),
-  que já trava `alcance="tudo"` contando 1 pra um registro
-  `papel=ACERVO, arquivo_ausente=True`. "Alcançável ou não" (a frase
-  original) só é verdade com o `papel` puro, não com `organizavel`.
-  Testemunha (`papel == SINAL`) continua nunca aparecendo na grade, em
-  nenhum dos três filtros — isso não muda. Decisão do dono, 2026-08-16,
-  resolvendo a contradição entre o comentário de `_query()`
-  ("Testemunhas ficam fora... de qualquer filtro") e o rótulo de
-  `ALCANCES["tudo"]` ("tudo que o app conhece", que sugeria incluir
-  testemunha). **Tripwire de teste**: `tests/test_sources_importer.py:428`
-  DEVE continuar passando (contar 1) depois da mudança — se quebrar, o
-  predicado errado (`_ACERVO`) foi usado.
+- **D-01 [corrigido pelo executor durante a execução, 2026-08-16 —
+  segunda correção, ver histórico completo em `02-01-SUMMARY.md`]:**
+  "Tudo" inclui `papel == MediaRole.ACERVO` (qualquer, alcançável ou não)
+  **OU** `papel == MediaRole.SINAL com arquivo_ausente == True`
+  (referência externa pura — ex. Apple Fotos iCloud-only, volume do
+  Lightroom desmontado). Exclui só `SINAL` com arquivo local real
+  (miniatura/derivado dentro de pacote — `.photoslibrary`/`.aplibrary`/
+  `.lrdata`), que é o caso que o BUG-03 de fato reclama (353.480
+  registros medidos em `docs/AVALIACAO_UX.md` §C.2).
+
+  **Por que não é `papel == ACERVO` puro** (versão anterior desta
+  decisão, corrigida): o teste `tests/test_sources_importer.py:398-433`
+  (`test_referencia_aparece_na_biblioteca_e_fica_fora_do_organizavel`)
+  não testa um registro `ACERVO` — testa uma **referência externa**
+  (`ExternalAsset(caminho=None, ...)` → `_gravar_referencia`, que grava
+  `papel = MediaRole.SINAL` explicitamente, comentário "Uma referência é
+  testemunha por definição"). Esse teste existe desde o commit
+  `1b125f7` (31/07/2026, "a Biblioteca mostra o que o app conhece, não
+  só o que ele organiza") — feature deliberada: o dono viu 44.661 fotos
+  do Apple Fotos (todas iCloud-only, sem arquivo local) virarem "(0)" na
+  importação e descreveu isso como "o sistema esquece". Excluir toda
+  `SINAL` de "Tudo" (a versão anterior desta decisão) reverteria essa
+  feature sem necessidade — o achado do BUG-03 é sobre miniatura/
+  derivado com arquivo real (a maioria dos 353.480), não sobre
+  referência sem arquivo (~99 mil, um subconjunto bem menor).
+
+  **Tripwire de teste** (agora correto, sem contradição): `tests/
+  test_sources_importer.py:428-430` continuam passando (`tudo`==1,
+  `faltantes`==1, `organizaveis`==0) **sem editar o arquivo** — a
+  referência externa (SINAL + sem arquivo) permanece contada em "tudo"
+  E em "faltantes" (não mudou), só sai de "organizaveis" (não mudou).
 - **D-02:** O rótulo `ALCANCES["tudo"]` (`repositories/media.py:70`,
   hoje `"tudo que o app conhece"`) precisa mudar para não prometer o que
   não entrega mais — ex. `"todo o acervo, alcançável ou não"`. Redação
