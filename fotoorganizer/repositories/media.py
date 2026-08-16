@@ -88,7 +88,7 @@ def _acervo_ao_alcance():
 # O que a grade mostra. Os dois recortes são complementares: o que não dá
 # para organizar agora aparece em "faltantes", nunca em lugar nenhum.
 ALCANCES: dict[str, str] = {
-    "tudo": "tudo que o app conhece",
+    "tudo": "acervo inteiro, ao alcance ou não",
     "organizaveis": "acervo com o arquivo ao alcance agora",
     "faltantes": "o resto: sem arquivo, fora de alcance ou não é acervo",
 }
