@@ -41,6 +41,27 @@ _TIPO_EFETIVO = func.coalesce(MediaFile.tipo_confirmado, MediaFile.tipo_imagem)
 _ACERVO = MediaFile.organizavel
 _TESTEMUNHA = ~_ACERVO
 
+# Acervo (qualquer, alcançável ou não) OU referência externa sem arquivo
+# local. `_ACERVO` (== `organizavel`) exige também arquivo alcançável —
+# estrito demais para "tudo": excluiria acervo real cujo volume externo
+# está temporariamente desmontado (`arquivo_offline=True`), mesmo o dono
+# continuando dono dessas fotos. `papel == ACERVO` puro também erra, mas na
+# direção oposta: referência de catálogo externo sem arquivo (Apple Fotos
+# iCloud-only, item do Lightroom) é sempre gravada como `papel=SINAL` por
+# desenho (`sources/importer.py:_gravar_referencia`, "testemunha por
+# definição" — migração 0010 tornou `papel=ACERVO` sem arquivo um estado
+# inalcançável). Sem o segundo termo deste OR, essas referências
+# desapareceriam de "Tudo" — reabrindo o "o sistema esquece" que o commit
+# 1b125f7 corrigiu (44.661 fotos do Apple Fotos viravam "(0)" na
+# importação). O que fica de fora é só testemunha COM arquivo local real
+# (miniatura/derivado dentro de pacote — `.photoslibrary`/`.aplibrary`/
+# `.lrdata`) — o caso medido em docs/AVALIACAO_UX.md §C.2 (353.480
+# registros). Tripwire: tests/test_sources_importer.py:428-430.
+_ACERVO_OU_REFERENCIA = or_(
+    MediaFile.papel == MediaRole.ACERVO,
+    MediaFile.arquivo_ausente.is_(True),
+)
+
 
 def _acervo_ao_alcance():
     """Acervo cuja fonte responde AGORA — o que a grade promete ao dizer
@@ -194,16 +215,19 @@ class MediaRepository:
         self._factory = session_factory
 
     def _query(self, filters: MediaFilters):
-        # Testemunhas ficam fora da biblioteca visível, das contagens e de
-        # qualquer filtro. Existem só para doar GPS e horário à correlação.
-        # Junto delas fica o acervo cuja fonte não responde: é foto do dono,
-        # e mesmo assim não há o que abrir, revisar ou copiar agora.
+        # "Tudo" mostra acervo (qualquer, alcançável ou não) mais referência
+        # externa sem arquivo local — não testemunha com arquivo real
+        # (miniatura/derivado dentro de pacote). "Organizáveis" é o
+        # subconjunto que também tem arquivo ao alcance agora. Testemunha
+        # (dos dois tipos) continua aparecendo em "faltantes" de propósito:
+        # é lá que o rótulo promete "o resto: sem arquivo, fora de alcance
+        # ou não é acervo" — ver _ACERVO_OU_REFERENCIA acima.
         if filters.alcance == "organizaveis":
             stmt = select(MediaFile).where(_acervo_ao_alcance())
         elif filters.alcance == "faltantes":
             stmt = select(MediaFile).where(~_acervo_ao_alcance())
         else:
-            stmt = select(MediaFile)
+            stmt = select(MediaFile).where(_ACERVO_OU_REFERENCIA)
         if filters.busca:
             like = f"%{filters.busca}%"
             # Nome, caminho — e a curadoria. Procurar "Pantanal" e não achar
