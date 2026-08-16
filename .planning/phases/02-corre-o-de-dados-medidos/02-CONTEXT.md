@@ -25,15 +25,26 @@ aberto.
 ## Implementation Decisions
 
 ### Definição de "Tudo"
-- **D-01:** "Tudo" passa a significar `papel == MediaRole.ACERVO`
-  (alcançável ou não) — mesmo critério de `_ACERVO`/`organizavel` já
-  usado em `organizaveis`/`faltantes`, só sem o filtro de fonte
-  disponível. Testemunha (`papel == SINAL`) nunca aparece na grade, em
-  nenhum dos três filtros (`tudo`/`organizaveis`/`faltantes`) — decisão
-  do dono, 2026-08-16, resolvendo a contradição entre o comentário de
-  `_query()` ("Testemunhas ficam fora... de qualquer filtro") e o rótulo
-  de `ALCANCES["tudo"]` ("tudo que o app conhece", que sugeria incluir
-  testemunha).
+- **D-01 [corrigido pelo pattern-mapper, 2026-08-16]:** "Tudo" passa a
+  significar `MediaFile.papel == MediaRole.ACERVO` **puro** — NÃO
+  `_ACERVO`/`organizavel` (que é mais estrito: também exige
+  `not arquivo_ausente and not arquivo_offline`). A redação original
+  desta decisão dizia "mesmo critério de `_ACERVO`", o que estava
+  **errado** — `_ACERVO = MediaFile.organizavel` excluiria registros
+  ACERVO sem arquivo local, quebrando o teste existente
+  `tests/test_sources_importer.py:428`
+  (`test_referencia_aparece_na_biblioteca_e_fica_fora_do_organizavel`),
+  que já trava `alcance="tudo"` contando 1 pra um registro
+  `papel=ACERVO, arquivo_ausente=True`. "Alcançável ou não" (a frase
+  original) só é verdade com o `papel` puro, não com `organizavel`.
+  Testemunha (`papel == SINAL`) continua nunca aparecendo na grade, em
+  nenhum dos três filtros — isso não muda. Decisão do dono, 2026-08-16,
+  resolvendo a contradição entre o comentário de `_query()`
+  ("Testemunhas ficam fora... de qualquer filtro") e o rótulo de
+  `ALCANCES["tudo"]` ("tudo que o app conhece", que sugeria incluir
+  testemunha). **Tripwire de teste**: `tests/test_sources_importer.py:428`
+  DEVE continuar passando (contar 1) depois da mudança — se quebrar, o
+  predicado errado (`_ACERVO`) foi usado.
 - **D-02:** O rótulo `ALCANCES["tudo"]` (`repositories/media.py:70`,
   hoje `"tudo que o app conhece"`) precisa mudar para não prometer o que
   não entrega mais — ex. `"todo o acervo, alcançável ou não"`. Redação
@@ -49,11 +60,22 @@ aberto.
   o padrão "dois números discordando" que já mordeu o projeto duas vezes
   (D-065, achado 8 do CONCERNS.md).
 
+- **D-04:** `webapp/src/App.tsx:341-347` tem um tooltip hardcoded pro
+  botão "Tudo" com o mesmo problema de redação do D-02 ("tudo que o app
+  conhece, inclusive sem arquivo local") — string independente do dict
+  `ALCANCES` do backend (não é buscada via API). Corrigir também, mesmo
+  texto/espírito do D-02, já que é a mesma causa raiz e o mesmo esforço
+  de uma linha. Não é mudança de componente/visual, só texto — não conta
+  como "UI nova" pro propósito do `<domain>` desta fase.
+
 ### Claude's Discretion
-- Redação exata do novo rótulo de `ALCANCES["tudo"]` (ver D-02).
-- Se a mudança de `_query()` deve reutilizar `_ACERVO` diretamente ou uma
-  pequena função nomeada — desde que o resultado seja idêntico e o teste
-  cubra o caso testemunha-excluída-de-tudo.
+- Redação exata do novo rótulo de `ALCANCES["tudo"]` e do tooltip do
+  `App.tsx` (ver D-02/D-04) — mesma restrição (sem "conhece", sem
+  "acervo" repetido).
+- Se a mudança de `_query()` introduz uma função nomeada nova
+  (`_e_acervo()` ou similar) ou usa `MediaFile.papel ==
+  MediaRole.ACERVO` inline — desde que seja o critério puro de papel
+  (ver D-01), não `_ACERVO`.
 
 </decisions>
 
@@ -73,8 +95,9 @@ aberto.
 
 ### Código existente a reaproveitar
 - `fotoorganizer/repositories/media.py:40-64` (`_ACERVO`, `_TESTEMUNHA`,
-  `_acervo_ao_alcance`) — os predicados já existem, só faltam ser
-  aplicados ao branch `tudo`.
+  `_acervo_ao_alcance`) — **NÃO usar `_ACERVO` pro branch `tudo`** (ver
+  D-01) — mais estrito que o critério decidido. Referenciado aqui só pra
+  contraste, não como reaproveitamento direto.
 - `fotoorganizer/repositories/media.py:196-204` (`_query`, ponto exato da
   mudança — `if/elif/else` de `filters.alcance`).
 - `fotoorganizer/repositories/media.py:68-72` (`ALCANCES`, dict de
@@ -83,9 +106,13 @@ aberto.
   referência de como `_ACERVO`/`_TESTEMUNHA` já são usados separadamente,
   não precisa mudar (D-03).
 - `fotoorganizer/models/catalog.py:250-275` (`organizavel` hybrid
-  property) — define `papel == MediaRole.ACERVO` + arquivo presente/
-  online; `_ACERVO` em `media.py` é este mesmo critério antes do filtro
-  de fonte disponível.
+  property) — define o critério de `_ACERVO` (`papel == MediaRole.ACERVO`
+  **+** `not arquivo_ausente` **+** `not arquivo_offline`) — mais estrito
+  que o `papel` puro que D-01 exige. Ver tripwire de teste em D-01.
+- `webapp/src/App.tsx:341-347` — tooltip do botão "Tudo" (D-04).
+- `tests/test_sources_importer.py:398-433` — teste existente que trava o
+  comportamento correto de `alcance="tudo"` com registro ACERVO sem
+  arquivo (tripwire do D-01).
 
 </canonical_refs>
 
