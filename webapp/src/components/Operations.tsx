@@ -149,7 +149,7 @@ export default function Operations({ job }: { job: Job }) {
                 }`}
               >
                 <div className="truncate">{p.nome}</div>
-                <div className="text-texto-3">
+                <div className="text-texto-2">
                   <span className={CORES_STATUS[p.status] ?? "text-texto-2"}>
                     {p.status}
                   </span>{" "}
@@ -220,7 +220,7 @@ export default function Operations({ job }: { job: Job }) {
                   className={
                     plano.dry_run_em && !plano.executavel
                       ? "text-erro"
-                      : "text-texto-3"
+                      : "text-texto-2"
                   }
                 >
                   {veredito(plano)}

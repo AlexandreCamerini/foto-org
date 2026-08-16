@@ -142,7 +142,7 @@ export default function Review({
           </button>
         ))}
         <div className="flex-1" />
-        <span className="text-texto-3">
+        <span className="text-texto-2">
           {/* Números do banco, não da página: dizia "200 em 3 grupos" para
               uma fila de 5.048 em 10. */}
           {totalNaFila.toLocaleString("pt-BR")} em {lista.length}{" "}
@@ -250,7 +250,7 @@ export default function Review({
                             className="h-9 w-12 shrink-0 rounded object-cover bg-cartao"
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="mb-1 truncate text-[11px] text-texto-3">
+                            <div className="mb-1 truncate text-[11px] text-texto-2">
                               {s.nome}
                             </div>
                             <input
@@ -444,7 +444,7 @@ function PorQue({ mediaId }: { mediaId: number }) {
   }
   if (!sugestao?.evidencias?.length) {
     return (
-      <div className="px-3 pb-2 pl-[68px] text-texto-3">
+      <div className="px-3 pb-2 pl-[68px] text-texto-2">
         Sem evidência registrada para esta sugestão.
       </div>
     );
