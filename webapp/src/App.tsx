@@ -340,7 +340,7 @@ export default function App() {
                       onClick={() => setAlcance(chave)}
                       title={
                         chave === "tudo"
-                          ? "tudo que o app conhece, inclusive sem arquivo local"
+                          ? "seu acervo inteiro, com arquivo local ou sem — miniatura de outro app fica fora"
                           : chave === "organizaveis"
                             ? "acervo seu com o arquivo ao alcance agora — o que dá para revisar e copiar"
                             : "o resto: no iCloud, em volume desmontado, ou miniatura de outro app"
