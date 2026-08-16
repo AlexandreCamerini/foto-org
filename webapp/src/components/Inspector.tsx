@@ -199,7 +199,7 @@ function TipoDaImagem({
         variante="fantasma"
         tamanho="sm"
         onClick={() => confirmar.mutate(null)}
-        className="px-1 text-texto-3"
+        className="px-1 text-texto-2"
         title="Devolver a decisão ao detector"
       >
         desfazer
@@ -236,18 +236,18 @@ function MetadadosDoArquivo({ mediaId }: { mediaId: number }) {
         <div className="mt-1 text-texto-3">lendo…</div>
       )}
       {aberto && data && data.total === 0 && (
-        <div className="mt-1 text-texto-3">
+        <div className="mt-1 text-texto-2">
           Este arquivo não trouxe metadado nenhum.
         </div>
       )}
       {aberto &&
         data?.namespaces.map((ns) => (
           <div key={ns.nome} className="mt-2">
-            <div className="mb-1 text-[11px] text-texto-3">{ns.rotulo}</div>
+            <div className="mb-1 text-[11px] text-texto-2">{ns.rotulo}</div>
             <dl className="space-y-0.5">
               {ns.itens.map((item) => (
                 <div key={item.chave} className="flex gap-2">
-                  <dt className="w-24 shrink-0 break-all text-texto-3">
+                  <dt className="w-24 shrink-0 break-all text-texto-2">
                     {item.chave}
                   </dt>
                   <dd className="min-w-0 break-all text-texto-2">{item.valor}</dd>
