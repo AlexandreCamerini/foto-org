@@ -27,7 +27,7 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
 
 - [x] **Phase 1: Timezone estimado** - Fotos ganham fuso horário estimado (completed 2026-08-16)
   (`tz_estimado`) a partir do país já atribuído, gravado direto sem revisão
-- [ ] **Phase 2: Correção de dados medidos** - Filtro "Tudo" da Biblioteca
+- [x] **Phase 2: Correção de dados medidos** - Filtro "Tudo" da Biblioteca (completed 2026-08-16)
   para de esconder SINAL misturado com acervo sem `WHERE`
 - [ ] **Phase 3: Revisão acessível e consistente** - Tela de Revisão operável
   só de teclado e alinhada ao design system
@@ -94,10 +94,10 @@ o escopo desta fase foi reduzido de acordo.
 **Success Criteria** (what must be TRUE):
   1. O filtro "Tudo" da Biblioteca distingue `SINAL` de `ACERVO` em vez de
      devolver a tabela inteira sem `WHERE`.
-**Plans:** 0/1 plans complete
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — branch `tudo` de `_query` filtra por `papel == ACERVO`,
+- [x] 02-01-PLAN.md — branch `tudo` de `_query` filtra por `papel == ACERVO`,
   rótulo/tooltip corrigidos, auditoria das contagens vizinhas (D-03)
 
 ### Phase 3: Revisão acessível e consistente
@@ -168,7 +168,7 @@ paralelo, sem dependência estrutural das demais)
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Timezone estimado | 1/1 | Complete   | 2026-08-16 |
-| 2. Correção de dados medidos | 0/1 | Planned | - |
+| 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 0/TBD | Not started | - |
 | 4. Consistência visual secundária | 0/TBD | Not started | - |
 | 5. Preparação para lançamento | 0/TBD | Not started | - |
