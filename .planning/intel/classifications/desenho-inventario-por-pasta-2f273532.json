@@ -1,0 +1,32 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/desenho-inventario-por-pasta.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Desenho — inventário por pasta",
+  "summary": "Technical design for per-destination-folder inventory files (inventario.json + INVENTARIO.md) recording photo metadata and evidence for audit and catalog reconstruction.",
+  "scope": [
+    "inventario.json schema",
+    "INVENTARIO.md rendering",
+    "operations/executor.py integration point",
+    "operations/inventario.py module",
+    "OperationItem",
+    "MediaFile",
+    "Evidence",
+    "AuditLog",
+    "idempotência de re-execução",
+    "tratamento de falha de escrita não-bloqueante",
+    "reconstrução do catalog.db"
+  ],
+  "cross_refs": [
+    "docs/PLANO_IA_E_PRODUTO.md",
+    "docs/CONFIANCA.md",
+    "fotoorganizer/operations/executor.py",
+    "fotoorganizer/operations/planner.py",
+    "fotoorganizer/operations/inventario.py",
+    "scripts/verificar.sh"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

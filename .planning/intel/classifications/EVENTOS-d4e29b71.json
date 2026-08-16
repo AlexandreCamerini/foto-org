@@ -1,0 +1,30 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/EVENTOS.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Dividir uma sessão em acontecimentos",
+  "summary": "Explains how eventos_temporais.py splits a session into multiple events using relative firing-rate rules, GPS displacement, and floor/ceiling thresholds.",
+  "scope": [
+    "eventos_temporais.py",
+    "dividir_em_eventos",
+    "dividir_sessao",
+    "SuggestionEngine._subdividir",
+    "session/event/trip grouping",
+    "temporal clustering thresholds (FATOR, JANELA, PISO, TETO, DESLOCAMENTO_KM, MIN_FOTOS_EVENTO, DURACAO_MAX_ACONTECIMENTO)",
+    "evaluation scripts and tests for grouping accuracy"
+  ],
+  "cross_refs": [
+    "docs/AGRUPAMENTO.md",
+    "docs/DECISOES.md",
+    "fotoorganizer/grouping/eventos_temporais.py",
+    "fotoorganizer/classification/engine.py",
+    "scripts/avaliar_agrupamento.py",
+    "tests/test_eventos_temporais.py",
+    "tests/test_suggestion_engine.py",
+    "CLAUDE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

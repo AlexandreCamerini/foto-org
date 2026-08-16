@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/AGRUPAMENTO.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Modelo de agrupamento inteligente",
+  "summary": "Especifica a cascata determinística e o advisor LLM opt-in que classificam sessões de fotos em viagem, evento ou neutra.",
+  "scope": [
+    "grouping (sessões temporais)",
+    "cascata determinística de classificação (viagem/evento/neutra)",
+    "correlação temporal entre fontes (deriva de relógio, herança de GPS)",
+    "benchmark de cenários (scripts/avaliar_agrupamento.py)",
+    "nomeação por álbum de catálogo externo (grouping/albuns.py)",
+    "advisor LLM opt-in (ClassificationAdvisor/ClaudeAdvisor)",
+    "modelo de evidências e confiança"
+  ],
+  "cross_refs": [
+    "docs/CONFIANCA.md",
+    "docs/PRIVACIDADE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prosa extensa com motivação e histórico de benchmark aproxima o texto de DOC, mas tabelas de regras/thresholds precisos e contratos de implementação (grouping/classifier.py, grouping/correlacao.py, grouping/albuns.py, classification/engine.py) pesam para SPEC. Sem frontmatter ou convenção de nome de arquivo que sinalize o tipo; referencia decisões (D-024, D-030, D-034) sem apontar caminho explícito para docs/DECISOES.md, por isso não incluído em cross_refs."
+}

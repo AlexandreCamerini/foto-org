@@ -1,0 +1,36 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/AVALIACAO_ARQUITETURA.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Avaliação de arquitetura — fase 1",
+  "summary": "Architecture audit of Foto Organizer: layers, protocols, background jobs, path security, dual UIs, schema gaps, scaling risks, and market comparison.",
+  "scope": [
+    "camadas de arquitetura",
+    "esquema de banco de dados (SQLite)",
+    "protocolos substituíveis (Protocol)",
+    "JobManager / trabalho em background",
+    "segurança de caminho",
+    "UI PySide6 vs webapp",
+    "modelo de dados DAM (derivados, taxonomia, direitos, coleções)",
+    "N+1 queries e índices ausentes",
+    "escala e confiabilidade",
+    "observabilidade",
+    "arquitetura de trabalho com agentes (CLAUDE.md/AGENTS.md)",
+    "comparação de mercado (digiKam, Lightroom, DAM)"
+  ],
+  "cross_refs": [
+    "docs/prompts/00-protocolo.md",
+    "docs/DECISOES.md",
+    "docs/COBERTURA_METADADOS.md",
+    "docs/ARQUITETURA.md",
+    "docs/EMPACOTAMENTO.md",
+    "docs/METODO_DE_TRABALHO.md",
+    "docs/CONFIANCA.md",
+    "CLAUDE.md",
+    "AGENTS.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Evaluation/audit report, not a single locked decision (no Status: Accepted / Decision-Consequences structure). Contains ADR-adjacent trade-off table (section 5) and SPEC-adjacent technical findings (schema gaps, missing indices, N+1) but reads as prose analysis feeding decisions recorded separately in docs/DECISOES.md (D-006 to D-009). Classified as DOC (context/supporting analysis); synthesizer may want to mine section 3, 4, 5, 7 for technical-constraint-like content."
+}

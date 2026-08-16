@@ -1,0 +1,24 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/EMPACOTAMENTO.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Empacotamento para macOS (.app) — Tauri + Python embarcado",
+  "summary": "Guia de empacotamento do Foto Organizer como .app macOS via Tauri v2 com Python embarcado (python-build-standalone), passos de build e assinatura.",
+  "scope": [
+    "empacotamento macOS",
+    "Tauri v2",
+    "python-build-standalone",
+    "assinatura e notarização",
+    "PyInstaller (alternativa descartada)",
+    "backend FastAPI/uvicorn embarcado",
+    "webapp (Vite/React)",
+    "src-tauri",
+    "scripts/empacotar_runtime.sh",
+    "scripts/assinar_runtime.sh"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": "Contém uma seção '## Decisão' com trade-off entre python-build-standalone e PyInstaller/venv-no-boot (sinal de ADR), mas o documento inteiro é majoritariamente um guia de build passo a passo, marcos com critérios de aceite técnico e contingências — sem status/numeração de ADR nem arquivo dedicado em pasta adr/. Classificado como DOC (design rationale + runbook); a decisão embutida pode valer registro separado como ADR pelo synthesizer."
+}

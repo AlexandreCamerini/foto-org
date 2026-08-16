@@ -1,0 +1,42 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/AVALIACAO_UX.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Rodada de 2026-08-06 — pós-correções de scan + feedback do dono (Avaliação de UX)",
+  "summary": "UX and visual-consistency audit of the webapp (Review, PhotoGrid, tokens) with findings, prioritized fixes, owner feedback and design-rationale prototypes across multiple rounds.",
+  "scope": [
+    "Review.tsx / tela de Revisão",
+    "PhotoGrid / grade virtualizada",
+    "design tokens (webapp/src/index.css)",
+    "Direção de arte",
+    "Inspector.tsx",
+    "Operations.tsx",
+    "Panorama",
+    "classification engine / advisor LLM",
+    "scanner/discovery.py (papel SINAL vs ACERVO)",
+    "protótipos de UX (docs/prototipos)"
+  ],
+  "cross_refs": [
+    "../fotoorganizer/scanner/discovery.py",
+    "../fotoorganizer/repositories/media.py",
+    "../fotoorganizer/metadata/purepython.py",
+    "../fotoorganizer/classification/engine.py",
+    "../fotoorganizer/classification/advisor.py",
+    "../tests/test_suggestion_engine.py",
+    "docs/prototipos/index.html",
+    "docs/prototipos/01-confianca.html",
+    "docs/prototipos/02-revisao-em-lote.html",
+    "docs/prototipos/03-mapa-local-estimado.html",
+    "docs/prototipos/04-linha-do-tempo.html",
+    "docs/prototipos/05-plano-antes-depois.html",
+    "docs/prompts/00-protocolo.md",
+    "docs/AUDITORIA_FUNCIONALIDADES.md",
+    "docs/REFERENCIAS_DESIGN.md",
+    "docs/DIRECAO_DE_ARTE.md",
+    "docs/DECISOES.md (D-017, D-018, D-024, D-028, D-030, D-034)"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Multi-round evaluation report (two H1 sections concatenated: 2026-08-06 round and fase 6). Contains prioritized proposal tables and effort estimates resembling PRD/backlog content, and references locked ADR-style decisions (D-017 etc.) by ID rather than defining them here, so classified as DOC (audit/critique + design rationale) rather than PRD or ADR."
+}

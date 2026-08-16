@@ -1,0 +1,28 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/ARQUITETURA.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Arquitetura e decisões",
+  "summary": "Documento técnico de arquitetura do Foto Organizer: fluxo de dados, schema SQLite/Alembic, decisões registradas e riscos principais.",
+  "scope": [
+    "fluxo de dados (scan → catálogo → evidências → sugestões → operações)",
+    "schema SQLite (Alembic migração 0001)",
+    "servidor FastAPI local + webapp React/Vite/TS",
+    "ExternalCatalogImporter (Apple Fotos, Google Takeout)",
+    "modelo de evidências e confiança",
+    "duplicatas (exato/conteúdo/visual)",
+    "operation_plans e audit_log",
+    "decisões arquiteturais registradas",
+    "riscos de escala, integridade e metadados"
+  ],
+  "cross_refs": [
+    "CLAUDE.md",
+    "docs/AGRUPAMENTO.md",
+    "docs/PLANO_METADADOS.md",
+    "docs/PRIVACIDADE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Documento híbrido: contém tabela 'Decisões registradas' (7 decisões com racional, sinal de ADR) e schema/contratos de dados detalhados (sinal de SPEC), mas não segue formato ADR padrão (sem Status/Context/Consequences por decisão, sem numeração de arquivo ADR-*). Classificado como SPEC por dominância de conteúdo de schema/contrato técnico; decisões individuais podem merecer extração separada como ADRs de baixa confiança pelo sintetizador. source_hash gerado sem ferramenta de hashing disponível neste agente (sem Bash) — usar como identificador de arquivo único, não como SHA-256 verdadeiro."
+}

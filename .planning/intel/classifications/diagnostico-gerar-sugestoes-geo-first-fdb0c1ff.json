@@ -1,0 +1,32 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/diagnostico-gerar-sugestoes-geo-first.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Diagnóstico — \"Gerar sugestões\" vs. objetivo geo-first",
+  "summary": "Investigative diagnostic comparing SuggestionEngine's actual geo/temporal correlation order against the geo-first objective, with a phased remediation plan.",
+  "scope": [
+    "SuggestionEngine",
+    "geocodificação",
+    "correlação temporal",
+    "herança de GPS",
+    "LocationResolver",
+    "cascata de evidências",
+    "categorias de sessão (Viagens/Família/Eventos)",
+    "XMP/IPTC",
+    "advisor (ClaudeAdvisor)"
+  ],
+  "cross_refs": [
+    "docs/DECISOES.md",
+    "docs/prompts/00-protocolo.md",
+    "docs/AGRUPAMENTO.md",
+    "scripts/avaliar_agrupamento.py",
+    "docs/PLANO_IA_E_PRODUTO.md",
+    "docs/ROADMAP.md",
+    "docs/CONFIANCA.md",
+    "scripts/medir_categorias_ausentes.py"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prose-heavy investigative diagnostic with embedded decision references (D-051 through D-055) and a phased implementation plan, but it is not itself an ADR (no Status/Accepted frontmatter, not numbered ADR filename; actual decisions are recorded separately in docs/DECISOES.md). Classified as DOC (context/rationale document) rather than ADR/PRD/SPEC; confidence set to medium due to the decision-record-like content mixed into an otherwise diagnostic report."
+}

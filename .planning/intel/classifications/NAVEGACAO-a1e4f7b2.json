@@ -1,0 +1,26 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/NAVEGACAO.md",
+  "type": "ADR",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Modelo de navegação",
+  "summary": "Três decisões de UX/navegação para o app: abas com esqueleto comum, separação lugar/recorte em um só estado de filtro, e rolagem contínua com âncora temporal.",
+  "scope": [
+    "navegação",
+    "abas",
+    "barra lateral",
+    "filtro",
+    "fonte",
+    "recorte",
+    "grade virtualizada",
+    "rolagem infinita",
+    "âncora temporal",
+    "UI web local"
+  ],
+  "cross_refs": [
+    "docs/DECISOES.md (referência a D-004)"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Sem frontmatter, sem campo Status (Accepted/Proposed), sem numeração de arquivo ADR — mas o conteúdo tem estrutura Decisão/Escolhida/Consequência ('O que muda') para três decisões distintas, o que pesa mais forte que DOC. Classificado como ADR por sinal de conteúdo; locked=false por ausência de marcador explícito de status Accepted, apesar de as decisões serem apresentadas como finais ('Escolhida')."
+}

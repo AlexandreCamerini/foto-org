@@ -1,0 +1,25 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/AUDITORIA_IA.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Auditoria: onde a IA alcança o que a regra não alcança",
+  "summary": "Audit comparing deterministic rules vs local vision models for photo grouping/geolocation/date inference, ending with open recommendations for the owner.",
+  "scope": [
+    "ClassificationAdvisor",
+    "embedding local de imagem",
+    "regra determinística vs modelo",
+    "agrupamento temporal (grouping)",
+    "geolocalização por correlação temporal",
+    "metadados EXIF corrompidos",
+    "skill ai-firstify",
+    "princípio 5 (não construir agente embutido)"
+  ],
+  "cross_refs": [
+    "docs/DECISOES.md (referência a D-004)",
+    "fotoorganizer/classification/advisor.py"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prose audit/investigation doc with a 'Recomendação' section resembling decision content, but the actual decision (baixar modelo de visão local) is explicitly left open to the owner in the final section ('O que fica em aberto para o dono'), not accepted/locked — classified as DOC rather than ADR. No frontmatter, no numbered ADR filename."
+}

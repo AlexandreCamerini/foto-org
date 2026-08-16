@@ -1,0 +1,25 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/PRIVACIDADE.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Privacidade",
+  "summary": "Statement of FotoOrganizer's privacy commitments: local-first data, opt-in external/LLM services, biometric face data handling, no telemetry, and honest limits of local encryption.",
+  "scope": [
+    "privacidade",
+    "advisor LLM opcional",
+    "servicos externos opt-in",
+    "dados biometricos (rostos)",
+    "criptografia local de embeddings",
+    "telemetria",
+    "catalogos externos (Apple Fotos, Google Photos)",
+    "logs sem conteudo sensivel"
+  ],
+  "cross_refs": [
+    "docs/AGRUPAMENTO.md",
+    "CLAUDE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

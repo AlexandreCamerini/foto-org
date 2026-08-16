@@ -1,0 +1,31 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/DIRECAO_DE_ARTE.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Direção de arte",
+  "summary": "Design/UI spec for the webapp: 3-panel layout, color tokens, typography, spacing, map iconography, and interaction behaviors.",
+  "scope": [
+    "webapp UI",
+    "3-panel layout",
+    "design tokens (colors, typography, spacing)",
+    "webapp/src/index.css @theme",
+    "components/Mapa.tsx",
+    "keyboard shortcuts",
+    "status bar",
+    "confidence badges",
+    "pill navigation/controls",
+    "grade virtualizada (thumbnail grid)"
+  ],
+  "cross_refs": [
+    "docs/DECISOES.md",
+    "docs/REFERENCIAS_DESIGN.md",
+    "docs/prototipos/03-mapa-local-estimado.html",
+    "webapp/src/index.css",
+    "webapp/src/App.tsx",
+    "components/Mapa.tsx"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

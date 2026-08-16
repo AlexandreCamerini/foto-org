@@ -1,0 +1,26 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/LOCAL_ESTIMADO.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "O lugar estimado e o tamanho da sua dúvida",
+  "summary": "Explica e calibra a fórmula do raio de incerteza para coordenadas herdadas por fotos sem GPS, com metodologia de medição e resultados.",
+  "scope": [
+    "raio de incerteza GPS",
+    "herança de coordenada (correlacao.py)",
+    "endpoint GET /api/mapa",
+    "calibração estatística (calibrar_raio_incerteza.py)",
+    "D-025",
+    "D-031"
+  ],
+  "cross_refs": [
+    "fotoorganizer/grouping/correlacao.py",
+    "fotoorganizer/geolocation/escala.py",
+    "scripts/calibrar_raio_incerteza.py",
+    "tests/test_correlacao.py",
+    "docs/DECISOES.md (D-025, D-031)"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prosa dominante, explica racional de calibração de uma constante já decidida (referencia D-025/D-031 em vez de ser o registro da decisão em si) — classificado DOC. Contém um único endpoint (GET /api/mapa) sem tabela de schema completa, sinal SPEC fraco insuficiente para sobrepor o padrão de documento explicativo."
+}

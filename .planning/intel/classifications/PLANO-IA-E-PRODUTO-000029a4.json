@@ -1,0 +1,32 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/PLANO_IA_E_PRODUTO.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Plano de IA e produto — fase 5",
+  "summary": "Phase-5 planning doc arguing most catalog decisions are already deterministic, analyzing model/cost trade-offs, proposing a folder inventory, and listing three decisions pending approval.",
+  "scope": [
+    "classification/engine.py cascade",
+    "ClassificationAdvisor",
+    "modelo Opus 5 / Sonnet 5 / Haiku 4.5",
+    "custo de tokens do advisor e da visão",
+    "VisionProvider",
+    "reconhecimento facial",
+    "inventário por pasta (inventario.json / INVENTARIO.md)",
+    "template de catalogação editável",
+    "pré-requisitos de lançamento",
+    "roadmap v2"
+  ],
+  "cross_refs": [
+    "docs/prompts/00-protocolo.md",
+    "docs/DECISOES.md",
+    "docs/EMPACOTAMENTO.md",
+    "docs/ROADMAP.md",
+    "classification/engine.py",
+    "CLAUDE.md",
+    "arquitetura §3"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Prose/rationale + cost-analysis document for a phase-5 gate. References locked decisions D-004, D-022, D-023, D-024 (in docs/DECISOES.md) but is not itself an Accepted ADR — section 8 lists three decisions still pending user approval. Also carries PRD-like launch-prerequisite and roadmap items and SPEC-like cost tables, but no dominant single-type signal; classified as DOC per ambiguity rule (no Decision/Consequences frontmatter, no Status: Accepted, no user-story/acceptance-criteria structure)."
+}
