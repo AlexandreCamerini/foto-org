@@ -158,3 +158,12 @@ bloqueio identificado para o fechamento da Fase 3.
 ---
 *Phase: 03-revis-o-acess-vel-e-consistente*
 *Completed: 2026-08-16*
+
+## Self-Check: PASSED
+
+- FOUND: webapp/src/App.tsx
+- FOUND: webapp/src/App.test.tsx
+- FOUND: .planning/phases/03-revis-o-acess-vel-e-consistente/03-01-SUMMARY.md
+- FOUND: e8be38a (test commit, Task 1)
+- FOUND: 4c5e776 (feat commit, Task 2)
+- FOUND: c01634e (SUMMARY.md commit)
