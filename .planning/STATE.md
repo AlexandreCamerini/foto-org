@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: planning
+stopped_at: Phase 1 context gathered
+last_updated: "2026-08-16T06:01:41.439Z"
+last_activity: 2026-08-16 — ROADMAP.md, REQUIREMENTS.md, PROJECT.md e
+progress:
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+---
+
 # Project State
 
 ## Project Reference
@@ -21,6 +37,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: - min
 - Total execution time: 0 hours
@@ -32,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: -
 - Trend: -
 
@@ -50,10 +68,12 @@ Recent decisions affecting current work:
   do `docs/ROADMAP.md` já estavam implementados (confirmado via
   D-031/032/033/034/065 + implementação de templates 2026-08-02) — não
   entraram como requisitos v1, foram para PROJECT.md § Validated.
+
 - Reconectar volumes desmontados (Lightroom + Apple Fotos, ~90 mil
   registros) é o candidato de maior alavancagem do backlog, mas **não é
   decisão ainda** — ficou em REQUIREMENTS.md v2 (ARCH-01), fora das 5
   fases deste roadmap. Trazer ao dono antes de qualquer trabalho nele.
+
 - `docs/NAVEGACAO.md` e `docs/EMPACOTAMENTO.md` tratados como DOC-precedence
   (não ADR-locked) nesta sessão, por aprovação explícita do dono — ver
   `.planning/INGEST-CONFLICTS.md`.
@@ -69,6 +89,7 @@ None yet.
   ainda não rodou. Não bloqueia planejamento, mas fases que dependem de
   medição contra o acervo real (ex. Phase 5 baseline de performance)
   precisarão de um catálogo populado primeiro.
+
 - Dívida técnica relevante às fases 1-2: motor de sugestões e detector de
   duplicatas fazem full-scan em memória sem caminho incremental; nenhuma
   reconciliação de boot para `OperationPlan.EXECUTANDO` travado. Ver
@@ -87,7 +108,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16
-Stopped at: Roadmap inicial (5 fases) criado e escrito em disco a partir do
+Last session: 2026-08-16T06:01:41.431Z
+Stopped at: Phase 1 context gathered
 ingest de 25 documentos; nenhuma fase planejada em detalhe ainda.
-Resume file: None
+Resume file: .planning/phases/01-timezone-estimado/01-CONTEXT.md
