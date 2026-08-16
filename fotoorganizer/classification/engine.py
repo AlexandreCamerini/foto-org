@@ -42,6 +42,7 @@ from fotoorganizer.grouping.datas import (
     rotulo_mes,
 )
 from fotoorganizer.geolocation.folder_names import _normalizar
+from fotoorganizer.geolocation.timezones import TZ_POR_PAIS
 from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
@@ -1059,6 +1060,17 @@ class SuggestionEngine:
             )
             session.add(evidencia)
             evidencias[draft.campo] = evidencia
+
+        # tz_estimado: dado técnico auxiliar (D-038), gravado direto em
+        # MediaFile, sem Evidence/Suggestion nova e sem entrada em
+        # docs/CONFIANCA.md — mesmo padrão de gps_lat_estimado em
+        # _persistir_herancas. O `else None` (em vez do snippet literal do
+        # spec, que não tem `else`) garante que uma rodada futura de
+        # gerar() que não resolve mais "pais" para esta mídia não deixa
+        # sobreviver um tz_estimado obsoleto da rodada anterior.
+        media.tz_estimado = TZ_POR_PAIS.get(
+            evidencias["pais"].valor
+        ) if "pais" in evidencias else None
 
         campos = {campo: ev.valor for campo, ev in evidencias.items()}
         if "data" in evidencias:
