@@ -29,6 +29,7 @@ three genuinely open calls (REV-03, REV-06, REV-07) resolved below with the evid
 | Component library | none — bespoke: `webapp/src/ui/Botao.tsx`, `components/Confianca.tsx`, `components/Miniatura.tsx` |
 | Icon library | none — glyphs/unicode only (`▾ ▸ ✎ →`), no icon font/SVG set |
 | Font | system: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif` (`--font-sans`) |
+| Primary screen focal point | Unchanged from existing `Review.tsx` layout — Phase 3 fixes accessibility/consistency defects (keyboard nav, contrast, search-state, radius, date format, button weight, accent misuse) only; it does not alter grid layout, hierarchy, or the focal point of the review screen. |
 
 **shadcn gate — resolved as `Tool: none`, not asked.** `components.json` is absent and the stack is
 Vite/React, which would normally trigger the shadcn init question. Not asked here: the codebase already has
@@ -45,20 +46,29 @@ non-interactive; no discuss-phase happened). Registry safety gate: not applicabl
 
 ## Spacing Scale
 
-Declared values — **inherited verbatim from `webapp/src/index.css`**, not a new decision for this phase:
+Declared values — **inherited verbatim from `webapp/src/index.css`**, restricted to the standard 8-point
+multiples actually in use. Not a new decision for this phase:
 
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px | Icon gaps, inline padding (gap-1, gap-1.5) |
 | sm | 8px | Compact element spacing (gap-2, px-2) |
-| — | 12px | Established exception — grid gutter for thumbnails (`docs/DIRECAO_DE_ARTE.md`: "gap de 10px" rounds to Tailwind's 2.5/3 in practice; treat 12px as the project's real third rung, already in use for card/section padding) |
-| md | 16px | Default element/section padding (px-3 = 12px is actually the dominant unit in this codebase, not 16px — see note) |
-| lg | 24px | Section padding (rare; modals use `p-4` = 16px) |
+| md | 16px | Default element/section padding (modals use `p-4` = 16px) |
+| lg | 24px | Section padding (rare) |
 
-**Correction to the generic GSD 8-point default:** this codebase's real rhythm is **4 / 8 / 12 / 16**,
-capped there — nothing in the webapp uses 24/32/48/64. Phase 3 does not introduce any new large-scale
-layout, so **do not introduce 24/32/48/64 spacing this phase**; stay within the four values already in use.
-This is a declared exception, not an oversight.
+**Correction to the generic GSD 8-point default:** this codebase's declared scale for Phase 3 is
+**4 / 8 / 16 / 24** — standard values only. Nothing in the webapp uses 32/48/64, so Phase 3 does not
+introduce them either.
+
+**Scope note on 12px (`px-3`) — not a scale value, not touched by this phase:** the existing codebase uses
+`px-3` (12px) pervasively for card/section padding and the thumbnail grid gutter. This is a pre-existing,
+non-standard rung that predates this contract. Per the checker's rule, a justified exception does not
+downgrade a non-standard rung from BLOCK to FLAG, so 12px is **not** listed above as an accepted scale value.
+None of REV-01..REV-07 involve spacing or layout (they are keyboard nav, contrast, search-state, border-
+radius, date format, button weight, and accent-color scope) — Phase 3 has no spacing work to do and does not
+need 12px in its scale. Leave existing `px-3` usages exactly as they are: do not "fix" them to 8/16 as a
+drive-by edit, and do not add any new 12px usage this phase. Reconciling the codebase onto a strict
+4/8/16/24/32/48/64 scale (if ever done) is Phase 4/CONS-08-adjacent work, out of this phase's scope.
 
 Exceptions: 44px touch targets — not applicable (desktop pointer/keyboard app, no touch surface).
 
@@ -75,13 +85,25 @@ class reference, per `docs/DIRECAO_DE_ARTE.md`).
 | Body (default) | 13px (`--text-corpo`) | 400 (no class = browser default) | not tokenized — leave as browser default this phase; do not add a new line-height rule (see note) |
 | Label / secondary | 11px (`--text-micro`) | 400 | not tokenized |
 | Panel title (`.titulo-painel`) | 11px, uppercase, `letter-spacing: 0.08em` | 400 | not tokenized |
-| Emphasis (filenames, destinations, "Confere" etc.) | 13px (inherits body) | **ambiguous — `font-medium` (500) and `font-semibold` (600) coexist without a rule** | — |
+| Emphasis (filenames, destinations, "Confere", REV-07 de-accented labels) | 13px (inherits body) | **500 (`font-medium`) — canonical for Phase 3 scope** | — |
 | Display | not applicable | — | — |
 
-**Weight ambiguity is explicitly out of scope for Phase 3.** `docs/AVALIACAO_UX.md` finding B.8 (tokenizing
-`--font-weight-titulo`) is filed under **CONS-08, Phase 4**, not REV. Do not resolve it here — pick whichever
-of `font-medium`/`font-semibold` the surrounding code in the file you're touching already uses, to avoid
-introducing a third value ahead of the Phase 4 tokenization work.
+**Emphasis weight — resolved to a single value for this phase.** `font-medium` (500) is the declared,
+canonical weight for the Emphasis role in any file Phase 3 actually touches (REV-02, REV-06, REV-07 scope):
+`Review.tsx`, `Operations.tsx`, and `TemplateEditor.tsx` use `font-medium` exclusively wherever this role
+appears; `Inspector.tsx`'s one `font-semibold` instance (line 38, the file-name header) sits outside the
+lines REV-02 touches (lines ~239/246/250) and is left as-is. This is also the value REV-07's own requirement
+text specifies: `.planning/REQUIREMENTS.md` REV-07 reads "troca para `font-medium` neutro" for de-accented
+labels — the project's own target, not an invented default. Total weights in play for Phase 3: **400 (body)
++ 500 (Emphasis) = 2**, within the dimension's cap.
+
+**Full-codebase reconciliation stays deferred.** The remaining `font-semibold` (600) instances outside
+Phase 3's edit scope (`App.tsx`, `Trips.tsx`, `Loupe.tsx`, `Duplicates.tsx`, `Sidebar.tsx`, and
+`Inspector.tsx` line 38) are not edited this phase and do not count against this phase's 2-weight
+declaration. `docs/AVALIACAO_UX.md` finding B.8 (tokenizing `--font-weight-titulo` project-wide) remains
+filed under **CONS-08, Phase 4** — do not attempt that reconciliation here; if a file you're touching for a
+different REV item happens to already use `font-semibold` for Emphasis, leave it rather than rewriting it to
+`font-medium` as a drive-by (that's Phase 4's job with full-codebase context).
 
 **Line-height:** no project-wide line-height token exists. Do not add one this phase — introducing 1.5/1.2
 project-wide is a visual-redesign-scale change this consistency phase does not call for and could reflow
