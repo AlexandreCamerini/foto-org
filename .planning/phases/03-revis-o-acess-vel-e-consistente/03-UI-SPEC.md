@@ -142,14 +142,32 @@ completed on that basis.
 | Error state | No new error copy. Existing pattern (`text-erro`, inline below the field, e.g. `erroEdicao` in `Review.tsx`) is the contract to reuse for any new validation surfaced this phase. |
 | Destructive confirmation | No destructive actions in this phase's scope (REV-01..REV-07 are keyboard nav, contrast, search-state, radius, date format, button weight, accent misuse — none delete or overwrite anything). Invariant 2 of `CLAUDE.md` (dry-run before any physical operation) is unaffected. |
 
+**Note for the checker: three of five rows above are `N/A` by design, not by omission.** This phase adds no
+new screen, CTA, or destructive flow — it fixes accessibility/consistency defects in existing UI. The two
+rows that carry real content (Empty state body's behavioral requirement, Error state's reuse pattern) are
+the ones this phase actually touches. Read the N/A rows as "verified no new copy needed," not as unanswered
+fields.
+
 **REV-03 behavioral decision (declared premise, not asked — no user present in this run):** clear the active
 text search on group/tab navigation, extending the pattern that already exists at two call sites
 (`App.tsx`: `Panorama.aoRecortar` and `Trips.onAbrir` both call `setBusca("")` before switching to
 Biblioteca). Do **not** build a chips-based "active filters" UI as the alternative REQUIREMENTS.md leaves
 open — that would be new UI surface this consistency phase doesn't otherwise call for, and the existing
-precedent is already "clear," not "show as removable chip." Apply the same `setBusca("")` (or equivalent)
-on every remaining tab-switch and group-switch path that doesn't already have it, so "0 no filtro" can only
-mean "the current filter genuinely returns zero," never "a filter from a previous screen survived."
+precedent is already "clear," not "show as removable chip."
+
+**Exact remaining call sites in `App.tsx` that need the same `setBusca("")` and don't have it yet**
+(enumerated from the current tab/navigation handlers, not "every remaining path" left for the executor to
+re-derive):
+1. Line ~210 — the generic tab-nav button, `ABAS.map(...).onClick={() => setAba(nome)}`. This is the main
+   gap: clicking any of the six tab pills (Panorama/Viagens/Revisão/Duplicatas/Operações/Biblioteca)
+   directly does not clear `busca`.
+2. Line ~231-237 — `Sidebar`'s `onSelecionarPasta`, which calls `setSelIndex(null)` and conditionally
+   `setAba("Biblioteca")` when a folder is picked, but does not clear `busca`.
+3. Line ~438-443 — `StatusBar`'s `aoIrPara` (used by the "N fora do filtro" status-bar link), which resets
+   `setAlcance`/`setRecorte`/`setFonte` and calls `setAba("Biblioteca")`, but not `setBusca("")`.
+
+Add `setBusca("")` at all three so "0 no filtro" can only mean "the current filter genuinely returns zero,"
+never "a filter from a previous screen survived."
 
 ---
 
