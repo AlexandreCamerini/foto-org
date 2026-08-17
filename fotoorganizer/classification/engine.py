@@ -852,6 +852,14 @@ class SuggestionEngine:
                         "; a hora de uma delas é a do arquivo, não a da "
                         "captura — a proximidade pode ser coincidência"
                     )
+                # A justificativa geral (sem concordância) vale para todo
+                # campo; só o campo corroborado por uma segunda doadora
+                # (D-074) ganha a frase extra — dizer isso é parte do "por
+                # quê" que o usuário vê, não só um detalhe interno de score.
+                just_concordante = just + (
+                    "; confirmada por outra foto do lado oposto no tempo, "
+                    "na mesma área plausível"
+                )
                 drafts = []
                 for campo, valor in [
                     ("pais", location.pais), ("regiao", location.regiao),
@@ -863,8 +871,12 @@ class SuggestionEngine:
                     score = round(
                         SCORES_REFERENCIA["vizinhanca_temporal"] * fator, 3
                     )
+                    texto = (
+                        just_concordante if campo in heranca.concordancia
+                        else just
+                    )
                     drafts.append(
-                        _Draft(campo, "vizinhanca_temporal", valor, just,
+                        _Draft(campo, "vizinhanca_temporal", valor, texto,
                                score_override=score)
                     )
                 if drafts:

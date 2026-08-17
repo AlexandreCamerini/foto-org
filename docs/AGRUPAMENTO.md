@@ -66,9 +66,24 @@ cruza as fontes (`grouping/correlacao.py`):
    (MAD > 3 min) ou insuficientes (< 2) são descartadas.
 2. **Herança de GPS** — foto sem GPS herda a localização da foto com GPS
    de OUTRA origem (fonte ou câmera diferente) mais próxima na linha do
-   tempo corrigida, janela ±10 min. Evidência `vizinhanca_temporal`
-   (0.75×fator, fator 1.0 até Δt de 2 min decaindo a 0.6 na borda) com
-   justificativa nomeando a doadora.
+   tempo corrigida. Não é uma janela única: cada campo (cidade, região,
+   país) tem sua própria janela aninhada (D-025 — cidade ≤10 min, região
+   ≤2 h, país ≤12 h), com fator decaindo de 1.0 (até Δt de 2 min) a 0.6 na
+   borda da PRÓPRIA janela — "país a 6 h" e "cidade a 6 min" não competem
+   na mesma escala. Evidência `vizinhanca_temporal` (0.75×fator).
+
+   A busca já olha os dois lados da linha do tempo (antes e depois); desde
+   D-074 o lado perdedor não é descartado — ele testemunha a favor ou
+   contra o mais próximo, campo a campo (cidade e região, nunca país):
+   concordam se os círculos de incerteza de cada lado (`raio_incerteza`,
+   D-032) se sobrepõem, e aí o campo é mantido com o MESMO fator de
+   sempre — sem bônus de score, só a marca de concordância e uma frase
+   extra na justificativa. Discordam, e o campo não é herdado por
+   ninguém: duas doadoras a horas de distância uma da outra é sinal de
+   trânsito, não empate a favor da mais próxima. Medido contra o acervo
+   real: o subconjunto que discordava tinha cobertura de só 91,1%
+   (50,9% numa banda inteira) — era aí que a versão anterior errava
+   calada. Ver D-074 e `scripts/calibrar_raio_incerteza.py --concordancia`.
 
 As coordenadas efetivas (próprias ou herdadas) alimentam a cascata
 (regras 4/5), as pernas multi-país e a transição casa↔fora. "Casa" usa

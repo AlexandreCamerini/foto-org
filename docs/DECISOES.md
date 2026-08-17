@@ -2631,3 +2631,109 @@ inteiro passa a ser contado numa passada só
   fechado (a fração 3.220/8.192 da regra 6 que era pasta cronológica); a
   fração por keyword fraca (regra 2, 3.300 fotos) e o resto de "álbum +
   duração" continuam abertos.
+
+---
+
+## D-074 — Herança de GPS confronta os dois lados em vez de só descartar o perdedor
+
+- Fase: fatia independente (fora do roadmap de fase), a pedido do
+  orquestrador de agentes.
+- Classe: A
+- Data: 2026-08-17
+- Contexto: `herdar_gps` já buscava doadora dos DOIS lados (antes e
+  depois) desde a versão que atravessa vizinhos da mesma origem
+  (`procurar`, comentário sobre os 27.117 candidatos barrados), mas
+  descartava o lado perdedor inteiro com `min(candidatos, key=...)` — pura
+  extrapolação de âncora única. Quando a doadora mais próxima e a mais
+  distante discordam geograficamente (uma indica São Paulo, a outra
+  Campinas), a foto do meio está em algum lugar EM TRÂNSITO — afirmar a
+  cidade da mais próxima como se a outra não existisse é a "sugestão
+  errada com aparência de fundamentada" que D-025 já havia nomeado, agora
+  aplicada ao caso de duas evidências, não uma.
+- Medido: `scripts/calibrar_raio_incerteza.py --concordancia` (mesma
+  técnica de D-032 — foto com GPS próprio tratada como herdeira
+  hipotética), contra o backup pré-reset com GPS em 4 fontes
+  (`catalog-antes-do-reset-20260816-013503.db`, 40.678 fotos com GPS,
+  39.443 pares na janela de 12h). Dos 33.889 pares com doadora testável
+  dos dois lados (números abaixo já são os corrigidos após a revisão por
+  sub-agente ter achado um bug na PRÓPRIA medição — ver "Achado na
+  revisão" adiante):
+  - **83,8% concordam** (os círculos de incerteza de cada lado se
+    sobrepõem) — cobertura real 97,5%, contra 94,2% do subconjunto de
+    âncora única na mesma amostra.
+  - **2,1% discordam** — e é aí que mora o problema que esta fatia
+    resolve: cobertura de só **91,1%** no geral, e **50,9%** (quase cara
+    ou coroa) na banda de 1–10 min — quer dizer, quase metade das vezes
+    em que os dois lados discordam nessa banda, a coordenada da doadora
+    mais próxima sozinha estaria FORA do próprio círculo de incerteza
+    dela. É exatamente o padrão de doadora com coordenada errada que
+    D-032 já havia flagueado (2019-04-19, Apple Fotos gravando "casa" a
+    163 km do lugar real) — só que ali só um caso ficou registrado; a
+    medição agora generaliza: quando a doadora mais próxima está errada,
+    a mais distante costuma discordar dela, e esse desacordo é o sinal
+    que sobrava sem uso.
+  - **Testado e descartado**: apertar o raio de incerteza quando os dois
+    lados concordam. `min(raio_incerteza(delta_perto),
+    raio_incerteza(delta_longe))` já é, por construção,
+    `raio_incerteza(delta)` de hoje — `delta` já é sempre o Δt do lado
+    mais próximo (a escolha de doadora sempre prefere o mais próximo) e
+    `raio_incerteza` é monótona em Δt. Não há aperto de graça aí.
+    Testei também um fator de encolhimento extra sobre o raio dos
+    concordantes: a cobertura **bruta** sobe suave e engana (dominada
+    pelos 94,8% dos pares concordantes que estão a ≤1 min, onde o raio já
+    está no piso e quase qualquer fator cobre); ponderando por banda —
+    como a própria metodologia de D-032 exige, porque a herdeira real se
+    concentra em 30 min–12 h, não em segundos — a banda de 1–10 min só
+    alcança 90% de cobertura por volta de K≈0,7–1,0, ou seja, quase sem
+    encolhimento livre. **Nenhum fator novo foi adicionado.**
+- Escolhida — três regras, sem constante nova:
+  1. Cada campo (cidade, região) é confrontado contra o lado oposto
+     quando o Δt desse lado também cabe na janela daquele campo
+     (D-025). Concordam se a distância entre as duas doadoras cabe na
+     soma dos dois `raio_incerteza` — reusa a constante calibrada de
+     D-032, não inventa outra.
+  2. Concordam: o campo é mantido, com o MESMO fator de sempre (Δt do
+     lado mais próximo, sem bônus de score) — só ganha uma marca
+     (`Heranca.concordancia`) e uma frase extra na justificativa
+     ("confirmada por outra foto do lado oposto no tempo").
+  3. Discordam: o campo não é herdado por ninguém — nem pelo lado mais
+     próximo. Se uma granularidade mais grossa (ex.: região quando só
+     cidade discordou) não chegou a ser testada — porque o Δt do lado
+     distante não cabe na janela dela — ela segue como sempre seguiu,
+     sem teste, sem regressão.
+  País fica de fora do teste inteiro, de propósito: `raio_incerteza` tem
+  teto de 50 km (deslocamento de pessoa em 12h), e duas doadoras a
+  300 km — claramente no mesmo país — falhariam um teste calibrado
+  numa escala cem vezes menor. Resolver isso direito pede
+  geocodificação, que `grouping/correlacao.py` deliberadamente não tem.
+- Por quê: o ganho real e mensurável é reportar quando NÃO afirmar, não
+  inflar confiança quando afirma. A cobertura do subconjunto discordante
+  (91,1%, com um poço de 50,9% numa banda inteira) é o preço que o modelo
+  anterior pagava em silêncio; descartar esse campo é assumir a incerteza
+  real em vez de escondê-la atrás do "doador mais próximo venceu".
+- Achado na revisão por sub-agente, antes do commit, na PRÓPRIA medição:
+  `montar_pares_duplo` (script) parava na janela mais estreita (cidade,
+  600 s) para decidir se um par era "testável", em vez da mais larga que
+  o Δt escolhido sustenta (região, 7200 s) — igual `herdar_gps` faz
+  campo a campo. Isso subcontava como "única" todo par em que só região
+  era de fato confrontada em produção, justamente na banda mais citada
+  como evidência (1–10 min). Corrigido antes do commit; os números acima
+  já são os corrigidos (eram 78,2%/1,9%/91,5%/48,8%/31.577 antes do
+  ajuste — a conclusão não mudou, só a precisão dela).
+- Não modelado: hora de qualquer um dos três lados envolvidos (a foto que
+  herda, o doador escolhido ou o doador do outro lado) vinda do mtime do
+  arquivo derruba a confiabilidade do Δt usado no teste geométrico — o
+  campo simplesmente não é testado nesse caso (fica como se só houvesse um
+  lado), em vez de inventar um multiplicador de penalidade sem dado que o
+  sustente (mesma postura de D-032 para `hora_incerta`). Achado na revisão
+  por sub-agente antes do commit: a primeira versão só olhava a hora do
+  lado DESCARTADO — deixava passar o caso em que a foto ou o doador
+  ESCOLHIDO tinham hora incerta, produzindo uma justificativa que dizia
+  "a proximidade pode ser coincidência" e "confirmada por outra foto" na
+  mesma frase. Corrigido antes do commit.
+- Como reverter: `_confrontar_com_outro_lado` em
+  `fotoorganizer/grouping/correlacao.py` é a função isolada — remover a
+  chamada em `herdar_gps` volta ao `min(candidatos, ...)` de sempre.
+  `scripts/calibrar_raio_incerteza.py --concordancia` refaz a medição
+  contra qualquer catálogo.
+- Status: decidido por medição.

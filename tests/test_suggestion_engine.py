@@ -8,6 +8,7 @@ from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.classification.confidence import nivel_para_score
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.geolocation import GeoResult, LocationResolver
+from fotoorganizer.grouping.correlacao import campos_confiaveis
 from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.models import (
     ConfidenceLevel,
@@ -1319,3 +1320,47 @@ def test_heranca_distante_afirma_o_pais_e_cala_a_cidade(migrated_engine):
     assert "cidade" not in campos
     heranca = next(e for e in evidencias if e.origem == "vizinhanca_temporal")
     assert "não a cidade" in heranca.justificativa
+
+
+def test_heranca_concordante_diz_que_foi_confirmada(migrated_engine):
+    """D-074: com doadora dos dois lados perto uma da outra, a cidade
+    herdada fica corroborada — e a justificativa precisa dizer isso, não só
+    guardar o dado internamente. Sem bônus de score: mesma fórmula de
+    sempre, só a frase muda."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "meio.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "antes.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=3),
+            gps=(43.9500, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.add(_media(
+            telefone.id, "depois.jpg", "/fotos/DCIM",
+            data=base + timedelta(minutes=4),
+            gps=(43.9520, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "meio.jpg")
+    heranca = next(
+        e for e in evidencias
+        if e.origem == "vizinhanca_temporal" and e.campo == "cidade"
+    )
+    assert "confirmada por outra foto" in heranca.justificativa
+    assert "herdado de 'antes.jpg'" in heranca.justificativa
+    # Sem bônus: o score é o mesmo que uma âncora única a 3 min daria.
+    assert heranca.score == round(0.75 * campos_confiaveis(
+        timedelta(minutes=3)
+    )[-1][1], 3)

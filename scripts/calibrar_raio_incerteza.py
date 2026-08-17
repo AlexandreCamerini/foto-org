@@ -26,6 +26,16 @@ Uso:
     .venv/bin/python scripts/calibrar_raio_incerteza.py
     .venv/bin/python scripts/calibrar_raio_incerteza.py --grade
     .venv/bin/python scripts/calibrar_raio_incerteza.py --db <catalog.db>
+    .venv/bin/python scripts/calibrar_raio_incerteza.py --concordancia
+
+`--concordancia` mede a mesma coisa por um ângulo diferente: quando a
+herdeira hipotética tem doadora dos DOIS lados (antes e depois), a mais
+distante corrobora ou contradiz a mais próxima? Aplica a MESMA regra de
+`herdar_gps` (D-074) — concordam quando os círculos de incerteza de cada
+lado se sobrepõem — e reporta cobertura e distância real por classe (única /
+concordante / discordante), para responder: o corte de discordância
+melhora a cobertura do que sobra, e a concordância prevê distância real
+menor do que uma âncora sozinha na mesma banda de Δt?
 
 Resultado documentado em docs/LOCAL_ESTIMADO.md.
 """
@@ -278,6 +288,134 @@ def relatorio(pares: list[Par], pesos: dict[str, int]) -> None:
           f"{dias_ruins.most_common(5)}")
 
 
+@dataclass(frozen=True, slots=True)
+class ParDuplo:
+    """Como `Par`, mas guarda se a herdeira hipotética tinha doadora dos
+    DOIS lados e, quando tinha, se elas concordavam geograficamente — a
+    mesma pergunta que `herdar_gps` faz para decidir se corrobora ou
+    descarta um campo (D-074)."""
+
+    delta_s: float
+    distancia_m: float
+    dia: date
+    classe: str   # "unica" | "concordante" | "discordante"
+
+
+# A janela testável por D-074 é a de REGIÃO (2h, a mais larga de D-025 que
+# ainda não é país): sempre que o Δt do lado escolhido cabe em região, região
+# também está em `campos_base` e É testada contra o lado distante, mesmo
+# quando esse lado já não cabe na janela (mais estreita) de cidade. Parar em
+# cidade (600s) subcontaria como "única" todo par em que só região é
+# confrontada — cidade e região, quando as duas são testáveis, dão sempre o
+# MESMO veredito geométrico (a distância entre doadoras e a soma dos raios
+# não dependem do campo, só dos dois Δt), então não há ambiguidade em usar
+# a janela mais larga aqui.
+_JANELA_TESTAVEL_S = 7200.0
+
+
+def montar_pares_duplo(
+    fotos: list[tuple[float, int, float, float]],
+    janela_s: float,
+) -> list[ParDuplo]:
+    """A mesma regra de `montar_pares`, mas sem jogar fora o lado perdedor:
+    quando os dois lados existem, testa se concordam (D-074) antes de
+    classificar o par."""
+    tempos = [f[0] for f in fotos]
+    pares: list[ParDuplo] = []
+    for i, (t, origem, lat, lon) in enumerate(fotos):
+        candidatos: dict[int, tuple[float, int]] = {}
+        for passo in (-1, 1):
+            j = i + passo
+            while 0 <= j < len(fotos):
+                delta = abs(tempos[j] - t)
+                if delta > janela_s:
+                    break
+                if fotos[j][1] != origem:
+                    candidatos[passo] = (delta, j)
+                    break
+                j += passo
+        if not candidatos:
+            continue
+        passo_escolhido = min(candidatos, key=lambda p: candidatos[p][0])
+        delta, j = candidatos[passo_escolhido]
+        distancia = haversine((lat, lon), (fotos[j][2], fotos[j][3]))
+
+        classe = "unica"
+        outro = candidatos.get(-passo_escolhido)
+        if outro is not None:
+            delta_outro, j_outro = outro
+            testavel = delta <= _JANELA_TESTAVEL_S
+            if testavel and delta_outro <= _JANELA_TESTAVEL_S:
+                soma_raios = (
+                    raio_incerteza(timedelta(seconds=delta))
+                    + raio_incerteza(timedelta(seconds=delta_outro))
+                )
+                dist_doadoras = haversine(
+                    (fotos[j][2], fotos[j][3]),
+                    (fotos[j_outro][2], fotos[j_outro][3]),
+                )
+                classe = ("concordante" if dist_doadoras <= soma_raios
+                          else "discordante")
+
+        pares.append(ParDuplo(
+            delta_s=delta, distancia_m=distancia,
+            dia=datetime.fromtimestamp(t).date(), classe=classe,
+        ))
+    return pares
+
+
+def relatorio_concordancia(pares: list[ParDuplo]) -> None:
+    """Responde as duas perguntas de D-074: o corte de discordância melhora
+    a cobertura do que sobra? A concordância prevê distância real menor do
+    que uma âncora sozinha, na mesma banda de Δt?"""
+    contagem = Counter(p.classe for p in pares)
+    total = len(pares)
+    print("\n--- concordância de duas âncoras (D-074) ---")
+    print(f"pares com doadora dos dois lados testável: "
+          f"{contagem['concordante'] + contagem['discordante']} de {total}")
+    for classe in ("unica", "concordante", "discordante"):
+        n = contagem[classe]
+        print(f"  {classe:<12} {n:>6}  ({n / total:.1%})")
+
+    for classe in ("unica", "concordante", "discordante"):
+        subset = [p for p in pares if p.classe == classe]
+        if not subset:
+            continue
+        print(f"\n{classe} — {len(subset)} pares, "
+              f"cobertura geral {sum(1 for p in subset if _cobre_duplo(p)) / len(subset):.1%}")
+        cab = f"{'banda':<10}{'n':>6}{'p50 real':>11}{'p90 real':>11}{'cobertura':>11}"
+        print(cab)
+        for nome, lo, hi in BANDAS:
+            sub = [
+                p for p in subset
+                if (lo < p.delta_s <= hi) or (lo == 0 and p.delta_s <= hi)
+            ]
+            if not sub:
+                continue
+            ds = [p.distancia_m for p in sub]
+            cob = sum(1 for p in sub if _cobre_duplo(p)) / len(sub)
+            print(f"{nome:<10}{len(sub):>6}"
+                  f"{statistics.median(ds) / 1000:>10.1f}k"
+                  f"{_percentil(ds, 0.90) / 1000:>10.1f}k"
+                  f"{cob:>11.1%}")
+
+    # A pergunta do min(raio): como `delta` já é sempre o do lado mais
+    # próximo (a escolha de doadora sempre prefere o mais próximo), e
+    # `raio_incerteza` é monótona em Δt, min(raio_perto, raio_longe) já é
+    # exatamente `raio_incerteza(delta)` — o raio de hoje. Não há aperto
+    # livre aqui; confirmado por construção, não só por medição.
+    print(
+        "\nmin(raio_perto, raio_longe) == raio_incerteza(delta) sempre, "
+        "por construção: delta já é o Δt do lado mais próximo, e "
+        "raio_incerteza é monótona. O raio de hoje já É o mínimo dos dois "
+        "lados — não há aperto de graça aqui (ver Heranca.raio_m)."
+    )
+
+
+def _cobre_duplo(par: ParDuplo) -> bool:
+    return par.distancia_m <= raio_incerteza(timedelta(seconds=par.delta_s))
+
+
 def grade(pares: list[Par], pesos: dict[str, int]) -> None:
     """Sensibilidade: o que acontece com a cobertura ao mexer nas constantes.
 
@@ -299,6 +437,8 @@ def main() -> int:
     ap.add_argument("--db", type=Path, default=paths.default_db_path())
     ap.add_argument("--grade", action="store_true",
                     help="tabela de sensibilidade das constantes")
+    ap.add_argument("--concordancia", action="store_true",
+                    help="mede concordância de duas âncoras (D-074)")
     args = ap.parse_args()
 
     if not args.db.exists():
@@ -316,6 +456,10 @@ def main() -> int:
     relatorio(pares, pesos)
     if args.grade:
         grade(pares, pesos)
+    if args.concordancia:
+        relatorio_concordancia(montar_pares_duplo(
+            fotos, JANELA_HERANCA.total_seconds()
+        ))
     return 0
 
 
