@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Miniatura } from "./Miniatura";
 import type { MidiaQuery } from "../hooks/useMidia";
+import Botao from "../ui/Botao";
 
 const GAP = 10;
 
@@ -13,6 +14,9 @@ interface Props {
   onSelecionar: (index: number) => void;
   onAbrirLoupe: () => void;
   onColunas?: (n: number) => void;
+  /** Abre o modal de adicionar pasta do App.tsx (CONS-05/D-07) — mesma ação
+   * do botão da Sidebar. */
+  onAdicionarPasta: () => void;
 }
 
 export default function PhotoGrid({
@@ -22,6 +26,7 @@ export default function PhotoGrid({
   onSelecionar,
   onAbrirLoupe,
   onColunas,
+  onAdicionarPasta,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [largura, setLargura] = useState(800);
@@ -70,9 +75,12 @@ export default function PhotoGrid({
 
   if (total === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-texto-2">
-        Nenhuma foto no filtro atual — adicione uma pasta ou importe um
-        catálogo na barra lateral.
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-texto-2">
+        <span>
+          Nenhuma foto no filtro atual — adicione uma pasta ou importe um
+          catálogo na barra lateral.
+        </span>
+        <Botao onClick={onAdicionarPasta}>Adicionar pasta…</Botao>
       </div>
     );
   }

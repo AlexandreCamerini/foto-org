@@ -25,7 +25,7 @@ describe("Trips", () => {
     // Checagem síncrona (sem await): é exatamente a janela entre o mount e
     // a promise do fetch resolver que o bug vivia.
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     expect(
       screen.queryByText(/Nenhuma viagem ou evento ainda/),
@@ -40,7 +40,7 @@ describe("Trips", () => {
 
   it("catálogo genuinamente vazio ainda mostra a mensagem, depois de carregar", async () => {
     servirApi({ "/api/viagens": [], "/api/eventos": [] });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     expect(
       await screen.findByText(/Nenhuma viagem ou evento ainda/),
@@ -49,7 +49,7 @@ describe("Trips", () => {
 
   it("a capa é a miniatura cacheada, não a prévia grande do loupe", async () => {
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     const img = (await screen.findByText("Dubai")).closest('[role="button"]')!
       .querySelector("img")!;
@@ -64,7 +64,7 @@ describe("Trips", () => {
       "/api/viagens": [],
       "/api/eventos": [grupo({ nome: "Visconde de Maua", capa_id: null })],
     });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     expect(await screen.findByText("Visconde de Maua")).toBeInTheDocument();
     expect(screen.getByText("capa fora de alcance")).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe("Trips", () => {
       "/api/viagens": [],
       "/api/eventos": [grupo({ nome: "Pantanal", capa_id: 3248 })],
     });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     const img = (await screen.findByText("Pantanal")).closest('[role="button"]')!
       .querySelector("img")!;
@@ -87,7 +87,7 @@ describe("Trips", () => {
   it("badge Mapa abre o grupo direto na vista de mapa, sem também disparar o clique do card (D-050)", async () => {
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
     const onAbrir = vi.fn();
-    montar(<Trips onAbrir={onAbrir} />);
+    montar(<Trips onAbrir={onAbrir} onAdicionarPasta={vi.fn()} />);
 
     fireEvent.click(await screen.findByTitle("ver onde este grupo aconteceu"));
 
@@ -98,7 +98,7 @@ describe("Trips", () => {
   it("clicar no card fora do badge abre na vista padrão (lista)", async () => {
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
     const onAbrir = vi.fn();
-    montar(<Trips onAbrir={onAbrir} />);
+    montar(<Trips onAbrir={onAbrir} onAdicionarPasta={vi.fn()} />);
 
     fireEvent.click(await screen.findByText("Dubai"));
 
@@ -111,7 +111,7 @@ describe("Trips", () => {
     async (tecla) => {
       servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
       const onAbrir = vi.fn();
-      montar(<Trips onAbrir={onAbrir} />);
+      montar(<Trips onAbrir={onAbrir} onAdicionarPasta={vi.fn()} />);
 
       const card = (await screen.findByText("Dubai")).closest(
         '[role="button"]',
@@ -125,7 +125,7 @@ describe("Trips", () => {
 
   it("badge Mapa não é descendente do card — foco/Tab alcança os dois independentemente", async () => {
     servirApi({ "/api/viagens": [grupo({})], "/api/eventos": [] });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     const card = (await screen.findByText("Dubai")).closest('[role="button"]')!;
     const badge = screen.getByTitle("ver onde este grupo aconteceu");
@@ -140,7 +140,7 @@ describe("Trips", () => {
         grupo({ id: 2, nome: "Aniversário", metodo: "temporal" }),
       ],
     });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     expect(await screen.findByText("Álbum")).toBeInTheDocument();
     expect(screen.getByText("Evento detectado")).toBeInTheDocument();
@@ -154,7 +154,7 @@ describe("Trips", () => {
         grupo({ id: 2, nome: "Formatura", metodo: "temporal" }),
       ],
     });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     await screen.findByText("Aniversário");
     expect(screen.queryByText("Álbum")).not.toBeInTheDocument();
@@ -169,7 +169,7 @@ describe("Trips", () => {
       ],
       "/api/eventos": [],
     });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     expect(await screen.findAllByText("Praia")).toHaveLength(2);
     expect(screen.queryByText("Álbum")).not.toBeInTheDocument();
@@ -184,7 +184,7 @@ describe("Trips", () => {
         grupo({ id: 2, nome: "natal ", metodo: "temporal" }),
       ],
     });
-    montar(<Trips onAbrir={vi.fn()} />);
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
 
     expect(await screen.findAllByText("Evento detectado")).toHaveLength(2);
   });

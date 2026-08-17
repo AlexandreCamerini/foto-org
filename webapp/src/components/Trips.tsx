@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, type Agrupamento } from "../api";
+import Botao from "../ui/Botao";
 
 interface Props {
   /** Fonte escolhida na barra lateral. O controle vale nesta tela também:
@@ -15,11 +16,16 @@ interface Props {
     nome: string,
     vista?: "lista" | "mapa",
   ) => void;
+  /** Abre o modal de adicionar pasta do App.tsx (CONS-05/D-07). A frase do
+   * estado vazio fala de gerar sugestões e o botão adiciona pasta — é
+   * deliberado, D-07 manda a MESMA ação nas três telas, não inventar ação
+   * própria por tela. */
+  onAdicionarPasta: () => void;
 }
 
 /** Galeria de viagens e eventos como cards com capa — o agrupamento
  * explicável do motor apresentado do jeito que se mostra pra alguém. */
-export default function Trips({ onAbrir, fonte }: Props) {
+export default function Trips({ onAbrir, fonte, onAdicionarPasta }: Props) {
   const { data: viagens, isPending: viagensPendente } = useQuery({
     queryKey: ["viagens", fonte],
     queryFn: () => api.viagens(fonte),
@@ -46,8 +52,9 @@ export default function Trips({ onAbrir, fonte }: Props) {
         </div>
       )}
       {vazio && (
-        <div className="flex h-full items-center justify-center text-texto-2">
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-texto-2">
           Nenhuma viagem ou evento ainda — gere as sugestões na aba Revisão.
+          <Botao onClick={onAdicionarPasta}>Adicionar pasta…</Botao>
         </div>
       )}
       {(viagens ?? []).length > 0 && (

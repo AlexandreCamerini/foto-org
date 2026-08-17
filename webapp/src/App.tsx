@@ -289,6 +289,7 @@ export default function App() {
                 setRecorte(novo);
                 setAba("Biblioteca");
               }}
+              onAdicionarPasta={abrirAdicionarPasta}
             />
           )}
           {aba === "Viagens" && (
@@ -300,6 +301,7 @@ export default function App() {
                 setRecorte({ ...filtro, nome });
                 setAba("Biblioteca");
               }}
+              onAdicionarPasta={abrirAdicionarPasta}
             />
           )}
           {aba === "Revisão" && <Review job={job} fonte={fonte ?? undefined} />}
@@ -465,6 +467,7 @@ export default function App() {
                       onSelecionar={setSelIndex}
                       onAbrirLoupe={() => setLoupeAberto(true)}
                       onColunas={onColunas}
+                      onAdicionarPasta={abrirAdicionarPasta}
                     />
                   </div>
                   <LinhaDoTempo
