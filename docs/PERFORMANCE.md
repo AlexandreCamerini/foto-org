@@ -55,15 +55,15 @@ varrer **só `~/Pictures/2026`**, excluindo:
 
 | Fonte | Motivo da exclusão |
 |---|---|
-| `/Users/acamerini/Pictures/2025_05_24` | caminho ausente agora |
-| `/Users/acamerini/Pictures/Dubai, Thai & Viet` | caminho ausente agora |
+| `~/Pictures/2025_05_24` | caminho ausente agora |
+| pasta de viagem pessoal em `~/Pictures/` | caminho ausente agora |
 | `/Volumes/Externo` | volume não montado |
 | `/Volumes/photo/Portfolio/Fotos Organizadas` | volume não montado |
 | `/Volumes/photo` | volume não montado |
 | `Photos Library.photoslibrary` (APPLE_PHOTOS) | importador, fora da medida de varredura de pasta |
 | `Lightroom Catalog.lrcat` (LIGHTROOM) | importador, fora da medida de varredura de pasta |
-| `/Users/acamerini` (home inteiro) | escolha do dono — não representativo do que o produto organiza |
-| `/users/acamerini` (duplicata em minúsculas do home) | escolha do dono — mesmo motivo acima |
+| `~` (home inteiro) | escolha do dono — não representativo do que o produto organiza |
+| `~` (duplicata em minúsculas do caminho do home) | escolha do dono — mesmo motivo acima |
 
 Antes do reset, `catalog.db` zerado e recriado sem backup adicional
 (escolha explícita e informada do dono, oferecida a alternativa "com
@@ -75,7 +75,7 @@ enumerar as fontes.
 
 | Pasta | Indexados | Pulados | Erros | MB | Segundos | arq/s |
 |---|---:|---:|---:|---:|---:|---:|
-| `/Users/acamerini/Pictures/2026` | 1.382 | 0 | 0 | 8.713,3 | 23,58 | 59 |
+| `~/Pictures/2026` | 1.382 | 0 | 0 | 8.713,3 | 23,58 | 59 |
 | **total** | 1.382 | 0 | 0 | 8.713,3 | 23,58 | 59 |
 
 Total de registros em `media_files` após a varredura: **1.382**.

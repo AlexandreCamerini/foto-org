@@ -81,15 +81,15 @@ Raízes das 10 fontes do backup pré-reset excluídas desta rodada, com motivo (
 
 | Fonte | Motivo |
 |---|---|
-| `Pictures/2025_05_24` | caminho ausente agora |
-| `Pictures/Dubai, Thai & Viet` | caminho ausente agora |
+| `~/Pictures/2025_05_24` | caminho ausente agora |
+| pasta de viagem pessoal em `~/Pictures/` | caminho ausente agora |
 | `/Volumes/Externo` | volume não montado |
 | `/Volumes/photo/Portfolio/Fotos Organizadas` | volume não montado |
 | `/Volumes/photo` | volume não montado |
 | `Photos Library.photoslibrary` (APPLE_PHOTOS) | importador, fora da medida de varredura |
 | `Lightroom Catalog.lrcat` (LIGHTROOM) | importador, fora da medida de varredura |
-| `/Users/acamerini` (home) | escolha do dono — não representativo |
-| `/users/acamerini` (duplicata em minúsculas) | escolha do dono — mesmo motivo |
+| `~` (home) | escolha do dono — não representativo |
+| `~` (duplicata em minúsculas do caminho do home) | escolha do dono — mesmo motivo |
 
 Nenhum volume externo entrou na lista aprovada, então a checagem de aceite "volumes externos confirmados montados com `test -d`" não se aplica a esta rodada (nenhum foi incluído).
 
