@@ -5,6 +5,7 @@ import { Miniatura } from "./Miniatura";
 import { api, type Media, type Sugestao } from "../api";
 import { formatarData } from "../data";
 import { naoClassificado } from "../sugestoes";
+import { rotuloDeFonte } from "../fontes";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
 import Botao from "../ui/Botao";
@@ -27,6 +28,7 @@ type Item = {
   camera?: string | null;
   gps_estimado?: boolean;
   motivo_indisponivel?: string | null;
+  source_id?: number;
 };
 
 /** Revisão origem→destino: o usuário decide, o motor explica.
@@ -66,6 +68,9 @@ export default function Review({
     queryKey: ["sugestoes", "contagens", status, fonte],
     queryFn: () => api.sugestoes(status, 0, 1, fonte),
   });
+  // Mesma queryKey de App.tsx/Sidebar.tsx: cache compartilhado, sem
+  // requisição extra. Usado só para resolver o selo de fonte (CONS-01).
+  const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
 
   const acao = useMutation({
     mutationFn: ({ ids, tipo }: { ids: number[]; tipo: string }) =>
@@ -237,7 +242,7 @@ export default function Review({
                     status={status}
                     fonte={fonte}
                     total={grupo.total}
-                    renderizar={(s) => (
+                    renderizar={(s, colide) => (
 
                     <div key={s.id} className="border-b border-borda/60">
                       {editando === s.id ? (
@@ -302,7 +307,17 @@ export default function Review({
                             {/* Nome primeiro. Antes a pasta vinha antes e o
                                 truncate cortava a linha antes de o nome do
                                 arquivo aparecer — 63 linhas idênticas. */}
-                            <div className="truncate font-titulo">{s.nome}</div>
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-titulo">{s.nome}</span>
+                              {colide && s.source_id != null && (
+                                <span
+                                  title="Mesmo nome, data e câmera de outra sugestão nesta lista — fontes diferentes"
+                                  className="inline-flex shrink-0 items-center rounded-full border border-borda bg-cartao px-1.5 py-0.5 text-[11px] text-texto-2"
+                                >
+                                  {rotuloDeFonte(fontes, s.source_id)}
+                                </span>
+                              )}
+                            </div>
                             <div className="truncate text-[11px] text-texto-2">
                               {[s.camera, formatarData(s.data_capturada)]
                                 .filter(Boolean)
@@ -390,7 +405,7 @@ function FotosDoGrupo({
   status: string;
   fonte?: number;
   total: number;
-  renderizar: (item: Item) => React.ReactNode;
+  renderizar: (item: Item, colide: boolean) => React.ReactNode;
 }) {
   const [limite, setLimite] = useState(POR_PAGINA);
   const { data, isPending } = useQuery({
@@ -405,7 +420,21 @@ function FotosDoGrupo({
   const faltam = total - itens.length;
   return (
     <>
-      {itens.map(renderizar)}
+      {itens.map((item, i) => {
+        // CONS-01: duas sugestões vizinhas com mesmo nome+data+câmera mas
+        // media_id diferente são a mesma foto catalogada em dois lugares —
+        // ou dois arquivos que só por acaso se parecem. A tela precisa
+        // dizer de onde cada uma veio. Adjacência, não o grupo inteiro: a
+        // lista chega ordenada e as colisões reais aparecem encostadas.
+        const chave = (it: Item) =>
+          `${it.nome} ${it.data_capturada ?? ""} ${it.camera ?? ""}`;
+        const colideCom = (vizinho: Item | undefined) =>
+          vizinho !== undefined &&
+          chave(vizinho) === chave(item) &&
+          vizinho.media_id !== item.media_id;
+        const colide = colideCom(itens[i - 1]) || colideCom(itens[i + 1]);
+        return renderizar(item, colide);
+      })}
       {faltam > 0 && (
         <button
           onClick={() => setLimite((n) => n + POR_PAGINA)}

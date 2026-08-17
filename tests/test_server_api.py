@@ -320,6 +320,46 @@ def test_gerar_sugestoes_e_aprovar(migrated_engine, tmp_path):
     ).status_code == 422
 
 
+def test_sugestoes_trazem_source_id_da_fonte_que_catalogou(migrated_engine, tmp_path):
+    """CONS-01 precisa distinguir, em duas sugestões vizinhas colididas, de
+    onde cada uma veio — o selo de fonte na Revisão lê este campo. Sem ele,
+    o cliente não tem como saber qual `Source` catalogou cada foto."""
+    import time
+
+    fotos = tmp_path / "fotos"
+    for i in range(2):
+        make_jpeg(fotos / f"f_{i}.jpg", seed=i)
+    settings = Settings(data_dir=tmp_path / "d", cache_dir=tmp_path / "c")
+    factory = create_session_factory(migrated_engine)
+    scanner = CatalogScanner(factory, PurePythonExtractor(), ScannerSettings())
+    scanner.scan_source(fotos)
+    client = TestClient(
+        create_app(settings, factory), base_url="http://127.0.0.1:8765"
+    )
+
+    (fonte,) = client.get("/api/fontes").json()
+
+    assert client.post("/api/sugestoes/gerar").status_code == 200
+    for _ in range(150):
+        estado = client.get("/api/job").json()
+        if estado["status"] != "rodando":
+            break
+        time.sleep(0.1)
+    assert estado["status"] == "concluido"
+
+    pendentes = client.get("/api/sugestoes").json()
+    assert len(pendentes["itens"]) == 2
+    for item in pendentes["itens"]:
+        assert item["source_id"] == fonte["id"]
+        # Campos já existentes continuam presentes e inalterados.
+        for campo in (
+            "id", "media_id", "nome", "pasta", "destino", "nivel",
+            "status", "data_capturada", "camera", "gps_estimado",
+            "motivo_indisponivel",
+        ):
+            assert campo in item
+
+
 # -- template de destino configurável (fase 10) ------------------------------
 def test_template_sem_preferencia_salva_devolve_o_padrao(client):
     from fotoorganizer.classification.templates import TEMPLATE_PADRAO
