@@ -203,7 +203,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-1 border-b border-borda bg-painel px-3 py-1.5">
-        <span className="mr-3 font-semibold">Foto Organizer</span>
+        <span className="mr-3 font-titulo">Foto Organizer</span>
         {ABAS.map((nome) => (
           <button
             key={nome}

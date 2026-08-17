@@ -215,7 +215,7 @@ function ModalReapontar({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-[32rem] rounded-md border border-borda bg-painel p-4">
-        <div className="mb-2 font-semibold">Fonte mudou de lugar</div>
+        <div className="mb-2 font-titulo">Fonte mudou de lugar</div>
         {isLoading && <p className="text-texto-2">Verificando…</p>}
         {error && (
           <p className="text-erro">{(error as Error).message}</p>
@@ -238,7 +238,7 @@ function ModalReapontar({
                 →
               </span>
               <span
-                className="min-w-0 flex-1 truncate font-medium"
+                className="min-w-0 flex-1 truncate font-titulo"
                 title={previa.prefixo_novo}
               >
                 {previa.prefixo_novo}
@@ -291,7 +291,7 @@ function ModalAvisoApple({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-96 rounded-md border border-borda bg-painel p-4">
-        <div className="mb-2 font-semibold">Importar do Apple Fotos</div>
+        <div className="mb-2 font-titulo">Importar do Apple Fotos</div>
         <p className="mb-3 text-texto-2">
           A importação é somente leitura — nenhuma foto é movida, renomeada
           ou alterada na sua biblioteca. O macOS pode pedir Acesso Total ao
@@ -326,7 +326,7 @@ function ModalCaminho({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-96 rounded-md border border-borda bg-painel p-4">
-        <div className="mb-2 font-semibold">{titulo}</div>
+        <div className="mb-2 font-titulo">{titulo}</div>
         <input
           autoFocus
           value={valor}
