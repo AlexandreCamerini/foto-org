@@ -129,7 +129,7 @@ na Fase 3, 2026-08-16. -->
 - [x] **CONS-03**: Escala única de "botão importante" definida (preenchido
   = ação mais comprometedora); "Retomar"/"Gerar sugestões" migram para
   contorno neutro+hover [docs/AVALIACAO_UX.md, B.3]
-- [ ] **CONS-04**: Imagem em alta resolução que retorna 404 (Loupe,
+- [x] **CONS-04**: Imagem em alta resolução que retorna 404 (Loupe,
   comparação de Duplicatas) mostra estado de erro explícito, não texto cru
   ou retângulo preto [docs/AVALIACAO_UX.md, A.4]
 - [ ] **CONS-05**: Estados vazios (Panorama, PhotoGrid, Trips) ganham botão
@@ -239,7 +239,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-01 | Phase 4 | Pending |
 | CONS-02 | Phase 4 | Pending |
 | CONS-03 | Phase 4 | Complete |
-| CONS-04 | Phase 4 | Pending |
+| CONS-04 | Phase 4 | Done (04-03) |
 | CONS-05 | Phase 4 | Pending |
 | CONS-06 | Phase 4 | Pending |
 | CONS-07 | Phase 4 | Complete |
