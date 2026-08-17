@@ -81,10 +81,10 @@ function Secao({
   itens: Agrupamento[];
   onAbrir: (g: Agrupamento, vista?: "lista" | "mapa") => void;
 }) {
-  // Selo Álbum/Evento detectado (CONS-02, D-03) só faz sentido quando dois
-  // cards da mesma seção colidem no nome — sinal de ambiguidade, não
-  // decoração permanente. Comparação case-insensitive e sem espaço nas
-  // pontas: "Natal" e "natal " contam como o mesmo nome.
+  // Selo de origem (CONS-02, D-03) só faz sentido quando dois cards da
+  // mesma seção colidem no nome — sinal de ambiguidade, não decoração
+  // permanente. Comparação case-insensitive e sem espaço nas pontas:
+  // "Natal" e "natal " contam como o mesmo nome.
   const nomesNormalizados = itens.map((g) => g.nome.trim().toLowerCase());
   const nomesColidindo = new Set(
     nomesNormalizados.filter(
@@ -124,10 +124,6 @@ function Card({
   onAbrir: () => void;
   onAbrirMapa: () => void;
 }) {
-  // secao/colideNome chegam prontos desta task; o selo que os lê ainda não
-  // existe (próxima task) — placeholder para o tsconfig noUnusedParameters.
-  void secao;
-  void colideNome;
   const [capaFalhou, setCapaFalhou] = useState(false);
   // A capa é uma miniatura (cacheada, do tamanho do card), não a prévia do
   // loupe — e quando ela não carrega o card diz por quê em vez de ficar em
@@ -181,6 +177,18 @@ function Card({
           </div>
         </div>
       </div>
+      {/* Selo CONS-02/D-03: só quando o nome colide com outro card da mesma
+          seção Eventos — sinal de ambiguidade, não decoração permanente.
+          Rótulo é função pura do campo determinístico já servido pela API
+          (nunca LLM, ver 04-CONTEXT.md § Deferred). IRMÃO do role="button",
+          nunca dentro dele, pelo mesmo motivo do badge "Mapa" abaixo:
+          conteúdo dentro do role="button" vazaria pro nome acessível do
+          card. <span>, não <button> — o selo não é clicável. */}
+      {secao === "eventos" && colideNome && (
+        <span className="absolute left-2 top-2 z-10 rounded-full border border-borda bg-janela/80 px-2 py-0.5 text-[11px] text-texto-2 backdrop-blur-sm">
+          {grupo.metodo === "album_externo" ? "Álbum" : "Evento detectado"}
+        </span>
+      )}
       {/* Achado D-050: o mapa existe (Lista × Mapa, dentro do grupo aberto)
           mas não tinha nenhuma pista visível de que existe antes de já
           saber procurar. Badge sempre visível, não só no hover — é
