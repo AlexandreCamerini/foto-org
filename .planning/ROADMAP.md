@@ -22,23 +22,29 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
 ## Phases
 
 **Phase Numbering:**
+
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Timezone estimado** - Fotos ganham fuso horário estimado (completed 2026-08-16)
   (`tz_estimado`) a partir do país já atribuído, gravado direto sem revisão
+
 - [x] **Phase 2: Correção de dados medidos** - Filtro "Tudo" da Biblioteca (completed 2026-08-16)
   para de esconder SINAL misturado com acervo sem `WHERE`
+
 - [x] **Phase 3: Revisão acessível e consistente** - `texto-3` restante em (completed 2026-08-16)
   conteúdo e busca não limpa em 3 pontos de navegação
+
 - [x] **Phase 4: Consistência visual secundária** - Selos, estados de erro/ (completed 2026-08-17)
   vazio e tokens de peso/hover consistentes entre telas
+
 - [ ] **Phase 5: Preparação para lançamento** - Empacotamento assinado,
   índices ausentes, onboarding do primeiro acervo, baseline de performance
 
 ## Phase Details
 
 ### Phase 1: Timezone estimado
+
 **Goal**: Fotos ganham `tz_estimado` — fuso IANA estimado a partir do país
 já atribuído à foto por qualquer origem (GPS próprio, herança temporal de
 D-025, ou nome de pasta) — fechando o modelo de dois instantes de D-038:
@@ -53,21 +59,26 @@ do dono em 2026-08-16: seguir este doc, não o texto minerado do
 ROADMAP.md/AVALIACAO_UX.md original). Ver também D-038 em
 `docs/DECISOES.md` (modelo de dois instantes).
 **Success Criteria** (what must be TRUE):
+
   1. Tabela estática `TZ_POR_PAIS` (nova, `fotoorganizer/geolocation/
      timezones.py`) cobre os 98 países de `PAISES_PT`; todo valor é um
      identificador IANA válido, validado em teste contra
      `zoneinfo.available_timezones()`.
+
   2. Uma foto cujo país foi resolvido — por GPS próprio, herança temporal
      (D-025) ou nome de pasta — ganha `tz_estimado` gravado direto em
      `MediaFile` dentro de `_persistir_sugestao` após `gerar()`, **sem**
      passar por `Evidence`/`Suggestion`/revisão humana e **sem** entrada em
      `docs/CONFIANCA.md` — mesmo padrão não revisado de `gps_lat_estimado`.
+
   3. `GET /api/midia/{id}` devolve o campo `tz_estimado`.
   4. Sem país conhecido (ou país fora da tabela), `tz_estimado` fica
      `None` — nunca inventa, nunca lança erro.
+
   5. País com mais de um fuso oficial (Brasil, EUA, Rússia...) resolve para
      o fuso da capital ou de maior população — aproximação deliberada,
      documentada em comentário na própria tabela.
+
   6. Escrever `tz_estimado` não reescreve `data_capturada`/
      `data_capturada_utc` — conversão para hora local exibida em UI é
      decisão separada, fora desta fase.
@@ -78,9 +89,11 @@ máquina do importador); qualquer mudança em `Evidence`/`docs/CONFIANCA.md`.
 **Plans:** 1/1 plans complete
 
 Plans:
+
 - [x] 01-01-PLAN.md — tabela TZ_POR_PAIS, persistência direta em MediaFile, serialização em GET /api/midia/{id}
 
 ### Phase 2: Correção de dados medidos
+
 **Goal**: O filtro "Tudo" da Biblioteca distingue `SINAL` de `ACERVO` em
 vez de misturar os dois numa tabela sem `WHERE`.
 **Depends on**: Nothing
@@ -92,15 +105,18 @@ no código antes desta sessão — confirmado por leitura direta + testes
 existentes, movidos para PROJECT.md § Validated. Só BUG-03 segue aberto;
 o escopo desta fase foi reduzido de acordo.
 **Success Criteria** (what must be TRUE):
+
   1. O filtro "Tudo" da Biblioteca distingue `SINAL` de `ACERVO` em vez de
      devolver a tabela inteira sem `WHERE`.
 **Plans:** 1/1 plans complete
 
 Plans:
+
 - [x] 02-01-PLAN.md — branch `tudo` de `_query` filtra por `papel == ACERVO`,
   rótulo/tooltip corrigidos, auditoria das contagens vizinhas (D-03)
 
 ### Phase 3: Revisão acessível e consistente
+
 **Goal**: A busca de texto não vaza entre grupos/abas, e `texto-3`
 restante em conteúdo real (não decorativo/desabilitado) vira `texto-2`.
 **Depends on**: Phase 2 (corrige o dado que a Revisão exibe antes de
@@ -116,10 +132,12 @@ escopo desta fase foi reduzido de acordo. **UI-SPEC.md desta fase já
 reflete o escopo restrito** (aprovado antes desta correção de escopo,
 mas já tratava REV-01/04/05 como feitos).
 **Success Criteria** (what must be TRUE):
+
   1. Trocar de grupo ou aba nunca mostra um "0 no filtro" falso por causa
      de busca antiga sobrevivendo à navegação — nos 3 pontos de entrada
      ainda não cobertos (botão de troca de aba, `Sidebar.onSelecionarPasta`,
      `StatusBar.aoIrPara`).
+
   2. `texto-3` usado como texto de conteúdo real (não decorativo, não
      desabilitado, não estado de carregamento) em Review/Inspector/
      Operations vira `texto-2`.
@@ -127,73 +145,100 @@ mas já tratava REV-01/04/05 como feitos).
 **UI hint**: yes
 
 Plans:
+
 - [x] 03-01-PLAN.md — REV-03: `setBusca("")` no botão de aba, em
   `Sidebar.onSelecionarPasta` e em `StatusBar.aoIrPara`, + 4 testes de
   regressão (inclui a guarda de que reclicar a aba ativa não apaga a busca)
+
 - [x] 03-02-PLAN.md — REV-02: 9 promoções `texto-3` → `texto-2` em
   Review/Inspector/Operations pela lista fechada de D-02, com checkpoint
   visual de contraste
 
 ### Phase 4: Consistência visual secundária
+
 **Goal**: As inconsistências visuais/interação restantes deixam de
 diferenciar "em que tela eu estou" de "o que o design system manda".
 **Depends on**: Phase 3
 **Requirements**: CONS-01, CONS-02, CONS-03, CONS-04, CONS-05, CONS-06, CONS-07, CONS-08
 **Success Criteria** (what must be TRUE):
+
   1. Sugestões adjacentes que colidem em nome+data+câmera mostram selo de
      fonte, distinguindo "mesma foto em dois catálogos" de "arquivo
      diferente".
+
   2. Grupos de Eventos com nome igual mostram selo "álbum" vs. "evento
      detectado".
+
   3. Imagem quebrada (404) no Loupe ou na comparação de Duplicatas mostra
      estado de erro explícito, nunca texto cru ou retângulo preto.
+
   4. Estados vazios (Panorama, PhotoGrid, Trips) oferecem um botão de ação
      direta em vez de repetir frase estática.
 **Plans:** 7/7 plans complete
 **UI hint**: yes
 
 Plans:
+
 - [x] 04-01-PLAN.md — CONS-08: token `--font-weight-titulo: 500` no `@theme`,
   17 call sites migrados para `font-titulo` em 10 arquivos (sem exceção,
   D-10 revisado) e teste de guarda contra reintrodução (wave 1)
+
 - [x] 04-02-PLAN.md — CONS-03/CONS-07: "Retomar" e "Gerar sugestões" para o
   contorno neutro, Cancelar de Operações vermelho só no hover (wave 2)
+
 - [x] 04-03-PLAN.md — CONS-04: estado de erro de prévia 404 no Loupe (tela
   cheia, duas linhas) e em Duplicatas (`MembroFigura` extraído, por membro)
   (wave 2)
+
 - [x] 04-04-PLAN.md — CONS-02: selo "Álbum"/"Evento detectado" em cards de
   Eventos com nome colidido, pelo campo determinístico `metodo` (wave 2)
+
 - [x] 04-05-PLAN.md — CONS-06: barra da Biblioteca empilha em 2 grupos abaixo
   de `lg` (1024px), Inspetor sempre visível, com checkpoint visual (wave 2)
+
 - [x] 04-06-PLAN.md — CONS-05: `ModalCaminho` extraído, modal de pasta passa a
   ser do `App.tsx`, botão "Adicionar pasta…" nos 3 estados vazios (wave 3)
+
 - [x] 04-07-PLAN.md — CONS-01: `source_id` em `_sugestao_json`, colisão por
   adjacência na fila e selo com o nome da fonte por sugestão (wave 3)
 
 ### Phase 5: Preparação para lançamento
+
 **Goal**: O app pode ser entregue a um primeiro usuário real fora da
 máquina do desenvolvedor — assinado, com fluxo de entrada e com
 desempenho medido, não só funcionando para quem já sabe onde tudo está.
 **Depends on**: Nothing (pode rodar em paralelo às fases 1-4)
 **Requirements**: LANC-01, LANC-02, LANC-03, LANC-04
 **Success Criteria** (what must be TRUE):
+
   1. App instala como `.app` assinado e notarizado via Tauri v2 com Python
      embarcado (python-build-standalone), passando pelo Gatekeeper sem
      aviso.
+
   2. Consultas por prefixo de pasta (e demais FKs hoje sem índice) usam
      índice, não table scan.
+
   3. Um usuário de primeira vez consegue adicionar sua primeira fonte/pasta
      e chegar a uma grade populada sem ler documentação.
+
   4. Existe um baseline de performance documentado (taxa de indexação,
      tempo de geração de sugestões, tempo de detecção de duplicatas) contra
      um catálogo de tamanho representativo.
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 05-01-PLAN.md — índices de FK ausentes, PRAGMA case_sensitive_like e teste de plano de consulta (LANC-02)
 - [ ] 05-02-PLAN.md — build do bundle Marco 1 (runtime PBS + cargo tauri build) e assinatura efetiva (LANC-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-03-PLAN.md — aceite do Marco 1: catálogo novo, fixtures, grade, zero processo órfão (LANC-01)
 - [ ] 05-04-PLAN.md — script de medição e baseline de performance em docs/PERFORMANCE.md (LANC-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-05-PLAN.md — teste de primeira execução sem instrução e registro dos achados (LANC-03)
 
 **Nota de escopo**: o critério 1 acima fala em "assinado e notarizado"; esta fase
