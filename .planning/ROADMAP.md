@@ -149,21 +149,21 @@ diferenciar "em que tela eu estou" de "o que o design system manda".
      estado de erro explícito, nunca texto cru ou retângulo preto.
   4. Estados vazios (Panorama, PhotoGrid, Trips) oferecem um botão de ação
      direta em vez de repetir frase estática.
-**Plans:** 1/7 plans executed
+**Plans:** 5/7 plans executed
 **UI hint**: yes
 
 Plans:
 - [x] 04-01-PLAN.md — CONS-08: token `--font-weight-titulo: 500` no `@theme`,
   17 call sites migrados para `font-titulo` em 10 arquivos (sem exceção,
   D-10 revisado) e teste de guarda contra reintrodução (wave 1)
-- [ ] 04-02-PLAN.md — CONS-03/CONS-07: "Retomar" e "Gerar sugestões" para o
+- [x] 04-02-PLAN.md — CONS-03/CONS-07: "Retomar" e "Gerar sugestões" para o
   contorno neutro, Cancelar de Operações vermelho só no hover (wave 2)
-- [ ] 04-03-PLAN.md — CONS-04: estado de erro de prévia 404 no Loupe (tela
+- [x] 04-03-PLAN.md — CONS-04: estado de erro de prévia 404 no Loupe (tela
   cheia, duas linhas) e em Duplicatas (`MembroFigura` extraído, por membro)
   (wave 2)
-- [ ] 04-04-PLAN.md — CONS-02: selo "Álbum"/"Evento detectado" em cards de
+- [x] 04-04-PLAN.md — CONS-02: selo "Álbum"/"Evento detectado" em cards de
   Eventos com nome colidido, pelo campo determinístico `metodo` (wave 2)
-- [ ] 04-05-PLAN.md — CONS-06: barra da Biblioteca empilha em 2 grupos abaixo
+- [x] 04-05-PLAN.md — CONS-06: barra da Biblioteca empilha em 2 grupos abaixo
   de `lg` (1024px), Inspetor sempre visível, com checkpoint visual (wave 2)
 - [ ] 04-06-PLAN.md — CONS-05: `ModalCaminho` extraído, modal de pasta passa a
   ser do `App.tsx`, botão "Adicionar pasta…" nos 3 estados vazios (wave 3)
@@ -201,5 +201,5 @@ paralelo, sem dependência estrutural das demais)
 | 1. Timezone estimado | 1/1 | Complete   | 2026-08-16 |
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
-| 4. Consistência visual secundária | 1/7 | In Progress|  |
+| 4. Consistência visual secundária | 5/7 | In Progress|  |
 | 5. Preparação para lançamento | 0/TBD | Not started | - |
