@@ -124,7 +124,7 @@ na Fase 3, 2026-08-16. -->
   colidem em nome+data+câmera (`media_id` diferente), para distinguir
   "mesma foto em dois catálogos" de "arquivo diferente"
   [docs/AVALIACAO_UX.md, A.6]
-- [ ] **CONS-02**: Selo "álbum" vs. "evento detectado" aparece quando dois
+- [x] **CONS-02**: Selo "álbum" vs. "evento detectado" aparece quando dois
   cards de Eventos colidem no nome [docs/AVALIACAO_UX.md, A.7/B.6]
 - [ ] **CONS-03**: Escala única de "botão importante" definida (preenchido
   = ação mais comprometedora); "Retomar"/"Gerar sugestões" migram para
@@ -237,7 +237,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REV-06 | — | Already validated (commit ae60319, pre-session) |
 | REV-07 | — | Already validated (commit a7d6e5e, pre-session) |
 | CONS-01 | Phase 4 | Pending |
-| CONS-02 | Phase 4 | Pending |
+| CONS-02 | Phase 4 | Complete |
 | CONS-03 | Phase 4 | Pending |
 | CONS-04 | Phase 4 | Pending |
 | CONS-05 | Phase 4 | Pending |
