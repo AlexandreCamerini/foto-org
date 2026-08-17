@@ -294,11 +294,18 @@ export default function App() {
           {aba === "Biblioteca" && (
             <>
               <div className="flex flex-col gap-2 border-b border-borda px-3 py-2 lg:flex-row lg:items-center lg:gap-2">
-                <div className="flex flex-wrap items-center gap-2">
+                {/* Este grupo NUNCA quebra em sub-linhas (flex-nowrap): D-08
+                    trava "no máximo 2 linhas" abaixo de `lg`, e um grupo que
+                    se permite `flex-wrap` internamente pode sozinho consumir
+                    2 linhas e estourar o orçamento quando somado ao grupo 2.
+                    Em vez de wrap, o excesso rola horizontalmente dentro do
+                    próprio grupo — nenhum controle some, só passa a exigir
+                    scroll em larguras extremas. */}
+                <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
                   {recorte && (
                     <button
                       onClick={() => setRecorte(null)}
-                      className="flex items-center gap-1 rounded-full border border-borda-forte bg-painel px-2.5 py-1 hover:bg-cartao"
+                      className="flex shrink-0 items-center gap-1 rounded-full border border-borda-forte bg-painel px-2.5 py-1 hover:bg-cartao"
                       title="Limpar recorte"
                     >
                       {recorte.nome} ✕
@@ -365,17 +372,20 @@ export default function App() {
                   )}
                 </div>
                 {!noMapa && (
-                  <div className="flex flex-1 flex-wrap items-center gap-2">
+                  // Mesma lógica do grupo 1: flex-nowrap + overflow-x-auto
+                  // em vez de flex-wrap, para que este grupo também nunca
+                  // vire 2 sub-linhas por conta própria.
+                  <div className="flex flex-1 flex-nowrap items-center gap-2 overflow-x-auto">
                     <input
                       value={busca}
                       onChange={(e) => setBusca(e.target.value)}
                       placeholder="Buscar por nome ou caminho…"
-                      className="w-64 border-borda bg-cartao outline-none placeholder:text-texto-3 focus:border-acento"
+                      className="w-64 shrink-0 border-borda bg-cartao outline-none placeholder:text-texto-3 focus:border-acento"
                     />
                     <select
                       value={ordenacao}
                       onChange={(e) => setOrdenacao(e.target.value)}
-                      className="rounded-md border border-borda bg-cartao px-2 py-1"
+                      className="shrink-0 rounded-md border border-borda bg-cartao px-2 py-1"
                     >
                       <option value="data_desc">Mais recentes</option>
                       <option value="data_asc">Mais antigas</option>
@@ -398,7 +408,7 @@ export default function App() {
                       value={zoom}
                       onChange={(e) => setZoom(Number(e.target.value))}
                       title="Tamanho das miniaturas"
-                      className="w-28 accent-acento"
+                      className="w-28 shrink-0 accent-acento"
                     />
                   </div>
                 )}
