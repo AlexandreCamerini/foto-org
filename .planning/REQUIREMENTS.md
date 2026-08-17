@@ -132,7 +132,7 @@ na Fase 3, 2026-08-16. -->
 - [x] **CONS-04**: Imagem em alta resolução que retorna 404 (Loupe,
   comparação de Duplicatas) mostra estado de erro explícito, não texto cru
   ou retângulo preto [docs/AVALIACAO_UX.md, A.4]
-- [ ] **CONS-05**: Estados vazios (Panorama, PhotoGrid, Trips) ganham botão
+- [x] **CONS-05**: Estados vazios (Panorama, PhotoGrid, Trips) ganham botão
   de ação ("Adicionar pasta") em vez de repetir frase estática
   [docs/AVALIACAO_UX.md, B.6]
 - [x] **CONS-06**: Abaixo de ~1000px, com grupo aberto, o Inspetor colapsa
@@ -142,7 +142,7 @@ na Fase 3, 2026-08-16. -->
   se cancelar job é irreversível o bastante para justificar `hover:text-erro`
   ou se deve ser `hover:bg-cartao` neutro em todo lugar)
   [docs/AVALIACAO_UX.md, B.7]
-- [ ] **CONS-08**: Peso de texto de ênfase é tokenizado
+- [x] **CONS-08**: Peso de texto de ênfase é tokenizado
   (`--font-weight-titulo` no `@theme`) em vez de `font-semibold`/
   `font-medium` convivendo sem regra [docs/AVALIACAO_UX.md, B.8]
 
@@ -240,10 +240,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-02 | Phase 4 | Complete |
 | CONS-03 | Phase 4 | Complete |
 | CONS-04 | Phase 4 | Done (04-03) |
-| CONS-05 | Phase 4 | Pending |
+| CONS-05 | Phase 4 | Complete |
 | CONS-06 | Phase 4 | Complete |
 | CONS-07 | Phase 4 | Complete |
-| CONS-08 | Phase 4 | Pending |
+| CONS-08 | Phase 4 | Complete |
 | LANC-01 | Phase 5 | Pending |
 | LANC-02 | Phase 5 | Pending |
 | LANC-03 | Phase 5 | Pending |
