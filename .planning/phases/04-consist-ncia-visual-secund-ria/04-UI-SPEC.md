@@ -28,6 +28,7 @@ researcher by `04-CONTEXT.md` D-06 and resolved below.
 | Component library | none — bespoke: `webapp/src/ui/Botao.tsx`, `components/Confianca.tsx`, `components/Miniatura.tsx` |
 | Icon library | none — glyphs/unicode only (`▾ ▸ ✎ → ⊘ ⚠ ✕`). CONS-04's new broken-image state reuses `⊘`, the glyph already established by `Miniatura.tsx`/`Trips.tsx` for "no image available" — see Interaction Contract. |
 | Font | system: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif` (`--font-sans`) |
+| Focal point / hierarchy | No focal-point or information-hierarchy changes this phase — CONS-01..08 are call-site reconciliation (classes, copy, badges, breakpoints) against the existing design system across multiple screens, not a layout/hierarchy redesign of any one of them. Every screen touched keeps its current grid, panel order, and primary/secondary emphasis unchanged. |
 
 **shadcn gate:** not re-asked. `components.json` confirmed absent (`ls` checked this session). Same reasoning as
 Phase 3: the bespoke token system in `webapp/src/index.css` and the `Botao`/`Confianca` component API are a
@@ -87,7 +88,8 @@ none of CONS-01..08 add or remove `px-3` usage. 44px touch targets: not applicab
 
 Inherited base scale from `webapp/src/index.css` (`--text-micro` 11px, body 13px via `<html>`, `--text-realce`
 15px) — unchanged. **What this phase changes is the Emphasis row**, which CONS-08 tokenizes and reconciles
-project-wide (Phase 3 only fixed it in the files it touched; this phase finishes it everywhere).
+project-wide, with zero exceptions (Phase 3 only fixed it in the files it touched; this phase finishes it
+everywhere, including the one call site Phase 3 had left out).
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
@@ -116,7 +118,9 @@ makes a future stray `font-semibold`/`font-medium` (typed ad hoc instead of `fon
 not indistinguishable from the canonical token.
 
 **Exhaustive migration list — every `font-semibold`/`font-medium` instance found in `webapp/src/` this session
-(grep, non-test files), and the single locked exception:**
+(grep, non-test files). No exceptions: `04-CONTEXT.md` D-10 (revised 2026-08-16 after the checker's BLOCK on
+the prior draft) confirms the product owner chose "migrate everything" over "make the exception permanent."
+`Inspector.tsx:38` migrates like every other call site:**
 
 | File:line | Current class | Target |
 |-----------|---------------|--------|
@@ -136,11 +140,11 @@ not indistinguishable from the canonical token.
 | `Mapa.tsx:777` | `font-medium` | `font-titulo` |
 | `Duplicates.tsx:134` (`grupo.rotulo`) | `font-semibold` | `font-titulo` |
 | `Duplicates.tsx:186` | `font-medium` | `font-titulo` |
-| **`Inspector.tsx:38`** (filename header — page-title role, not emphasis) | `font-semibold` | **stays `font-semibold` (600) — locked exception, D-10 in `04-CONTEXT.md`. Do not migrate without confirming with the product owner first.** |
+| `Inspector.tsx:38` (filename header) | `font-semibold` | `font-titulo` |
 
-Total weights in play project-wide after this phase: 400 (body) + 500 (`font-titulo`) + 600 (the one
-Inspector.tsx exception) — do not read this as violating a 2-weight cap; the exception is explicitly
-documented and load-bearing (it's a locked decision carried from Phase 3, not a new one made here).
+**Final weight system, project-wide, after this phase: exactly 2 weights — 400 (body, no class) and 500
+(`font-titulo`, all 17 migrated call sites above). No exceptions, no third weight left in play anywhere in
+`webapp/src/`.**
 
 ---
 
@@ -218,7 +222,7 @@ red on hover only; edit/modal (nothing done yet) = neutral." Applying it:
 | Primary CTA (CONS-05, all 3 empty states + Sidebar, same trigger) | "Adicionar pasta…" — reused verbatim from `Sidebar.tsx:117`, not a new string |
 | Empty state heading | N/A — no heading role added; existing single-paragraph pattern kept, button appended below it (not a new heading + body structure) |
 | Empty state body | **Existing text kept verbatim in all 3, button added below — text is not replaced:**<br>• `Panorama.tsx` (`data.total === 0`): "Catálogo vazio — adicione uma pasta na barra lateral para começar." *(consider dropping "na barra lateral" now that the button acts directly — planner's call, not required)*<br>• `PhotoGrid.tsx` (`total === 0`): "Nenhuma foto no filtro atual — adicione uma pasta ou importe um catálogo na barra lateral." — kept as-is<br>• `Trips.tsx` (`vazio`): "Nenhuma viagem ou evento ainda — gere as sugestões na aba Revisão." — kept as-is even though the button's action (add folder) isn't literally what this message describes; D-07 locks the same action for all three, "não inventar ação própria por tela" — do not rewrite the diagnostic sentence to match the button, and do not skip the button because the sentence talks about something else |
-| Error state (CONS-04, new this phase) | **Loupe** (full-screen, single photo, room for two lines): "Não foi possível carregar esta imagem em alta resolução." + secondary line "O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação."<br>**Duplicates** (compact card in a 2-3 column comparison grid, one line only): "imagem indisponível" |
+| Error state (CONS-04, new this phase) | **Loupe** (full-screen, single photo, room for two lines): "Não foi possível carregar esta imagem em alta resolução." + secondary line "O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação."<br>**Duplicates** (compact card in a 2-3 column comparison grid, one visible line, but not a dead-end): "imagem indisponível" as the visible caption, plus `title="O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação."` on the same element so the full explanation (same wording as Loupe's second line) is reachable on hover without widening the card — see Interaction Contract for the exact markup. |
 | Destructive confirmation | N/A — no new destructive action introduced this phase. CONS-07's Operations.tsx change re-styles an *existing* cancel action's hover state; it does not add a new confirmation dialog. |
 
 ---
@@ -273,7 +277,10 @@ const [falhouPreview, setFalhouPreview] = useState(false); // per-member, needs 
   // left to the executor
 
 {falhouPreview ? (
-  <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-cartao text-texto-3">
+  <div
+    title="O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação."
+    className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-cartao text-texto-3"
+  >
     <span aria-hidden className="text-2xl">⊘</span>
     <span className="text-texto-2">imagem indisponível</span>
   </div>
@@ -287,12 +294,15 @@ const [falhouPreview, setFalhouPreview] = useState(false); // per-member, needs 
   />
 )}
 ```
-Note the background flips from `bg-black` (letterboxing for a successfully loaded `object-contain` image) to
-`bg-cartao` (this app's established "empty/broken surface" color, same as `Miniatura`/`Trips`) in the error
-state — do not keep `bg-black` for the error card, it would read as "still loading," not "failed." The
-`<figure>` wrapper's role-based border (`border-ok` for principal, `border-borda opacity-50` for ignorado,
-`border-borda` otherwise) is unaffected — it still reflects the member's role regardless of image load state.
-The filename is already shown in `<figcaption>` below the image — do not repeat it inside the error state.
+The `title` attribute carries the same explanation Loupe shows as its second line, reachable on hover/long-
+press without adding a second line of visible text to the compact card — the grid stays scannable at 2-3
+columns while the full reason is still one hover away. Note the background flips from `bg-black` (letterboxing
+for a successfully loaded `object-contain` image) to `bg-cartao` (this app's established "empty/broken
+surface" color, same as `Miniatura`/`Trips`) in the error state — do not keep `bg-black` for the error card, it
+would read as "still loading," not "failed." The `<figure>` wrapper's role-based border (`border-ok` for
+principal, `border-borda opacity-50` for ignorado, `border-borda` otherwise) is unaffected — it still reflects
+the member's role regardless of image load state. The filename is already shown in `<figcaption>` below the
+image — do not repeat it inside the error state.
 
 ### CONS-01 — selo de fonte (per-sugestão, `Review.tsx`)
 
