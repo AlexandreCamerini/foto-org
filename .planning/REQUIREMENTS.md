@@ -135,7 +135,7 @@ na Fase 3, 2026-08-16. -->
 - [ ] **CONS-05**: Estados vazios (Panorama, PhotoGrid, Trips) ganham botão
   de ação ("Adicionar pasta") em vez de repetir frase estática
   [docs/AVALIACAO_UX.md, B.6]
-- [ ] **CONS-06**: Abaixo de ~1000px, com grupo aberto, o Inspetor colapsa
+- [x] **CONS-06**: Abaixo de ~1000px, com grupo aberto, o Inspetor colapsa
   automaticamente ou a barra empilha em duas linhas — hoje dropdown/busca/
   Inspetor se sobrepõem em ~900px [docs/AVALIACAO_UX.md, A.3]
 - [ ] **CONS-07**: Hover de "cancelar" é consistente entre telas (decidir
@@ -241,7 +241,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-03 | Phase 4 | Pending |
 | CONS-04 | Phase 4 | Pending |
 | CONS-05 | Phase 4 | Pending |
-| CONS-06 | Phase 4 | Pending |
+| CONS-06 | Phase 4 | Complete |
 | CONS-07 | Phase 4 | Pending |
 | CONS-08 | Phase 4 | Pending |
 | LANC-01 | Phase 5 | Pending |
