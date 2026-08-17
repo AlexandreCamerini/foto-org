@@ -246,7 +246,7 @@ export default function Mapa({
         <span aria-hidden className="text-2xl text-texto-3">
           ⊘
         </span>
-        <div className="text-[15px] font-medium">
+        <div className="text-[15px] font-titulo">
           Nenhuma foto deste grupo tem lugar.
         </div>
         <div className="max-w-[52ch] text-texto-2">
@@ -774,7 +774,7 @@ function PainelDoLugar({
       {/* A contagem é a resposta do painel: entra no tamanho de título de
           cartão (15px), não no corpo, para o olho não ter que procurá-la
           entre a coordenada e os blocos de explicação. */}
-      <div className="mb-1 text-[15px] font-medium leading-tight">
+      <div className="mb-1 text-[15px] font-titulo leading-tight">
         {total} {total === 1 ? "foto" : "fotos"}
       </div>
       <div className="mb-3 text-texto-3">

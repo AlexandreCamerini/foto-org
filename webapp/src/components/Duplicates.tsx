@@ -131,7 +131,7 @@ export default function Duplicates({ job }: { job: Job }) {
       ) : (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
-            <span className="shrink-0 font-semibold">{grupo.rotulo}</span>
+            <span className="shrink-0 font-titulo">{grupo.rotulo}</span>
             {grupo.resolvido_automaticamente && (
               <span
                 title="Bytes idênticos (SHA-256): o algoritmo escolheu a cópia mais organizada como principal. Revise ou desfaça se preferir outra."
@@ -183,7 +183,7 @@ export default function Duplicates({ job }: { job: Job }) {
                   className="aspect-[4/3] w-full bg-black object-contain"
                 />
                 <figcaption className="space-y-1 p-2">
-                  <div className="truncate font-medium" title={m.caminho}>
+                  <div className="truncate font-titulo" title={m.caminho}>
                     {m.nome}
                   </div>
                   <div className="flex items-center justify-between text-texto-2">

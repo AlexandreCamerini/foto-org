@@ -198,7 +198,7 @@ export default function Review({
                   <span aria-hidden className="shrink-0 text-texto-3">
                     →
                   </span>
-                  <span className="truncate font-medium">{destino}</span>
+                  <span className="truncate font-titulo">{destino}</span>
                   <span className="shrink-0 text-texto-2">
                     · {grupo.total.toLocaleString("pt-BR")}{" "}
                     {grupo.total === 1 ? "foto" : "fotos"}
@@ -303,7 +303,7 @@ export default function Review({
                             {/* Nome primeiro. Antes a pasta vinha antes e o
                                 truncate cortava a linha antes de o nome do
                                 arquivo aparecer — 63 linhas idênticas. */}
-                            <div className="truncate font-medium">{s.nome}</div>
+                            <div className="truncate font-titulo">{s.nome}</div>
                             <div className="truncate text-[11px] text-texto-2">
                               {[s.camera, formatarData(s.data_capturada)]
                                 .filter(Boolean)

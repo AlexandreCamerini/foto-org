@@ -35,7 +35,7 @@ export default function Inspector({ media }: { media: Media | null }) {
             alt={media.nome}
             className="mb-2 w-full rounded-md bg-cartao object-contain"
           />
-          <div className="mb-2 break-all font-semibold">{media.nome}</div>
+          <div className="mb-2 break-all font-titulo">{media.nome}</div>
           <dl className="space-y-1 text-texto-2">
             <Linha
               rotulo="Capturada"
@@ -111,7 +111,7 @@ export default function Inspector({ media }: { media: Media | null }) {
                 {detalhe.sugestao.evidencias.map((ev, i) => (
                   <li key={i} className="rounded-md bg-cartao px-2 py-1.5">
                     <div className="mb-0.5 flex items-center justify-between">
-                      <span className="font-medium">
+                      <span className="font-titulo">
                         {ev.campo}: {ev.valor}
                       </span>
                       <Confianca nivel={ev.nivel} rotulo={false} />
