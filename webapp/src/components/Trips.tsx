@@ -53,6 +53,7 @@ export default function Trips({ onAbrir, fonte }: Props) {
       {(viagens ?? []).length > 0 && (
         <Secao
           titulo="Viagens"
+          secao="viagens"
           itens={viagens!}
           onAbrir={(g, vista) => onAbrir({ trip_id: g.id }, g.nome, vista)}
         />
@@ -60,6 +61,7 @@ export default function Trips({ onAbrir, fonte }: Props) {
       {(eventos ?? []).length > 0 && (
         <Secao
           titulo="Eventos"
+          secao="eventos"
           itens={eventos!}
           onAbrir={(g, vista) => onAbrir({ event_id: g.id }, g.nome, vista)}
         />
@@ -70,13 +72,26 @@ export default function Trips({ onAbrir, fonte }: Props) {
 
 function Secao({
   titulo,
+  secao,
   itens,
   onAbrir,
 }: {
   titulo: string;
+  secao: "viagens" | "eventos";
   itens: Agrupamento[];
   onAbrir: (g: Agrupamento, vista?: "lista" | "mapa") => void;
 }) {
+  // Selo de origem (CONS-02, D-03) só faz sentido quando dois cards da
+  // mesma seção colidem no nome — sinal de ambiguidade, não decoração
+  // permanente. Comparação case-insensitive e sem espaço nas pontas:
+  // "Natal" e "natal " contam como o mesmo nome.
+  const nomesNormalizados = itens.map((g) => g.nome.trim().toLowerCase());
+  const nomesColidindo = new Set(
+    nomesNormalizados.filter(
+      (nome, i) => nomesNormalizados.indexOf(nome) !== i,
+    ),
+  );
+
   return (
     <section className="mb-6">
       <div className="titulo-painel mb-3">{titulo}</div>
@@ -85,6 +100,8 @@ function Secao({
           <Card
             key={g.id}
             grupo={g}
+            secao={secao}
+            colideNome={nomesColidindo.has(g.nome.trim().toLowerCase())}
             onAbrir={() => onAbrir(g)}
             onAbrirMapa={() => onAbrir(g, "mapa")}
           />
@@ -96,10 +113,14 @@ function Secao({
 
 function Card({
   grupo,
+  secao,
+  colideNome,
   onAbrir,
   onAbrirMapa,
 }: {
   grupo: Agrupamento;
+  secao: "viagens" | "eventos";
+  colideNome: boolean;
   onAbrir: () => void;
   onAbrirMapa: () => void;
 }) {
@@ -156,6 +177,18 @@ function Card({
           </div>
         </div>
       </div>
+      {/* Selo CONS-02/D-03: só quando o nome colide com outro card da mesma
+          seção Eventos — sinal de ambiguidade, não decoração permanente.
+          Rótulo é função pura do campo determinístico já servido pela API
+          (nunca LLM, ver 04-CONTEXT.md § Deferred). IRMÃO do role="button",
+          nunca dentro dele, pelo mesmo motivo do badge "Mapa" abaixo:
+          conteúdo dentro do role="button" vazaria pro nome acessível do
+          card. <span>, não <button> — o selo não é clicável. */}
+      {secao === "eventos" && colideNome && (
+        <span className="absolute left-2 top-2 z-10 rounded-full border border-borda bg-janela/80 px-2 py-0.5 text-[11px] text-texto-2 backdrop-blur-sm">
+          {grupo.metodo === "album_externo" ? "Álbum" : "Evento detectado"}
+        </span>
+      )}
       {/* Achado D-050: o mapa existe (Lista × Mapa, dentro do grupo aberto)
           mas não tinha nenhuma pista visível de que existe antes de já
           saber procurar. Badge sempre visível, não só no hover — é
