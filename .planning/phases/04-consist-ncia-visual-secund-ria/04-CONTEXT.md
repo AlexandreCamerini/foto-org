@@ -80,18 +80,28 @@ desta fase pelo `03-UI-SPEC.md`).
   de breakpoint customizado a seguir.
 
 ### CONS-08 — Token de peso de ênfase
-- **D-10 [informational]:** Confirmado migrar TODO `font-semibold`/
-  `font-medium` do webapp para um token único `--font-weight-titulo: 500`
-  no `@theme` de `webapp/src/index.css` — mesmo valor que `font-medium`
-  (500) já travado como peso canônico de ênfase na Fase 3
+- **D-10 [informational, revisado 2026-08-16 após BLOCK do gsd-ui-checker
+  na Fase 4]:** Confirmado migrar TODO `font-semibold`/`font-medium` do
+  webapp — **sem exceção** — para um token único `--font-weight-titulo:
+  500` no `@theme` de `webapp/src/index.css`, mesmo valor que
+  `font-medium` (500) já travado como peso canônico de ênfase na Fase 3
   (`03-UI-SPEC.md` linhas 88-106, que já anunciava essa reconciliação
-  full-codebase como trabalho desta fase). Afeta 8+ arquivos: `App.tsx`,
+  full-codebase como trabalho desta fase). Afeta 9 arquivos: `App.tsx`,
   `Loupe.tsx`, `Trips.tsx`, `Inspector.tsx`, `Sidebar.tsx`,
   `Duplicates.tsx`, `TemplateEditor.tsx`, `Review.tsx`, `Operations.tsx`,
-  `Mapa.tsx`. Exceção documentada em `03-UI-SPEC.md`: `Inspector.tsx:38`
-  (cabeçalho de nome de arquivo) usa `font-semibold` (600) por ser um
-  papel de título de página, fora do escopo de "ênfase" — não migrar essa
-  instância junto com as demais sem confirmar com o dono primeiro.
+  `Mapa.tsx`. **Revisão da decisão original:** a versão anterior deste
+  D-10 excluía `Inspector.tsx:38` (cabeçalho de nome de arquivo,
+  `font-semibold`/600) por ser "papel de título de página" — o checker de
+  UI (`gsd-ui-checker`) bloqueou o `04-UI-SPEC.md` por isso: a exceção
+  deixava o projeto com 3 pesos de ênfase em uso simultâneo (400/500/600)
+  em vez do teto de 2, e — diferente da Fase 3, onde `Inspector.tsx`
+  estava genuinamente fora de escopo — CONS-08 é justamente a
+  reconciliação full-codebase, então a exceção não pode ficar de fora da
+  contagem. Perguntado ao dono explicitamente entre "migrar tudo" e
+  "tornar a exceção uma regra permanente do design system" — escolheu
+  migrar tudo. `Inspector.tsx:38` também vira `font-titulo` (500); o
+  projeto fecha com 2 pesos reais (400 corpo, 500 ênfase/título), sem
+  exceção.
 
 ### Claude's Discretion
 - Nome exato da classe/prop CSS usada para aplicar o token (`font-medium`
