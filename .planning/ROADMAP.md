@@ -31,7 +31,7 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
   para de esconder SINAL misturado com acervo sem `WHERE`
 - [x] **Phase 3: Revisão acessível e consistente** - `texto-3` restante em (completed 2026-08-16)
   conteúdo e busca não limpa em 3 pontos de navegação
-- [ ] **Phase 4: Consistência visual secundária** - Selos, estados de erro/
+- [x] **Phase 4: Consistência visual secundária** - Selos, estados de erro/ (completed 2026-08-17)
   vazio e tokens de peso/hover consistentes entre telas
 - [ ] **Phase 5: Preparação para lançamento** - Empacotamento assinado,
   índices ausentes, onboarding do primeiro acervo, baseline de performance
@@ -149,7 +149,7 @@ diferenciar "em que tela eu estou" de "o que o design system manda".
      estado de erro explícito, nunca texto cru ou retângulo preto.
   4. Estados vazios (Panorama, PhotoGrid, Trips) oferecem um botão de ação
      direta em vez de repetir frase estática.
-**Plans:** 5/7 plans executed
+**Plans:** 7/7 plans complete
 **UI hint**: yes
 
 Plans:
@@ -165,9 +165,9 @@ Plans:
   Eventos com nome colidido, pelo campo determinístico `metodo` (wave 2)
 - [x] 04-05-PLAN.md — CONS-06: barra da Biblioteca empilha em 2 grupos abaixo
   de `lg` (1024px), Inspetor sempre visível, com checkpoint visual (wave 2)
-- [ ] 04-06-PLAN.md — CONS-05: `ModalCaminho` extraído, modal de pasta passa a
+- [x] 04-06-PLAN.md — CONS-05: `ModalCaminho` extraído, modal de pasta passa a
   ser do `App.tsx`, botão "Adicionar pasta…" nos 3 estados vazios (wave 3)
-- [ ] 04-07-PLAN.md — CONS-01: `source_id` em `_sugestao_json`, colisão por
+- [x] 04-07-PLAN.md — CONS-01: `source_id` em `_sugestao_json`, colisão por
   adjacência na fila e selo com o nome da fonte por sugestão (wave 3)
 
 ### Phase 5: Preparação para lançamento
@@ -201,5 +201,5 @@ paralelo, sem dependência estrutural das demais)
 | 1. Timezone estimado | 1/1 | Complete   | 2026-08-16 |
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
-| 4. Consistência visual secundária | 5/7 | In Progress|  |
+| 4. Consistência visual secundária | 7/7 | Complete   | 2026-08-17 |
 | 5. Preparação para lançamento | 0/TBD | Not started | - |
