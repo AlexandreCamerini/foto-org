@@ -131,4 +131,61 @@ describe("Trips", () => {
     const badge = screen.getByTitle("ver onde este grupo aconteceu");
     expect(card.contains(badge)).toBe(false);
   });
+
+  it("dois eventos com o mesmo nome mostram, cada um, de onde vieram (D-03/CONS-02)", async () => {
+    servirApi({
+      "/api/viagens": [],
+      "/api/eventos": [
+        grupo({ id: 1, nome: "Aniversário", metodo: "album_externo" }),
+        grupo({ id: 2, nome: "Aniversário", metodo: "temporal" }),
+      ],
+    });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    expect(await screen.findByText("Álbum")).toBeInTheDocument();
+    expect(screen.getByText("Evento detectado")).toBeInTheDocument();
+  });
+
+  it("evento sem nome colidido não ganha selo — sinal de ambiguidade, não decoração permanente", async () => {
+    servirApi({
+      "/api/viagens": [],
+      "/api/eventos": [
+        grupo({ id: 1, nome: "Aniversário", metodo: "album_externo" }),
+        grupo({ id: 2, nome: "Formatura", metodo: "temporal" }),
+      ],
+    });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    await screen.findByText("Aniversário");
+    expect(screen.queryByText("Álbum")).not.toBeInTheDocument();
+    expect(screen.queryByText("Evento detectado")).not.toBeInTheDocument();
+  });
+
+  it("duas viagens com o mesmo nome nunca ganham o selo — ele é só de Eventos", async () => {
+    servirApi({
+      "/api/viagens": [
+        grupo({ id: 1, nome: "Praia", metodo: "album_externo" }),
+        grupo({ id: 2, nome: "Praia", metodo: "temporal" }),
+      ],
+      "/api/eventos": [],
+    });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    expect(await screen.findAllByText("Praia")).toHaveLength(2);
+    expect(screen.queryByText("Álbum")).not.toBeInTheDocument();
+    expect(screen.queryByText("Evento detectado")).not.toBeInTheDocument();
+  });
+
+  it("nomes que diferem só por caixa/espaço contam como colisão", async () => {
+    servirApi({
+      "/api/viagens": [],
+      "/api/eventos": [
+        grupo({ id: 1, nome: "Natal", metodo: "temporal" }),
+        grupo({ id: 2, nome: "natal ", metodo: "temporal" }),
+      ],
+    });
+    montar(<Trips onAbrir={vi.fn()} />);
+
+    expect(await screen.findAllByText("Evento detectado")).toHaveLength(2);
+  });
 });
