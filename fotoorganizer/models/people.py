@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, Enum, ForeignKey, LargeBinary
+from sqlalchemy import Enum, ForeignKey, Index, JSON, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fotoorganizer.models.base import Base, utcnow
@@ -51,6 +51,17 @@ class FaceEmbedding(Base):
 
 class FaceOccurrence(Base):
     __tablename__ = "face_occurrences"
+    __table_args__ = (
+        # Consumidor: repositories/people.py:42,108,109. Migração 0018.
+        Index("ix_face_occurrences_media_id", "media_id"),
+        Index("ix_face_occurrences_person_id", "person_id"),
+    )
+    # `FaceEmbedding.person_id` (classe acima, mesmo arquivo) fica de
+    # propósito FORA da migração 0018: grep de uso não achou nenhuma
+    # cláusula WHERE/join filtrando por essa coluna hoje, só travessia de
+    # relacionamento (cascade delete) — mesmo precedente de
+    # `catalog.py`, "índice quando o custo de escrita se justifica por um
+    # consumidor real e mensurável" (D-072).
 
     id: Mapped[int] = mapped_column(primary_key=True)
     media_id: Mapped[int] = mapped_column(ForeignKey("media_files.id"))

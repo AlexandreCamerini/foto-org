@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, UniqueConstraint
+from sqlalchemy import Enum, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fotoorganizer.models.base import Base, utcnow
@@ -55,7 +55,15 @@ class DuplicateGroup(Base):
 
 class DuplicateMember(Base):
     __tablename__ = "duplicate_members"
-    __table_args__ = (UniqueConstraint("group_id", "media_id"),)
+    __table_args__ = (
+        UniqueConstraint("group_id", "media_id"),
+        # Consumidor: operations/planner.py:79; duplicates/detector.py:302
+        # ("em qual grupo está esta mídia" — busca reversa). NÃO coberto
+        # pelo UniqueConstraint acima: media_id é a SEGUNDA coluna ali, não
+        # utilizável como índice de coluna líder para um filtro só por
+        # media_id. Migração 0018.
+        Index("ix_duplicate_members_media_id", "media_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("duplicate_groups.id"))

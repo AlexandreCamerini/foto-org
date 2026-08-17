@@ -69,6 +69,11 @@ class ReviewStatus(enum.StrEnum):
 
 class Source(Base):
     __tablename__ = "sources"
+    __table_args__ = (
+        # Já existe no banco desde a migração 0011 — o modelo nunca
+        # espelhou. Sem migração nova (RESEARCH.md Pitfall 2).
+        Index("ix_sources_volume_id", "volume_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     caminho: Mapped[str] = mapped_column(Text, unique=True)
@@ -134,6 +139,24 @@ class MediaFile(Base):
         # arquivo: consumidor real, custo de escrita justificado (D-072).
         Index("ix_media_files_trip_id", "trip_id"),
         Index("ix_media_files_event_id", "event_id"),
+        # Consumidor: `_sob_a_pasta` (repositories/media.py:171) — filtro de
+        # pasta na grade — e `/api/pastas` (repositories/media.py:415), a
+        # árvore de pastas clicada a cada nível. Migração 0018. Índice
+        # sozinho não basta para `LIKE 'prefixo/%'` usar range scan — ver
+        # `PRAGMA case_sensitive_like=ON` em database/engine.py.
+        Index("ix_media_files_pasta", "pasta"),
+        # Consumidor: repositories/media.py:278,356 (filtro/join de lugar).
+        # Migração 0018.
+        Index("ix_media_files_location_id", "location_id"),
+        # Já existe no banco desde a migração 0005 — o modelo nunca
+        # espelhou. Sem migração nova (RESEARCH.md Pitfall 2).
+        Index("ix_media_files_gps_estimado_de_id", "gps_estimado_de_id"),
+        # Já existe no banco desde a migração 0006 — reconciliação de drift,
+        # sem migração nova.
+        Index("ix_media_files_tipo_imagem", "tipo_imagem"),
+        # Já existe no banco desde a migração 0007 — reconciliação de drift,
+        # sem migração nova.
+        Index("ix_media_files_tipo_confirmado", "tipo_confirmado"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
