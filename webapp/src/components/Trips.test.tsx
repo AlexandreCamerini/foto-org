@@ -1,4 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import Trips from "./Trips";
@@ -38,13 +39,23 @@ describe("Trips", () => {
     expect(screen.queryByText("carregando…")).not.toBeInTheDocument();
   });
 
-  it("catálogo genuinamente vazio ainda mostra a mensagem, depois de carregar", async () => {
+  it("catálogo genuinamente vazio ainda mostra a mensagem, depois de carregar, com o botão 'Adicionar pasta…' (CONS-05/D-07)", async () => {
     servirApi({ "/api/viagens": [], "/api/eventos": [] });
-    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={vi.fn()} />);
+    const onAdicionarPasta = vi.fn();
+    const usuario = userEvent.setup();
+    montar(<Trips onAbrir={vi.fn()} onAdicionarPasta={onAdicionarPasta} />);
 
     expect(
       await screen.findByText(/Nenhuma viagem ou evento ainda/),
     ).toBeInTheDocument();
+
+    // A frase fala de gerar sugestões e o botão adiciona pasta — deliberado
+    // (D-07 trava a MESMA ação nas três telas vazias, não uma ação própria
+    // por tela).
+    await usuario.click(
+      screen.getByRole("button", { name: "Adicionar pasta…" }),
+    );
+    expect(onAdicionarPasta).toHaveBeenCalledTimes(1);
   });
 
   it("a capa é a miniatura cacheada, não a prévia grande do loupe", async () => {

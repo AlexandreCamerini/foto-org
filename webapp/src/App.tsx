@@ -118,7 +118,7 @@ export default function App() {
   const { itens, total, hasNextPage, fetchNextPage } = midia;
   const job = useJob();
 
-  // Modal "Adicionar pasta…" (CONS-05/D-07): pertence ao App porque é o
+  // Modal de adicionar pasta (CONS-05/D-07): pertence ao App porque é o
   // único lugar que alcança os quatro pontos que o disparam — o botão da
   // Sidebar e os três estados vazios (Panorama, PhotoGrid, Trips). Erro
   // fica no modal, ao lado do campo que causou a falha, em vez de atrás

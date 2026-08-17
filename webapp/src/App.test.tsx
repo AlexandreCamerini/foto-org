@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import App from "./App";
-import { ROTAS_BASE, montar, servirApi } from "./test/servidor";
+import { ROTAS_BASE, erro, montar, servirApi } from "./test/servidor";
 
 describe("App", () => {
   it("abre no Panorama e mostra as lacunas do catálogo", async () => {
@@ -367,5 +367,151 @@ describe("âncora temporal", () => {
     await usuario.click(screen.getByTitle("jun/2024 · 5 fotos"));
 
     expect(await screen.findByText(/todo o período/)).toBeInTheDocument();
+  });
+});
+
+describe("Adicionar pasta — um modal, quatro pontos de entrada (CONS-05/D-07)", () => {
+  it("Panorama vazio: clicar 'Adicionar pasta…' abre 'Caminho da pasta de fotos' e confirmar dispara POST /api/scan com o caminho digitado", async () => {
+    const chamadas = servirApi({
+      ...ROTAS_BASE,
+      "/api/panorama": {
+        total: 0,
+        lacunas: [],
+        por_ano: [],
+        por_camera: [],
+        por_extensao: [],
+        cruzamento_ano_fonte: [],
+      },
+      "/api/scan": { status: "rodando", tipo: "scan" },
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Adicionar pasta…" }),
+    );
+    expect(
+      await screen.findByText("Caminho da pasta de fotos"),
+    ).toBeInTheDocument();
+
+    await usuario.type(
+      screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
+      "/Users/eu/Fotos/Viagem",
+    );
+    await usuario.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => {
+      const chamada = chamadas.find((c) => c.caminho === "/api/scan");
+      expect(chamada).toBeDefined();
+      expect(chamada?.metodo).toBe("POST");
+      expect(chamada?.corpo).toEqual({ caminho: "/Users/eu/Fotos/Viagem" });
+    });
+
+    // O disparo teve sucesso: o modal fecha em vez de ficar preso na tela.
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Caminho da pasta de fotos"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("o mesmo modal é alcançável pelo botão da barra lateral, na aba Biblioteca", async () => {
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Biblioteca" }),
+    );
+    const barraLateral = (await screen.findByText("Fontes")).closest(
+      "aside",
+    )!;
+    await usuario.click(
+      within(barraLateral).getByRole("button", { name: "Adicionar pasta…" }),
+    );
+
+    expect(
+      await screen.findByText("Caminho da pasta de fotos"),
+    ).toBeInTheDocument();
+  });
+
+  it("Biblioteca com grade vazia: o estado vazio da grade também tem o botão", async () => {
+    // ROTAS_BASE já serve /api/midia com total 0 — grade genuinamente
+    // vazia, não um catálogo inteiro vazio.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Biblioteca" }),
+    );
+
+    expect(
+      await screen.findByText(/Nenhuma foto no filtro atual/),
+    ).toBeInTheDocument();
+    // Dois botões "Adicionar pasta…" na tela: o da barra lateral e o do
+    // estado vazio da grade — os dois alcançam o mesmo modal do App.
+    expect(
+      screen.getAllByRole("button", { name: "Adicionar pasta…" }),
+    ).toHaveLength(2);
+  });
+
+  it("Trips com viagens e eventos vazios: tem o botão, e a frase original continua", async () => {
+    // Viagens é uma das abas onde a barra lateral também está montada
+    // (ABAS_COM_FONTE) — por isso dois botões "Adicionar pasta…" na tela,
+    // igual à Biblioteca; o que este teste prova é o do estado vazio do
+    // Trips especificamente, escopado à área principal.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Viagens" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Nenhuma viagem ou evento ainda — gere as sugestões na aba Revisão.",
+      ),
+    ).toBeInTheDocument();
+    const areaPrincipal = document.querySelector("main") as HTMLElement;
+    expect(
+      within(areaPrincipal).getByRole("button", { name: "Adicionar pasta…" }),
+    ).toBeInTheDocument();
+  });
+
+  it("quando o POST /api/scan responde erro, o modal permanece aberto e a mensagem do servidor aparece", async () => {
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/panorama": {
+        total: 0,
+        lacunas: [],
+        por_ano: [],
+        por_camera: [],
+        por_extensao: [],
+        cruzamento_ano_fonte: [],
+      },
+      "/api/scan": erro(422, "caminho não existe no disco"),
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Adicionar pasta…" }),
+    );
+    await usuario.type(
+      screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
+      "/Users/eu/pasta/inexistente",
+    );
+    await usuario.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(
+      await screen.findByText("caminho não existe no disco"),
+    ).toBeInTheDocument();
+    // O .catch não engoliu a falha nem fechou o modal — o campo de caminho
+    // continua no documento, pronto para o usuário corrigir.
+    expect(
+      screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
+    ).toBeInTheDocument();
   });
 });
