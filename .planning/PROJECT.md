@@ -115,6 +115,14 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   `texto-2` em Review/Inspector/Operations — 9 promoções pela lista
   fechada de D-02, 10 usos legítimos preservados, aprovação visual do
   dono contra dado real — REV-02, Validado na Fase 3, 2026-08-16
+- ✓ Consistência visual secundária: selo de fonte em sugestões colididas
+  (CONS-01), selo álbum×evento (CONS-02), escala única de botão
+  importante + hover de cancelar consistente (CONS-03/07), estado de
+  erro explícito para imagem 404 no Loupe/Duplicatas (CONS-04), 3
+  estados vazios com botão de ação via modal compartilhado (CONS-05),
+  barra da Biblioteca responsiva sem sobrepor o Inspetor abaixo de
+  1024px (CONS-06), token `--font-weight-titulo` único para peso de
+  ênfase (CONS-08) — Validado na Fase 4, 2026-08-17
 
 ### Active
 
@@ -123,9 +131,6 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] Consistência visual secundária (selos de fonte/álbum×evento, estado
-  de erro de imagem, estados vazios com ação, hover/peso de texto
-  tokenizado) — 8 achados restantes
 - [ ] Preparação para lançamento: empacotamento assinado/notarizado,
   índices de FK ausentes (incl. `pasta`), onboarding do primeiro acervo,
   série de métricas de desempenho
@@ -238,4 +243,4 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
 
 ---
-*Last updated: 2026-08-16 — Phase 3 (Revisão acessível e consistente) complete*
+*Last updated: 2026-08-17 — Phase 4 (Consistência visual secundária) complete*
