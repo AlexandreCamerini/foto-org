@@ -348,17 +348,19 @@ def downgrade() -> None:
 
 **All other claims in this research are `[VERIFIED]` (direct code read, live SQLite/SQLAlchemy experiment, or environment probe) or `[CITED]` (official Tauri docs) — no other assumption requires user confirmation before planning.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `FaceEmbedding.person_id`, `MediaTag.tag_id`, and `Trip.location_id` get indexes in this phase?**
    - What we know: no query-site (`WHERE`/`join` filter) usage of these columns was found via grep across the backend. They exist for relationship traversal (ORM lazy-loads via `relationship()`), not for filtered queries today.
    - What's unclear: whether "no consumer found by grep" truly means "no consumer" or just "not yet exercised" — face recognition (`FaceEmbedding`) is opt-in/disabled by default per invariant 6, so its query patterns may simply not exist in the codebase yet, not because they're unneeded but because the feature isn't built out.
    - Recommendation: exclude these three from LANC-02's migration by default (matches the project's own documented precedent: "índice quando o custo de escrita se justifica por um consumidor real e mensurável," `catalog.py` comment) — planner should confirm this reading of D-10's "enumerar a lista completa a partir do modelo" is about *FK columns with real consumers*, not *every FK column that exists*.
+   - **RESOLVED:** fechada pelo plano `05-01`, Task 2 — a recomendação foi adotada: `FaceEmbedding.person_id`, `MediaTag.tag_id` e `Trip.location_id` ficam **fora** da migração `0018`, e a exclusão é registrada com motivo no docstring da própria migração (critério de aceite: `grep -rn "FaceEmbedding" fotoorganizer/models/people.py | grep -c "Index("` retorna 0). A leitura de D-10 confirmada é *FK columns with real consumers*: os 9 índices criados têm consumidor citado com arquivo:linha.
 
 2. **Where should suggestion-generation and duplicate-detection timing be captured — a new CLI entry point, or driven through the existing `/api/sugestoes/gerar` / `/api/duplicatas/detectar` job endpoints?**
    - What we know: `SuggestionEngine.gerar()` and `DuplicateDetector.detectar()` are directly callable Python classes/methods (no CLI wrapper exists yet); the FastAPI job system already tracks job start/end times via SSE progress records (per `.planning/codebase/CONCERNS.md`'s description of the job system).
    - What's unclear: whether the existing job records already have enough timestamp granularity to extract "time to generate suggestions" without new instrumentation, or whether a direct-call timing script (mirroring `cmd_bench`'s `time.monotonic()` pattern) is simpler and more reproducible.
    - Recommendation: a direct-call script is lower-risk and more reproducible for a one-time baseline document (`docs/PERFORMANCE.md`, D-09) — avoids depending on job/SSE internals that could change independently of this measurement. Planner should pick one; this is Claude's Discretion territory per CONTEXT.md, not a locked decision.
+   - **RESOLVED:** fechada pelo plano `05-04`, Task 1 — escolhido o **script de chamada direta**, `scripts/medir_baseline_producao.py`, no padrão `time.monotonic()` de `cmd_bench`. O job system / SSE não é instrumentado nesta fase. Registrado também em `05-VALIDATION.md` § Wave 0 Requirements como a segunda dependência de Wave 0.
 
 ## Environment Availability
 
