@@ -106,6 +106,16 @@ None - nenhuma configuração de serviço externo.
 - `scripts/verificar.sh --rapido` verde (860 testes + benchmark 19/19); os passos de UI web (vitest/build) foram pulados por design do próprio script em modo `--rapido` — não bloqueiam este plano, mas ficam para o portão de fim de fase junto dos outros LANC.
 - Nenhum bloqueio identificado para os demais planos da Fase 5 (LANC-01 empacotamento, LANC-03 onboarding, LANC-04 baseline de performance) — este plano não tocou nenhum arquivo compartilhado com eles.
 
+## Self-Check: PASSED
+
+- FOUND: tests/test_indices.py
+- FOUND: fotoorganizer/database/migrations/versions/0018_indices_de_fk_ausentes.py
+- FOUND: .planning/phases/05-prepara-o-para-lan-amento/05-01-SUMMARY.md
+- FOUND commit: 8b132ca (test)
+- FOUND commit: 383e247 (perf)
+- FOUND commit: 64f7f38 (perf)
+- FOUND commit: 07149e2 (docs metadata)
+
 ---
 *Phase: 05-prepara-o-para-lan-amento*
 *Completed: 2026-08-17*
