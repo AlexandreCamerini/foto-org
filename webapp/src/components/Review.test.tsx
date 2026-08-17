@@ -111,6 +111,20 @@ describe("Review", () => {
     expect(screen.queryByText("DSC_0100.jpg")).not.toBeInTheDocument();
   });
 
+  it("Gerar/atualizar sugestões usa o contorno padrão, não o preenchido de antes (D-04, CONS-03)", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    montar(<Review job={jobParado()} />);
+
+    const botao = await screen.findByRole("button", {
+      name: "Gerar/atualizar sugestões",
+    });
+    const classes = botao.className.split(" ");
+    expect(classes).not.toContain("bg-acento");
+    expect(classes).not.toContain("text-texto-invertido");
+    expect(classes).toContain("border-borda");
+    expect(classes).toContain("bg-cartao");
+  });
+
   it("abre e fecha o grupo pelo teclado, sem depender do mouse", async () => {
     servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
     const usuario = userEvent.setup();

@@ -149,7 +149,6 @@ export default function Review({
           {lista.length === 1 ? "grupo" : "grupos"}
         </span>
         <Botao
-          variante="solido"
           onClick={() => job.gerarSugestoes()}
           disabled={job.rodando}>
           {job.rodando && job.estado.tipo === "sugestoes"

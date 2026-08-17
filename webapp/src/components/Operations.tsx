@@ -211,7 +211,11 @@ export default function Operations({ job }: { job: Job }) {
                   arquivos
                 </Botao>
                 {executando && (
-                  <Botao tom="erro" onClick={() => job.cancelar()}>
+                  <Botao
+                    variante="fantasma"
+                    onClick={() => job.cancelar()}
+                    className="hover:text-erro"
+                  >
                     Cancelar
                   </Botao>
                 )}
