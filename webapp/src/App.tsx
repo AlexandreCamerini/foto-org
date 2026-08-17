@@ -7,6 +7,7 @@ import Inspector from "./components/Inspector";
 import { LinhaDoTempo } from "./components/LinhaDoTempo";
 import Loupe from "./components/Loupe";
 import Mapa from "./components/Mapa";
+import ModalCaminho from "./components/ModalCaminho";
 import Duplicates from "./components/Duplicates";
 import Operations from "./components/Operations";
 import Panorama from "./components/Panorama";
@@ -116,6 +117,18 @@ export default function App() {
   const midia = useMidia(filtros);
   const { itens, total, hasNextPage, fetchNextPage } = midia;
   const job = useJob();
+
+  // Modal "Adicionar pasta…" (CONS-05/D-07): pertence ao App porque é o
+  // único lugar que alcança os quatro pontos que o disparam — o botão da
+  // Sidebar e os três estados vazios (Panorama, PhotoGrid, Trips). Erro
+  // fica no modal, ao lado do campo que causou a falha, em vez de atrás
+  // dele como era na Sidebar — o disparo já não vem mais só de lá.
+  const [modalPasta, setModalPasta] = useState(false);
+  const [erroPasta, setErroPasta] = useState<string | null>(null);
+  const abrirAdicionarPasta = useCallback(() => {
+    setErroPasta(null);
+    setModalPasta(true);
+  }, []);
 
   const grupoAberto =
     recorte?.trip_id !== undefined || recorte?.event_id !== undefined;
@@ -244,6 +257,7 @@ export default function App() {
               if (p) setAba("Biblioteca");
             }}
             job={job}
+            onAdicionarPasta={abrirAdicionarPasta}
           />
         )}
 
@@ -492,6 +506,21 @@ export default function App() {
           index={selIndex}
           onNavegar={navegar}
           onFechar={() => setLoupeAberto(false)}
+        />
+      )}
+
+      {modalPasta && (
+        <ModalCaminho
+          titulo="Caminho da pasta de fotos"
+          erro={erroPasta}
+          onConfirmar={(caminho) => {
+            setErroPasta(null);
+            job
+              .escanear(caminho)
+              .then(() => setModalPasta(false))
+              .catch((e: Error) => setErroPasta(e.message));
+          }}
+          onCancelar={() => setModalPasta(false)}
         />
       )}
     </div>
