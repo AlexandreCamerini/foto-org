@@ -60,7 +60,15 @@ class Evidence(Base):
 
 class Suggestion(Base):
     __tablename__ = "suggestions"
-    __table_args__ = (Index("ix_suggestions_status", "status"),)
+    __table_args__ = (
+        Index("ix_suggestions_status", "status"),
+        # Consumidor: engine.py:1042,1083,1106; server/app.py:724;
+        # repositories/media.py:118,149; repositories/suggestions.py:119,296;
+        # operations/planner.py:60; operations/inventario.py:161 — busca
+        # pesadamente consultada por media_id (Inspetor, filtro
+        # "sem_sugestao", join do planejador). Migração 0018.
+        Index("ix_suggestions_media_id", "media_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     media_id: Mapped[int] = mapped_column(ForeignKey("media_files.id"))

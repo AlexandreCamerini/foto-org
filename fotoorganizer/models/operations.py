@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import JSON, Enum, ForeignKey, Text
+from sqlalchemy import JSON, Enum, ForeignKey, Index, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fotoorganizer.models.base import Base, utcnow
@@ -47,6 +47,15 @@ class OperationPlan(Base):
 
 class OperationItem(Base):
     __tablename__ = "operation_items"
+    __table_args__ = (
+        # Consumidor: repositories/operations.py:71,141 (lista os itens de
+        # um plano — a consulta central da tela de Operações);
+        # operations/executor.py:272. Migração 0018.
+        Index("ix_operation_items_plan_id", "plan_id"),
+        # Consumidor: operations/planner.py:68 (checa operações pendentes
+        # por mídia). Migração 0018.
+        Index("ix_operation_items_media_id", "media_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("operation_plans.id"))
@@ -69,6 +78,12 @@ class OperationItem(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        # Consumidor: repositories/operations.py:95,128;
+        # operations/executor.py:131,163 — trilha de auditoria por plano
+        # (dry-run + execução). Migração 0018.
+        Index("ix_audit_log_plan_id", "plan_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     quando: Mapped[datetime] = mapped_column(default=utcnow)

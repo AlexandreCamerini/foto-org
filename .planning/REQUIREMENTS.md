@@ -153,7 +153,7 @@ na Fase 3, 2026-08-16. -->
   PyInstaller — fragilidade de codesign/notarização de libs nativas em
   layout sidecar) [docs/PLANO_IA_E_PRODUTO.md §6 pré-requisito 1;
   docs/EMPACOTAMENTO.md, DOC-precedence — ver INGEST-CONFLICTS.md]
-- [ ] **LANC-02**: Índices de FK ausentes adicionados, incluindo índice em
+- [x] **LANC-02**: Índices de FK ausentes adicionados, incluindo índice em
   `MediaFile.pasta` (hoje `LIKE 'prefixo%'` sem índice força table scan a
   cada clique na árvore de pastas) [docs/PLANO_IA_E_PRODUTO.md §6
   pré-requisito 3; corroborado por .planning/codebase/CONCERNS.md]
@@ -245,7 +245,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-07 | Phase 4 | Complete |
 | CONS-08 | Phase 4 | Complete |
 | LANC-01 | Phase 5 | Pending |
-| LANC-02 | Phase 5 | Pending |
+| LANC-02 | Phase 5 | Complete |
 | LANC-03 | Phase 5 | Pending |
 | LANC-04 | Phase 5 | Pending |
 
