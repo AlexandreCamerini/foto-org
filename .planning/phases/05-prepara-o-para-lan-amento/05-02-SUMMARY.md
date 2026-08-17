@@ -143,3 +143,11 @@ None - nenhuma configuração de serviço externo necessária.
 ---
 *Phase: 05-prepara-o-para-lan-amento*
 *Completed: 2026-08-17*
+
+## Self-Check: PASSED
+
+- FOUND: webapp/dist/index.html
+- FOUND: src-tauri/resources/runtime/python/bin/python3 (executable)
+- FOUND: src-tauri/target/release/bundle/macos/Foto Organizer.app
+- FOUND: src-tauri/target/release/bundle/dmg/Foto Organizer_0.1.0_aarch64.dmg
+- FOUND: commit 85d3c72 in git log
