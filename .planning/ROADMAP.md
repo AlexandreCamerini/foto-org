@@ -234,8 +234,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 05-03-PLAN.md — aceite do Marco 1: catálogo novo, fixtures, grade, zero processo órfão (LANC-01)
-- [ ] 05-04-PLAN.md — script de medição e baseline de performance em docs/PERFORMANCE.md (LANC-04)
+- [x] 05-03-PLAN.md — aceite do Marco 1: catálogo novo, fixtures, grade, zero processo órfão (LANC-01)
+- [x] 05-04-PLAN.md — script de medição e baseline de performance em docs/PERFORMANCE.md (LANC-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -260,4 +260,4 @@ paralelo, sem dependência estrutural das demais)
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
 | 4. Consistência visual secundária | 7/7 | Complete   | 2026-08-17 |
-| 5. Preparação para lançamento | 2/5 | In Progress|  |
+| 5. Preparação para lançamento | 4/5 | In Progress|  |
