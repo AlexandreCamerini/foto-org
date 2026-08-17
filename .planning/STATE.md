@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-16T23:26:55.863Z"
+stopped_at: Phase 4 UI-SPEC approved
+last_updated: "2026-08-17T00:42:49.344Z"
 last_activity: 2026-08-16
 progress:
   total_phases: 5
@@ -110,7 +110,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T23:26:55.848Z
-Stopped at: Phase 4 context gathered
+Last session: 2026-08-17T00:42:49.334Z
+Stopped at: Phase 4 UI-SPEC approved
 ingest de 25 documentos; nenhuma fase planejada em detalhe ainda.
-Resume file: .planning/phases/04-consist-ncia-visual-secund-ria/04-CONTEXT.md
+Resume file: .planning/phases/04-consist-ncia-visual-secund-ria/04-UI-SPEC.md
