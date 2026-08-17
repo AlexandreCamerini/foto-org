@@ -427,7 +427,7 @@ function FotosDoGrupo({
         // dizer de onde cada uma veio. Adjacência, não o grupo inteiro: a
         // lista chega ordenada e as colisões reais aparecem encostadas.
         const chave = (it: Item) =>
-          `${it.nome} ${it.data_capturada ?? ""} ${it.camera ?? ""}`;
+          `${it.nome}\0${it.data_capturada ?? ""}\0${it.camera ?? ""}`;
         const colideCom = (vizinho: Item | undefined) =>
           vizinho !== undefined &&
           chave(vizinho) === chave(item) &&
