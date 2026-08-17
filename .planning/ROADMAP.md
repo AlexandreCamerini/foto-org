@@ -229,8 +229,8 @@ desempenho medido, não só funcionando para quem já sabe onde tudo está.
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — índices de FK ausentes, PRAGMA case_sensitive_like e teste de plano de consulta (LANC-02)
-- [ ] 05-02-PLAN.md — build do bundle Marco 1 (runtime PBS + cargo tauri build) e assinatura efetiva (LANC-01)
+- [x] 05-01-PLAN.md — índices de FK ausentes, PRAGMA case_sensitive_like e teste de plano de consulta (LANC-02)
+- [x] 05-02-PLAN.md — build do bundle Marco 1 (runtime PBS + cargo tauri build) e assinatura efetiva (LANC-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -260,4 +260,4 @@ paralelo, sem dependência estrutural das demais)
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
 | 4. Consistência visual secundária | 7/7 | Complete   | 2026-08-17 |
-| 5. Preparação para lançamento | 0/5 | Planned | - |
+| 5. Preparação para lançamento | 2/5 | In Progress|  |
