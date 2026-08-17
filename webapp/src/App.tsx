@@ -376,11 +376,31 @@ export default function App() {
                   // em vez de flex-wrap, para que este grupo também nunca
                   // vire 2 sub-linhas por conta própria.
                   <div className="flex flex-1 flex-nowrap items-center gap-2 overflow-x-auto">
+                    {/* Sem shrink-0: é o mesmo `w-64` de antes de todo o
+                        plano 04-05 (commit 95dc137^), que encolhia via
+                        flex-shrink normal até o mínimo intrínseco do
+                        <input> (~145px medido). select e slider continuam
+                        shrink-0 — testado remover também: nenhum dos dois
+                        encolhe mesmo sem shrink-0, porque o mínimo intrínseco
+                        de um <select> já é a largura da opção mais longa, e o
+                        do range já é a largura declarada; sem isso, shrink-0
+                        neles é só documentação do que já é verdade. Com só a
+                        busca cedendo, o desktop comum (sem chip de recorte
+                        sobre um grupo aberto) volta a uma linha só, sem
+                        scroll — igual era antes do plano. No estado mais
+                        apertado possível (chip de recorte + Lista/Mapa +
+                        Tudo/Organizáveis abertos ao mesmo tempo em 1200px,
+                        grupo 1 fixo em 449px), o grupo 2 ainda pede scroll
+                        interno — mas o layout original também pedia nesse
+                        exato estado (829px de conteúdo em 761px disponíveis,
+                        68px de estouro, sem overflow-x-auto: o slider vazava
+                        visualmente por cima do Inspetor). O scroll contido de
+                        hoje é estritamente melhor que aquele vazamento. */}
                     <input
                       value={busca}
                       onChange={(e) => setBusca(e.target.value)}
                       placeholder="Buscar por nome ou caminho…"
-                      className="w-64 shrink-0 border-borda bg-cartao outline-none placeholder:text-texto-3 focus:border-acento"
+                      className="w-64 border-borda bg-cartao outline-none placeholder:text-texto-3 focus:border-acento"
                     />
                     <select
                       value={ordenacao}
