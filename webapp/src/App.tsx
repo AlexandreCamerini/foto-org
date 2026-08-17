@@ -293,109 +293,144 @@ export default function App() {
           {aba === "Operações" && <Operations job={job} />}
           {aba === "Biblioteca" && (
             <>
-              <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
-                {recorte && (
-                  <button
-                    onClick={() => setRecorte(null)}
-                    className="flex items-center gap-1 rounded-full border border-borda-forte bg-painel px-2.5 py-1 hover:bg-cartao"
-                    title="Limpar recorte"
-                  >
-                    {recorte.nome} ✕
-                  </button>
-                )}
-                {/* O mapa é uma VISÃO do grupo aberto, não um destino de
-                    navegação: aparece junto do chip que diz qual grupo está
-                    aberto, e some quando não há grupo. */}
-                {grupoAberto && (
-                  <div className="flex shrink-0 overflow-hidden rounded-full border border-borda">
-                    {[
-                      ["lista", "Lista"],
-                      ["mapa", "Mapa"],
-                    ].map(([chave, rotulo]) => (
-                      <button
-                        key={chave}
-                        onClick={() => setVisaoGrupo(chave as "lista" | "mapa")}
-                        title={
-                          chave === "lista"
-                            ? "as fotos do grupo na grade"
-                            : "onde o grupo aconteceu — e de onde veio cada coordenada"
-                        }
-                        className={`px-3 py-1 ${
-                          visaoGrupo === chave
-                            ? "bg-cartao text-texto"
-                            : "text-texto-2 hover:text-texto"
-                        }`}
-                      >
-                        {rotulo}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* No mapa, nada da barra de grade se aplica — e controle
-                    visível que não age sobre a tela em que está é o defeito
-                    que a barra lateral já teve. */}
-                {!noMapa && (
-                  <>
-                <div className="flex shrink-0 overflow-hidden rounded-full border border-borda">
-                  {[
-                    ["tudo", "Tudo"],
-                    ["organizaveis", "Organizáveis"],
-                    ["faltantes", "Fora de alcance"],
-                  ].map(([chave, rotulo]) => (
+              <div className="flex flex-col gap-2 border-b border-borda px-3 py-2 lg:flex-row lg:items-center lg:gap-2">
+                {/* Este grupo NUNCA quebra em sub-linhas (flex-nowrap): D-08
+                    trava "no máximo 2 linhas" abaixo de `lg`, e um grupo que
+                    se permite `flex-wrap` internamente pode sozinho consumir
+                    2 linhas e estourar o orçamento quando somado ao grupo 2.
+                    Em vez de wrap, o excesso rola horizontalmente dentro do
+                    próprio grupo — nenhum controle some, só passa a exigir
+                    scroll em larguras extremas. */}
+                <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+                  {recorte && (
                     <button
-                      key={chave}
-                      onClick={() => setAlcance(chave)}
-                      title={
-                        chave === "tudo"
-                          ? "seu acervo inteiro, com arquivo local ou sem — miniatura de outro app fica fora"
-                          : chave === "organizaveis"
-                            ? "acervo seu com o arquivo ao alcance agora — o que dá para revisar e copiar"
-                            : "o resto: no iCloud, em volume desmontado, ou miniatura de outro app"
-                      }
-                      className={`px-3 py-1 ${
-                        alcance === chave
-                          ? "bg-cartao text-texto"
-                          : "text-texto-2 hover:text-texto"
-                      }`}
+                      onClick={() => setRecorte(null)}
+                      className="flex shrink-0 items-center gap-1 rounded-full border border-borda-forte bg-painel px-2.5 py-1 hover:bg-cartao"
+                      title="Limpar recorte"
                     >
-                      {rotulo}
+                      {recorte.nome} ✕
                     </button>
-                  ))}
+                  )}
+                  {/* O mapa é uma VISÃO do grupo aberto, não um destino de
+                      navegação: aparece junto do chip que diz qual grupo está
+                      aberto, e some quando não há grupo. */}
+                  {grupoAberto && (
+                    <div className="flex shrink-0 overflow-hidden rounded-full border border-borda">
+                      {[
+                        ["lista", "Lista"],
+                        ["mapa", "Mapa"],
+                      ].map(([chave, rotulo]) => (
+                        <button
+                          key={chave}
+                          onClick={() => setVisaoGrupo(chave as "lista" | "mapa")}
+                          title={
+                            chave === "lista"
+                              ? "as fotos do grupo na grade"
+                              : "onde o grupo aconteceu — e de onde veio cada coordenada"
+                          }
+                          className={`px-3 py-1 ${
+                            visaoGrupo === chave
+                              ? "bg-cartao text-texto"
+                              : "text-texto-2 hover:text-texto"
+                          }`}
+                        >
+                          {rotulo}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* No mapa, nada da barra de grade se aplica — e controle
+                      visível que não age sobre a tela em que está é o defeito
+                      que a barra lateral já teve. */}
+                  {!noMapa && (
+                    <div className="flex shrink-0 overflow-hidden rounded-full border border-borda">
+                      {[
+                        ["tudo", "Tudo"],
+                        ["organizaveis", "Organizáveis"],
+                        ["faltantes", "Fora de alcance"],
+                      ].map(([chave, rotulo]) => (
+                        <button
+                          key={chave}
+                          onClick={() => setAlcance(chave)}
+                          title={
+                            chave === "tudo"
+                              ? "seu acervo inteiro, com arquivo local ou sem — miniatura de outro app fica fora"
+                              : chave === "organizaveis"
+                                ? "acervo seu com o arquivo ao alcance agora — o que dá para revisar e copiar"
+                                : "o resto: no iCloud, em volume desmontado, ou miniatura de outro app"
+                          }
+                          className={`px-3 py-1 ${
+                            alcance === chave
+                              ? "bg-cartao text-texto"
+                              : "text-texto-2 hover:text-texto"
+                          }`}
+                        >
+                          {rotulo}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por nome ou caminho…"
-                  className="w-64 border-borda bg-cartao outline-none placeholder:text-texto-3 focus:border-acento"
-                />
-                <select
-                  value={ordenacao}
-                  onChange={(e) => setOrdenacao(e.target.value)}
-                  className="rounded-md border border-borda bg-cartao px-2 py-1"
-                >
-                  <option value="data_desc">Mais recentes</option>
-                  <option value="data_asc">Mais antigas</option>
-                  <option value="nome">Nome</option>
-                  <option value="tamanho_desc">Maiores</option>
-                </select>
-                <div className="flex-1" />
-                {/* O contador saiu daqui. Ele dizia "197338 fotos" enquanto a
-                    lateral dizia "26023" e o rodapé outra coisa — três
-                    denominadores, nenhum rótulo. Quem responde "quantas estou
-                    vendo" agora é o degrau "no filtro" do funil, no rodapé,
-                    ao lado dos degraus que explicam a diferença. De quebra a
-                    barra encolhe: ela exigia 1011px só para si e era o que
-                    empurrava a busca por baixo do inspetor em tela estreita. */}
-                <input
-                  type="range"
-                  min={96}
-                  max={320}
-                  value={zoom}
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  title="Tamanho das miniaturas"
-                  className="w-28 accent-acento"
-                />
-                  </>
+                {!noMapa && (
+                  // Mesma lógica do grupo 1: flex-nowrap + overflow-x-auto
+                  // em vez de flex-wrap, para que este grupo também nunca
+                  // vire 2 sub-linhas por conta própria.
+                  <div className="flex flex-1 flex-nowrap items-center gap-2 overflow-x-auto">
+                    {/* Sem shrink-0: é o mesmo `w-64` de antes de todo o
+                        plano 04-05 (commit 95dc137^), que encolhia via
+                        flex-shrink normal até o mínimo intrínseco do
+                        <input> (~145px medido). select e slider continuam
+                        shrink-0 — testado remover também: nenhum dos dois
+                        encolhe mesmo sem shrink-0, porque o mínimo intrínseco
+                        de um <select> já é a largura da opção mais longa, e o
+                        do range já é a largura declarada; sem isso, shrink-0
+                        neles é só documentação do que já é verdade. Com só a
+                        busca cedendo, o desktop comum (sem chip de recorte
+                        sobre um grupo aberto) volta a uma linha só, sem
+                        scroll — igual era antes do plano. No estado mais
+                        apertado possível (chip de recorte + Lista/Mapa +
+                        Tudo/Organizáveis abertos ao mesmo tempo em 1200px,
+                        grupo 1 fixo em 449px), o grupo 2 ainda pede scroll
+                        interno — mas o layout original também pedia nesse
+                        exato estado (829px de conteúdo em 761px disponíveis,
+                        68px de estouro, sem overflow-x-auto: o slider vazava
+                        visualmente por cima do Inspetor). O scroll contido de
+                        hoje é estritamente melhor que aquele vazamento. */}
+                    <input
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Buscar por nome ou caminho…"
+                      className="w-64 border-borda bg-cartao outline-none placeholder:text-texto-3 focus:border-acento"
+                    />
+                    <select
+                      value={ordenacao}
+                      onChange={(e) => setOrdenacao(e.target.value)}
+                      className="shrink-0 rounded-md border border-borda bg-cartao px-2 py-1"
+                    >
+                      <option value="data_desc">Mais recentes</option>
+                      <option value="data_asc">Mais antigas</option>
+                      <option value="nome">Nome</option>
+                      <option value="tamanho_desc">Maiores</option>
+                    </select>
+                    <div className="flex-1" />
+                    {/* O contador saiu daqui. Ele dizia "197338 fotos" enquanto
+                        a lateral dizia "26023" e o rodapé outra coisa — três
+                        denominadores, nenhum rótulo. Quem responde "quantas
+                        estou vendo" agora é o degrau "no filtro" do funil, no
+                        rodapé, ao lado dos degraus que explicam a diferença.
+                        De quebra a barra encolhe: ela exigia 1011px só para si
+                        e era o que empurrava a busca por baixo do inspetor em
+                        tela estreita. */}
+                    <input
+                      type="range"
+                      min={96}
+                      max={320}
+                      value={zoom}
+                      onChange={(e) => setZoom(Number(e.target.value))}
+                      title="Tamanho das miniaturas"
+                      className="w-28 shrink-0 accent-acento"
+                    />
+                  </div>
                 )}
               </div>
 

@@ -39,6 +39,48 @@ describe("App", () => {
     expect(screen.queryByTitle("Limpar recorte")).not.toBeInTheDocument();
   });
 
+  it("CONS-06: a barra da Biblioteca empilha em dois grupos, não um flex único", async () => {
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Biblioteca" }),
+    );
+
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    const tudo = screen.getByRole("button", { name: "Tudo" });
+
+    // O contêiner externo empilha abaixo de `lg` (D-09: token padrão do
+    // Tailwind, sem media query em JS) e volta a uma linha a partir de
+    // 1024px.
+    const barra = tudo.closest("div.flex.flex-col");
+    expect(barra).not.toBeNull();
+    expect(barra?.className).toContain("flex-col");
+    expect(barra?.className).toContain("lg:flex-row");
+
+    // Busca e "Tudo" pertencem a grupos (linhas) distintos — prova de que a
+    // barra tem dois grupos declarados por intenção, não um `flex` único de
+    // N filhos, o que é o que garante no máximo duas linhas.
+    const grupoBusca = busca.closest(".flex-nowrap");
+    const grupoTudo = tudo.closest(".flex-nowrap");
+    expect(grupoBusca).not.toBeNull();
+    expect(grupoTudo).not.toBeNull();
+    expect(grupoBusca).not.toBe(grupoTudo);
+
+    // Cada grupo é `flex-nowrap` + `overflow-x-auto`, nunca `flex-wrap`: um
+    // grupo que quebra sozinho em sub-linhas pode, somado ao outro grupo,
+    // estourar o orçamento de 2 linhas (era exatamente o bug em ~700px —
+    // "Tudo" quebrava para uma segunda sub-linha dentro do próprio grupo 1).
+    // O excesso agora rola horizontalmente dentro do grupo em vez de quebrar.
+    expect(grupoBusca?.className).toContain("overflow-x-auto");
+    expect(grupoBusca?.className).not.toContain("flex-wrap");
+    expect(grupoTudo?.className).toContain("overflow-x-auto");
+    expect(grupoTudo?.className).not.toContain("flex-wrap");
+  });
+
   it("lacuna zerada não é clicável — não há conjunto para atacar", async () => {
     servirApi(ROTAS_BASE);
     montar(<App />);
