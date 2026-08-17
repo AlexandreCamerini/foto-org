@@ -120,7 +120,7 @@ na Fase 3, 2026-08-16. -->
 
 ### Consistência visual secundária (CONS)
 
-- [ ] **CONS-01**: Selo de fonte aparece quando duas sugestões adjacentes
+- [x] **CONS-01**: Selo de fonte aparece quando duas sugestões adjacentes
   colidem em nome+data+câmera (`media_id` diferente), para distinguir
   "mesma foto em dois catálogos" de "arquivo diferente"
   [docs/AVALIACAO_UX.md, A.6]
@@ -236,7 +236,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REV-05 | — | Already validated (pre-session) |
 | REV-06 | — | Already validated (commit ae60319, pre-session) |
 | REV-07 | — | Already validated (commit a7d6e5e, pre-session) |
-| CONS-01 | Phase 4 | Pending |
+| CONS-01 | Phase 4 | Complete |
 | CONS-02 | Phase 4 | Complete |
 | CONS-03 | Phase 4 | Complete |
 | CONS-04 | Phase 4 | Done (04-03) |
