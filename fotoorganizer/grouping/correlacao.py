@@ -16,10 +16,16 @@ Dois problemas resolvidos aqui, ambos como funções puras:
 2. Herança de GPS: para cada foto sem GPS, a foto COM GPS de outra
    origem (fonte ou câmera diferente) mais próxima na linha do tempo
    corrigida doa suas coordenadas, dentro de uma janela de tolerância.
+   Quando existe doadora dos DOIS lados (antes e depois), a mais distante
+   não é só descartada: se as duas concordam geograficamente, a granularidade
+   fica corroborada por duas evidências independentes; se discordam, essa
+   granularidade não é herdada por ninguém — nem pela mais próxima. Ver
+   `herdar_gps` e D-074.
 """
 
 from __future__ import annotations
 
+import math
 from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -36,6 +42,9 @@ JANELAS_POR_CAMPO: tuple[tuple[str, timedelta], ...] = (
 )
 # A busca pela doadora usa a maior das janelas; cada campo é filtrado depois.
 JANELA_HERANCA = max(janela for _, janela in JANELAS_POR_CAMPO)
+# Mesma coisa, como dict — usado pelo teste de concordância (D-074) uma vez
+# por foto candidata; construído aqui, não a cada chamada.
+_JANELA_DO_CAMPO = dict(JANELAS_POR_CAMPO)
 # Δt até este limite: confiança cheia da origem; acima, decai até a borda.
 _JANELA_CURTA = timedelta(minutes=2)
 # Âncoras com desvios muito espalhados indicam pareamento ruim — descarta.
@@ -119,6 +128,16 @@ class Heranca:
     # continua valendo — é melhor que nada — mas com score menor e dizendo
     # isso na justificativa.
     hora_incerta: bool = False
+    # Granularidades (subconjunto de "cidade"/"regiao") em que existia
+    # doadora dos DOIS lados e as duas concordaram geograficamente — os
+    # círculos de incerteza de cada lado se sobrepõem (D-074). Vazio é o
+    # caso comum: só uma doadora, ou a segunda longe demais para valer para
+    # aquele campo. "pais" nunca aparece aqui de propósito — ver
+    # `herdar_gps`.
+    concordancia: tuple[str, ...] = ()
+    # Id da doadora do outro lado, só quando ela participou de ao menos uma
+    # concordância acima. None no caso comum de âncora única.
+    doador_concordante_id: int | None = None
 
     def fator_de(self, campo: str) -> float | None:
         """O fator do campo, ou None quando o Δt não permite afirmá-lo."""
@@ -135,6 +154,12 @@ class Heranca:
         """Raio, em metros, da região onde esta foto plausivelmente está.
 
         O mapa desenha isto como círculo; o ponto no centro é da doadora.
+        `self.delta` já é o menor dos dois lados quando existem os dois (a
+        escolha de doadora sempre prefere o mais próximo) — como
+        `raio_incerteza` é monótona em Δt, isto já é o menor raio possível
+        entre os dois lados, concordando ou não. Ver D-074: apertar o raio
+        além disso exigiria uma geometria de interseção que a medição não
+        pediu.
         """
         return raio_incerteza(self.delta)
 
@@ -201,7 +226,40 @@ def herdar_gps(
 ) -> list[Heranca]:
     """Para cada foto sem GPS, herda a localização da foto com GPS de
     OUTRA origem (fonte ou câmera diferente) mais próxima na linha do
-    tempo corrigida, dentro da janela."""
+    tempo corrigida, dentro da janela.
+
+    Quando existe doadora dos dois lados (antes e depois), a mais distante
+    não é só descartada — ela testemunha a favor ou contra a mais próxima
+    (D-074), campo a campo:
+
+    - Se o Δt do lado mais distante também cabe na janela daquele campo, as
+      duas coordenadas são comparadas: concordam se a distância geométrica
+      entre elas cabe dentro da soma dos dois raios de incerteza
+      (`raio_incerteza`, já calibrados — nenhuma constante nova). Concordar
+      não aumenta o fator do campo (seria bônus inventado); o Δt usado
+      continua sendo o do lado mais próximo, igual antes.
+    - Se discordam, esse campo NÃO é herdado por ninguém — nem pelo lado
+      mais próximo. Duas doadoras a horas de distância uma da outra, uma de
+      cada lado, é o sinal de que a foto do meio está EM TRÂNSITO: nenhuma
+      das duas sabe onde ela estava.
+    - Se o lado mais distante está fora da janela daquele campo (só um lado
+      tem opinião), o campo segue como sempre seguiu — âncora única, sem
+      teste, sem regressão.
+
+    `pais` fica de fora deste teste de propósito: `raio_incerteza` é
+    calibrado para deslocamento de pessoa em até 12 h (teto 50 km), não
+    para o tamanho de um país (centenas/milhares de km) — reaplicar o
+    mesmo raio quebraria casos óbvios (duas doadoras a 300 km, claramente
+    no mesmo país, falhariam o teste). Resolver isso direito pede
+    geocodificação, que este módulo deliberadamente não tem (D-074).
+
+    Limitação conhecida, não escondida: uma ida e volta no mesmo dia entre
+    duas âncoras concordantes (casa → cidade vizinha → casa, sem foto com
+    GPS na cidade vizinha) produz falso-negativo — a foto do meio herda
+    "casa" com a confiança de concordância, mesmo tendo sido tirada em
+    outro lugar. Aceitável dado o teto de granularidade e o próprio raio de
+    incerteza, mas precisa estar escrito, não escondido.
+    """
     offsets = offsets or {}
 
     def corrigida(foto: FotoRef) -> datetime:
@@ -241,30 +299,116 @@ def herdar_gps(
             continue
         alvo = corrigida(foto)
         i = bisect_left(tempos, alvo)
-        candidatos = [
+        achados = [
             achado for achado in (
                 procurar(alvo, foto, i - 1, -1),   # para trás no tempo
                 procurar(alvo, foto, i, +1),       # para frente
             )
             if achado is not None
         ]
-        if not candidatos:
+        if not achados:
             continue
-        delta, doador = min(candidatos, key=lambda c: c[0])
+        delta, doador = min(achados, key=lambda c: c[0])
+        # O outro lado, quando existe (diferente do escolhido acima) — quem
+        # testemunha a favor ou contra a proximidade encontrada. Comparado
+        # por media_id, não pela tupla inteira: os dois lados nunca podem
+        # ser fisicamente o mesmo registro (índices disjuntos em `procurar`),
+        # mas media_id é a identidade real, não uma coincidência de campos.
+        outro = next(
+            (a for a in achados if a[1].media_id != doador.media_id), None
+        )
         # Hora de arquivo em qualquer um dos lados enfraquece a proximidade:
         # "2 minutos de distância" só significa alguma coisa se as duas horas
         # forem de captura. Vale menos, não vale zero — num acervo onde a
         # câmera não gravou data, é a única pista que sobra.
         incerta = foto.hora_do_arquivo or doador.hora_do_arquivo
-        campos = campos_confiaveis(delta, incerta)
+        campos_base = campos_confiaveis(delta, incerta)
+        if not campos_base:
+            continue
+        campos, concordancia = _confrontar_com_outro_lado(
+            campos_base, delta, doador, outro, incerta,
+        )
         if not campos:
             continue
         herancas.append(Heranca(
             media_id=foto.media_id, doador_id=doador.media_id,
             lat=doador.lat, lon=doador.lon, delta=delta,
             campos=campos, hora_incerta=incerta,
+            concordancia=concordancia,
+            doador_concordante_id=(
+                outro[1].media_id if outro is not None and concordancia
+                else None
+            ),
         ))
     return herancas
+
+
+def _confrontar_com_outro_lado(
+    campos_base: tuple[tuple[str, float], ...],
+    delta: timedelta,
+    doador: FotoRef,
+    outro: tuple[timedelta, FotoRef] | None,
+    incerta: bool,
+) -> tuple[tuple[tuple[str, float], ...], tuple[str, ...]]:
+    """Testa cada campo (exceto país) contra a doadora do outro lado.
+
+    Sem outro lado (achado único), nada muda — devolve `campos_base` como
+    veio. Com os dois lados, cada campo cujo Δt do lado mais distante
+    também cabe na janela daquele campo é confrontado: concordam se os
+    círculos de incerteza (`raio_incerteza` de cada lado) se sobrepõem;
+    discordam se não. Campo discordante é removido — não herdado por
+    ninguém, nem pelo lado mais próximo (D-074).
+
+    Hora de QUALQUER um dos três lados envolvidos (a foto que herda, o
+    doador escolhido — juntos, `incerta` — ou o doador do outro lado)
+    vinda do mtime do arquivo derruba a confiabilidade do Δt usado no
+    teste geométrico: um raio calculado sobre um Δt que pode estar
+    arbitrariamente errado não prova nada. O campo simplesmente não é
+    testado (fica como se só houvesse um lado) — e por construção nunca
+    entra em `concordancia`, então a justificativa nunca pode dizer
+    "confirmada" na mesma frase em que já avisa que a hora é incerta.
+    """
+    if outro is None:
+        return campos_base, ()
+    delta_outro, doador_outro = outro
+    if incerta or doador_outro.hora_do_arquivo:
+        return campos_base, ()
+
+    resultado: list[tuple[str, float]] = []
+    concordancia: list[str] = []
+    for campo, fator in campos_base:
+        if campo == "pais" or delta_outro > _JANELA_DO_CAMPO[campo]:
+            resultado.append((campo, fator))
+            continue
+        distancia = _distancia_m(
+            (doador.lat, doador.lon), (doador_outro.lat, doador_outro.lon)
+        )
+        raio_combinado = raio_incerteza(delta) + raio_incerteza(delta_outro)
+        if distancia <= raio_combinado:
+            resultado.append((campo, fator))
+            concordancia.append(campo)
+        # else: discordam — este campo não sobrevive, nem para o lado mais
+        # próximo. Duas doadoras a horas uma da outra, dos dois lados,
+        # significam que a foto do meio está em trânsito.
+    return tuple(resultado), tuple(concordancia)
+
+
+_RAIO_TERRA_M = 6_371_008.8
+
+
+def _distancia_m(
+    a: tuple[float, float], b: tuple[float, float]
+) -> float:
+    """Distância haversine entre duas coordenadas, em metros.
+
+    Mesma fórmula de `scripts/calibrar_raio_incerteza.py`: duplicada de
+    propósito, não importada — o script é uma ferramenta de calibração
+    offline, e este módulo puro não deveria depender dele.
+    """
+    la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = (math.sin((la2 - la1) / 2) ** 2
+         + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2)
+    return 2 * _RAIO_TERRA_M * math.asin(min(1.0, math.sqrt(h)))
 
 
 def campos_confiaveis(
