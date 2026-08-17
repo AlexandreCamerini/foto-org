@@ -300,6 +300,11 @@ Fires when an item's `nome`+`data_capturada`+`camera` collide with an **adjacent
 (different `media_id`) — D-01/D-02. Appears on **every** colliding item individually, not once at the group
 header. Requires the `source_id` backend addition noted in Dependencies above.
 
+**Implementation note (mirrors the CONS-02 note below):** `colide` is not a new field on `Item` — it's
+computed by the caller (`FotosDoGrupo`'s `renderizar` callback, or its parent) by comparing each item to its
+immediate neighbor(s) in the paginated list already fetched for the open group. Adjacency semantics, not new
+API surface.
+
 ```tsx
 <div className="flex min-w-0 items-center gap-1.5">
   <span className="truncate font-titulo">{s.nome}</span>
