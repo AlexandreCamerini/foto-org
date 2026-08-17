@@ -27,6 +27,7 @@ type Item = {
   camera?: string | null;
   gps_estimado?: boolean;
   motivo_indisponivel?: string | null;
+  source_id?: number;
 };
 
 /** Revisão origem→destino: o usuário decide, o motor explica.

@@ -278,6 +278,7 @@ export interface SugestaoRow {
   destino: string;
   nivel: "alta" | "media" | "baixa";
   status: string;
+  source_id: number;
 }
 
 export interface PaginaSugestoes {

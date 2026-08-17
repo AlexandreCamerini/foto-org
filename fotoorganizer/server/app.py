@@ -228,6 +228,7 @@ def _sugestao_json(linha: SuggestionRow, fora: frozenset[int] = frozenset()) -> 
         ),
         "camera": linha.camera,
         "gps_estimado": linha.gps_estimado,
+        "source_id": linha.source_id,
         # Por que a foto não pode ser aberta agora (a tela diz em vez de
         # desenhar imagem quebrada). None quando está alcançável.
         "motivo_indisponivel": (
