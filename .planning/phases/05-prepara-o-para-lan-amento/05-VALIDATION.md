@@ -1,9 +1,9 @@
 ---
 phase: 5
 slug: prepara-o-para-lan-amento
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: false  # tests/test_indices.py (05-01 T1) e scripts/medir_baseline_producao.py (05-04 T1) são as tasks que fecham
 created: 2026-08-17
 ---
 
@@ -40,19 +40,29 @@ created: 2026-08-17
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-XX-XX | TBD | TBD | LANC-01 | — | `.app` builds, opens on fresh catalog, scans fixtures, shows grid, leaves no orphan Python process on close | manual | `cd src-tauri && cargo tauri build`, then manual launch + process check | N/A — manual, no existing test | ⬜ pending |
-| 05-XX-XX | TBD | TBD | LANC-02 | — | `pasta` and other enumerated FK columns use an index (`SEARCH`, not `SCAN`) after migration | integration (DB-level) | `EXPLAIN QUERY PLAN` assertion against migrated test DB | ❌ Wave 0 — `tests/test_indices.py` needed | ⬜ pending |
-| 05-XX-XX | TBD | TBD | LANC-03 | — | First-time user reaches populated grid without documentation | manual UAT (uninstructed user test, per D-06) | None automatable — requirement is about an unguided human | N/A by design | ⬜ pending |
-| 05-XX-XX | TBD | TBD | LANC-04 | — | Baseline metrics measured and documented in `docs/PERFORMANCE.md` | manual/scripted one-time measurement | New timing script for suggestion/duplicate-detection, mirroring `cmd_bench` pattern | ❌ Wave 0 — new script needed | ⬜ pending |
+| 05-01-01 | 05-01 | 1 | LANC-02 | T-05-01/02 | `EXPLAIN QUERY PLAN` da consulta real de `_sob_a_pasta` mostra SEARCH; busca `.ilike` segue insensível a caixa | integration (DB-level) | `.venv/bin/python -m pytest tests/test_indices.py -q` | ❌ Wave 0 — criado nesta task | ⬜ pending |
+| 05-01-02 | 05-01 | 1 | LANC-02 | T-05-01 | 13 índices presentes no schema migrado; 4 de drift sem `create_index` duplicado | integration (DB-level) | `.venv/bin/python -m pytest tests/test_indices.py::test_indices_declarados_existem_no_schema tests/test_database.py -q` | ✅ | ⬜ pending |
+| 05-01-03 | 05-01 | 1 | LANC-02 | T-05-01/02 | PRAGMA `case_sensitive_like=ON` sem regressão de busca/filtro/agrupamento | integration + suíte completa | `.venv/bin/python -m pytest tests/test_indices.py -q && scripts/verificar.sh --rapido` | ✅ | ⬜ pending |
+| 05-02-01 | 05-02 | 1 | LANC-01 | T-05-12 | Runtime PBS importa rawpy/pillow_heif/fotoorganizer de dentro do bundle; extra `llm` fora | manual/scripted | `src-tauri/resources/runtime/python/bin/python3 -c "import rawpy, pillow_heif, fotoorganizer"` | N/A — verificação de artefato | ⬜ pending |
+| 05-02-02 | 05-02 | 1 | LANC-01 | T-05-11 | Bundle existe com binário e runtime embarcado; identidade de assinatura conhecida | manual/scripted | `codesign -dv --verbose=4 "src-tauri/target/release/bundle/macos/Foto Organizer.app"` | N/A — build nativo, fora de `verificar.sh` | ⬜ pending |
+| 05-03-01 | 05-03 | 2 | LANC-01 | T-05-20/22/23 | App empacotado sobe backend, varre fixtures, popula grade e encerra sem órfão nos dois caminhos | manual/scripted | `pgrep -f "fotoorganizer web"` sai 1 após `quit` e após `kill -9` no shell nativo | N/A — ciclo de vida nativo | ⬜ pending |
+| 05-03-02 | 05-03 | 2 | LANC-01 | T-05-21 | Dono abre pelo Finder passando pelo Gatekeeper e vê grade populada | manual (checkpoint bloqueante) | — (human-check) | N/A por desenho | ⬜ pending |
+| 05-03-03 | 05-03 | 2 | LANC-01 | — | Aceite do Marco 1 registrado em `docs/EMPACOTAMENTO.md` sem remover conteúdo | source assertion | `grep -c "## Aceite do Marco 1" docs/EMPACOTAMENTO.md` | ✅ | ⬜ pending |
+| 05-04-01 | 05-04 | 2 | LANC-04 | T-05-30/31 | Script mede as três métricas ponta a ponta, sem caminho destrutivo e com `advisor=None` | manual/scripted | `.venv/bin/python scripts/medir_baseline_producao.py --data-dir <tmp> --pasta <fixtures>` | ❌ Wave 0 — criado nesta task | ⬜ pending |
+| 05-04-02 | 05-04 | 2 | LANC-04 | T-05-33 | Raízes da medição aprovadas pelo dono antes da varredura longa | manual (checkpoint de decisão) | — (human-check) | N/A por desenho | ⬜ pending |
+| 05-04-03 | 05-04 | 2 | LANC-04 | T-05-30/34 | Baseline com número, metodologia e máquina; produção sem sugestões auto-geradas | manual/scripted | `sqlite3 "$HOME/Library/Application Support/FotoOrganizer/catalog.db" "select count(*) from suggestions"` retorna 0 | ✅ | ⬜ pending |
+| 05-05-01 | 05-05 | 3 | LANC-03 | T-05-40 | Wiring dos 4 pontos de entrada verde antes da sessão; catálogo do teste vazio | integration (frontend) | `cd webapp && npm test` | ✅ `webapp/src/App.test.tsx:373-510` | ⬜ pending |
+| 05-05-02 | 05-05 | 3 | LANC-03 | T-05-40 | Usuário sem instrução chega (ou não) a uma grade populada | manual UAT (checkpoint bloqueante) | — (human-check, D-06) | N/A por desenho | ⬜ pending |
+| 05-05-03 | 05-05 | 3 | LANC-03 | T-05-41 | Rodada registrada em `docs/AVALIACAO_UX.md`, achados classificados, sem mudança de UI não aprovada | source assertion | `git diff --stat webapp/` vazio e `grep -c "LANC-03" docs/AVALIACAO_UX.md` | ✅ | ⬜ pending |
 
-*Task IDs filled in by the planner once PLAN.md files exist.*
+*Task IDs preenchidos pelo planner em 2026-08-17.*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_indices.py` — asserts `EXPLAIN QUERY PLAN` uses `SEARCH ... USING INDEX` (not `SCAN`) for the `pasta` prefix query post-migration (LANC-02).
-- [ ] Timing script for `SuggestionEngine.gerar()` / `DuplicateDetector.detectar()` against real data (LANC-04) — direct-call CLI script recommended per RESEARCH.md Open Question 2, for reproducibility.
+- [x] `tests/test_indices.py` — planejado como task 1 do plano 05-01. — asserts `EXPLAIN QUERY PLAN` uses `SEARCH ... USING INDEX` (not `SCAN`) for the `pasta` prefix query post-migration (LANC-02).
+- [x] Timing script — planejado como task 1 do plano 05-04 (`scripts/medir_baseline_producao.py`). for `SuggestionEngine.gerar()` / `DuplicateDetector.detectar()` against real data (LANC-04) — direct-call CLI script recommended per RESEARCH.md Open Question 2, for reproducibility.
 
 *No Wave 0 gap for LANC-01/LANC-03 — both are inherently manual verifications per the phase's own success criteria (D-02, D-06).*
 
@@ -70,11 +80,11 @@ created: 2026-08-17
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (`tests/test_indices.py`, timing script)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (`tests/test_indices.py`, timing script)
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** planner, 2026-08-17 — 14 tasks mapeadas, 3 checkpoints humanos por desenho (LANC-01 visual, raízes da medição, UAT de LANC-03); nenhuma sequência de 3 tasks sem verificação automatizada.

@@ -187,7 +187,20 @@ desempenho medido, não só funcionando para quem já sabe onde tudo está.
   4. Existe um baseline de performance documentado (taxa de indexação,
      tempo de geração de sugestões, tempo de detecção de duplicatas) contra
      um catálogo de tamanho representativo.
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — índices de FK ausentes, PRAGMA case_sensitive_like e teste de plano de consulta (LANC-02)
+- [ ] 05-02-PLAN.md — build do bundle Marco 1 (runtime PBS + cargo tauri build) e assinatura efetiva (LANC-01)
+- [ ] 05-03-PLAN.md — aceite do Marco 1: catálogo novo, fixtures, grade, zero processo órfão (LANC-01)
+- [ ] 05-04-PLAN.md — script de medição e baseline de performance em docs/PERFORMANCE.md (LANC-04)
+- [ ] 05-05-PLAN.md — teste de primeira execução sem instrução e registro dos achados (LANC-03)
+
+**Nota de escopo**: o critério 1 acima fala em "assinado e notarizado"; esta fase
+entrega apenas o Marco 1 de `docs/EMPACOTAMENTO.md` (`.app` funcional sem
+assinatura Developer ID), por decisão explícita do dono (D-01 em 05-CONTEXT.md):
+Marco 2 exige certificado do Apple Developer Program (US$99/ano), custo recorrente
+que `PROJECT.md` § Constraints trava como decisão do dono.
 **UI hint**: yes
 
 ## Progress
@@ -202,4 +215,4 @@ paralelo, sem dependência estrutural das demais)
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
 | 4. Consistência visual secundária | 7/7 | Complete   | 2026-08-17 |
-| 5. Preparação para lançamento | 0/TBD | Not started | - |
+| 5. Preparação para lançamento | 0/5 | Planned | - |
