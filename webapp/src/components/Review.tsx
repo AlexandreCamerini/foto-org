@@ -391,7 +391,7 @@ function FotosDoGrupo({
   status: string;
   fonte?: number;
   total: number;
-  renderizar: (item: Item) => React.ReactNode;
+  renderizar: (item: Item, colide: boolean) => React.ReactNode;
 }) {
   const [limite, setLimite] = useState(POR_PAGINA);
   const { data, isPending } = useQuery({
@@ -406,7 +406,21 @@ function FotosDoGrupo({
   const faltam = total - itens.length;
   return (
     <>
-      {itens.map(renderizar)}
+      {itens.map((item, i) => {
+        // CONS-01: duas sugestões vizinhas com mesmo nome+data+câmera mas
+        // media_id diferente são a mesma foto catalogada em dois lugares —
+        // ou dois arquivos que só por acaso se parecem. A tela precisa
+        // dizer de onde cada uma veio. Adjacência, não o grupo inteiro: a
+        // lista chega ordenada e as colisões reais aparecem encostadas.
+        const chave = (it: Item) =>
+          `${it.nome} ${it.data_capturada ?? ""} ${it.camera ?? ""}`;
+        const colideCom = (vizinho: Item | undefined) =>
+          vizinho !== undefined &&
+          chave(vizinho) === chave(item) &&
+          vizinho.media_id !== item.media_id;
+        const colide = colideCom(itens[i - 1]) || colideCom(itens[i + 1]);
+        return renderizar(item, colide);
+      })}
       {faltam > 0 && (
         <button
           onClick={() => setLimite((n) => n + POR_PAGINA)}
