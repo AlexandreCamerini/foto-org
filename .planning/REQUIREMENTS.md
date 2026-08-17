@@ -126,7 +126,7 @@ na Fase 3, 2026-08-16. -->
   [docs/AVALIACAO_UX.md, A.6]
 - [ ] **CONS-02**: Selo "álbum" vs. "evento detectado" aparece quando dois
   cards de Eventos colidem no nome [docs/AVALIACAO_UX.md, A.7/B.6]
-- [ ] **CONS-03**: Escala única de "botão importante" definida (preenchido
+- [x] **CONS-03**: Escala única de "botão importante" definida (preenchido
   = ação mais comprometedora); "Retomar"/"Gerar sugestões" migram para
   contorno neutro+hover [docs/AVALIACAO_UX.md, B.3]
 - [ ] **CONS-04**: Imagem em alta resolução que retorna 404 (Loupe,
@@ -138,7 +138,7 @@ na Fase 3, 2026-08-16. -->
 - [ ] **CONS-06**: Abaixo de ~1000px, com grupo aberto, o Inspetor colapsa
   automaticamente ou a barra empilha em duas linhas — hoje dropdown/busca/
   Inspetor se sobrepõem em ~900px [docs/AVALIACAO_UX.md, A.3]
-- [ ] **CONS-07**: Hover de "cancelar" é consistente entre telas (decidir
+- [x] **CONS-07**: Hover de "cancelar" é consistente entre telas (decidir
   se cancelar job é irreversível o bastante para justificar `hover:text-erro`
   ou se deve ser `hover:bg-cartao` neutro em todo lugar)
   [docs/AVALIACAO_UX.md, B.7]
@@ -238,11 +238,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REV-07 | — | Already validated (commit a7d6e5e, pre-session) |
 | CONS-01 | Phase 4 | Pending |
 | CONS-02 | Phase 4 | Pending |
-| CONS-03 | Phase 4 | Pending |
+| CONS-03 | Phase 4 | Complete |
 | CONS-04 | Phase 4 | Pending |
 | CONS-05 | Phase 4 | Pending |
 | CONS-06 | Phase 4 | Pending |
-| CONS-07 | Phase 4 | Pending |
+| CONS-07 | Phase 4 | Complete |
 | CONS-08 | Phase 4 | Pending |
 | LANC-01 | Phase 5 | Pending |
 | LANC-02 | Phase 5 | Pending |
