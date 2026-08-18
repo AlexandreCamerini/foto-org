@@ -57,6 +57,23 @@ SCORES_REFERENCIA: dict[str, float] = {
     "fs": 0.40,            # data do filesystem (sem EXIF)
     "visao": 0.30,         # apenas análise visual
     "usuario": 1.00,       # correção manual prevalece sobre tudo
+    # Cidade/país/categoria inferidos pelo Claude a partir do NOME da pasta
+    # e do metadado já catalogado (opt-in, classification/pasta_classificacao,
+    # GENAI-03) — não lê imagem, não sai da máquina sem consentimento.
+    # Abaixo de `pasta` (0.60): `pasta` é parse determinístico de um
+    # segmento que já nomeia o lugar; aqui o modelo INFERE a partir de uma
+    # string ambígua ("Praia 2019" não é parseável, precisa de julgamento).
+    # Chave separada de `llm` (0.55) mesmo com o mesmo número provisório:
+    # são afirmações de natureza diferente (uma lê metadado de mídia
+    # individual via Advisor de cluster, a outra lê o nome da pasta uma vez
+    # por sessão) — docs/CONFIANCA.md proíbe fundir origens distintas, e o
+    # ROADMAP exige degrau próprio na cascata para manter a Revisão
+    # distinguindo as duas.
+    # PROVISÓRIO — valor NÃO medido. A convenção deste projeto (D-074,
+    # D-059/D-060) é medir contra o acervo real antes de travar um score.
+    # Medição e decisão ficam no plano 07-09; até lá este número não deve
+    # ser citado como calibrado.
+    "llm_pasta": 0.55,
 }
 
 _LIMIAR_ALTA = 0.8
