@@ -715,35 +715,39 @@ the dry-run pass.
 | A3 | Deleting the `_original` exiftool backup only after a *verified* successful diff (Pitfall 7's synthesis) is the right policy — reconciles STACK.md vs PITFALLS.md but wasn't itself tested against a real interrupted/crashed write | Pitfall 7 | If the cleanup step itself has a bug, could either leak `_original` files permanently (tree clutter PITFALLS.md warned about) or delete them before a failure is fully confirmed (losing the literal recovery copy STACK.md wanted) — needs explicit dono/planner sign-off as a policy decision, not silently coded either way |
 | A4 | `-P`/mtime-preservation behavior after a write wasn't conclusively tested (one quick check didn't show the flag preserving the original modify date) — not a blocking finding, just unresolved | (not in a numbered pitfall — minor) | Low — affects whether "Date Modified" in Finder changes after a location write; cosmetic, not a correctness or safety issue |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does Lightroom (or Photos.app, or plain Finder "Get Info") actually surface
-   `XMP-photoshop:City`/`IPTC:City` back to the dono the way D-075's rationale assumes?**
+1. **(RESOLVED → `06-09-PLAN.md` Task 3, blocking human checkpoint)** Does Lightroom (or
+   Photos.app, or plain Finder "Get Info") actually surface `XMP-photoshop:City`/`IPTC:City`
+   back to the dono the way D-075's rationale assumes?
    - What we know: the tag groups chosen are the standard, documented Adobe/IPTC-Core
      conventions, and exiftool's own write of them validates cleanly.
-   - What's unclear: no cross-tool read-back test was run this session (no Lightroom/Photos.app
-     available to script against).
-   - Recommendation: a cheap, one-time manual check (open one written test file in whichever
-     tool the dono actually uses day-to-day) before scaling the write to the full approved
-     plan — cheap enough to be a Wave 0 / pre-rollout gate, not a blocker for writing the plan
-     itself.
+   - Resolution: not resolved by measurement (no Lightroom/Photos.app available to script
+     against this session) — resolved procedurally instead. `06-09-PLAN.md` Task 3 is a
+     blocking human checkpoint: the dono opens one written test file in whichever tool they
+     actually use day-to-day and confirms location shows up, before the plan can be
+     considered fully verified. This is the premise underlying D-075's choice of EXIF direct
+     over sidecar-only, so it gates before rollout, not after.
 
-2. **What should Phase 6's initial format-write allowlist be, given the real catalog has no
-   CR3/HEIC to test against right now (Pitfall 8)?**
+2. **(RESOLVED → D-09 in `06-CONTEXT.md`)** What should Phase 6's initial format-write
+   allowlist be, given the real catalog has no CR3/HEIC to test against right now (Pitfall 8)?
    - What we know: `{jpg, cr2, dng, tif}` are measurably testable today; CR3/HEIC are the
      formats with documented historical write-corruption risk and are exactly the ones not
      reachable without ARCH-01.
-   - What's unclear: whether the dono wants to (a) source a small manual sample of CR3/HEIC
-     files from an unregistered volume just for D-03's test, or (b) explicitly scope this
-     milestone to what's in the catalog and treat CR3/HEIC as sidecar-only until ARCH-01.
-   - Recommendation: surface this as an explicit choice to the dono during planning — not a
-     silent scope narrowing.
+   - Resolution: dono chose (via `AskUserQuestion` during discuss-phase, not silently
+     narrowed) to test only formats present in the real catalog today. CR3/HEIC are marked
+     "não testado" (not "reprovado") and route to the sidecar XMP fallback (EXIF-05) until a
+     testable sample exists — recorded as D-09.
 
-3. **Cleanup policy for exiftool's `_original` backup file (Pitfall 7)** — delete immediately
-   after verified success (my recommended synthesis), or retain until some explicit user action
-   clears audit history (closer to invariant 8's most conservative reading)?
-   - Recommendation: default to "delete after verified success, logged," but flag explicitly for
-     dono sign-off since it reconciles two upstream documents that disagreed.
+3. **(RESOLVED → `06-05-PLAN.md` executor design + `06-09-PLAN.md` Task 2 step 8)** Cleanup
+   policy for exiftool's `_original` backup file (Pitfall 7) — delete immediately after
+   verified success, or retain until explicit user action?
+   - Resolution: delete only after the tag-diff verification passes AND the file still opens
+     normally (the synthesis this document recommended). Made observable to the dono, not
+     just coded silently: `06-09-PLAN.md` Task 2 step 8 has the dono confirm `_original` is
+     absent after a successful write and present after a rejected/failed one, at the same
+     blocking checkpoint as Open Question 1. This is the de facto sign-off mechanism — the
+     dono can reject the behavior at that checkpoint if it doesn't match expectations.
 
 ## Environment Availability
 
