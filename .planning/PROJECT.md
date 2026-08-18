@@ -134,10 +134,9 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   geração de sugestões, 4,54s detecção de duplicatas — LANC-04); fluxo
   de onboarding do primeiro acervo (LANC-03) — defeito real de UAT
   (backdrop translúcido do `ModalCaminho` deixava texto sobrepor)
-  diagnosticado por screenshot e corrigido (`bg-black/95`), mas reteste
-  comportamental com usuário sem instrução pós-fix ainda pendente, ver
-  `05-HUMAN-UAT.md` — Validado na Fase 5, 2026-08-18 (LANC-03 com
-  ressalva)
+  diagnosticado por screenshot e corrigido (`bg-black/95`); reteste
+  comportamental com segunda pessoa sem instrução pós-fix confirmou
+  sucesso (chegou à grade populada) — Validado na Fase 5, 2026-08-18
 
 ### Active
 

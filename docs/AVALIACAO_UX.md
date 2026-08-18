@@ -1,3 +1,69 @@
+# Rodada de 2026-08-18 — reteste pós-fix (fase 5, LANC-03)
+
+**Chegou a uma grade populada.** Reteste da rodada anterior (2026-08-17),
+com uma segunda pessoa que nunca usou o app, depois do fix do backdrop
+(`bg-black/95`, commit `f820d1a`) — critério 3 da Fase 5 (D-06) atendido
+nesta rodada.
+
+## Método
+
+Testador: uma segunda pessoa, diferente da rodada anterior, sem
+participação na construção do app (perfil, não nome). Como o `.app`
+empacotado do Marco 1 foi construído antes do fix, e reconstruir o bundle
+nativo exigiria repetir o empacotamento do runtime PBS (~15-20min,
+indisponível nesta worktree), o reteste rodou o mesmo código-fonte
+corrigido (`webapp/dist` reconstruído, `bg-black/95` presente) servido
+pelo backend Python direto, aberto no Safari — mesmo motor de
+renderização (WebKit) do `WKWebView` do Tauri no macOS. Catálogo
+genuinamente vazio via `FOTOORG_DATA_DIR` descartável; pasta de fotos
+sintéticas separada para o teste (6 JPEGs gerados por
+`tests.fixtures.make_jpeg`, metade com GPS). Mesma frase única dita ao
+testador: "este app organiza fotos; use como quiser".
+
+Ressalva honesta, mesmo espírito das rodadas anteriores: a sessão foi
+conduzida pelo dono do produto, que relatou o resultado de volta no chat
+desta sessão de execução — este documento transcreve esse relato.
+
+## O que foi observado
+
+- O campo de caminho do `ModalCaminho` está legível agora — relato
+  literal do dono: "a entrada de dados agora está limpa possibilitando a
+  digitação da pasta". O bloqueador da rodada anterior (achado 1,
+  2026-08-17) está confirmado corrigido por uma segunda pessoa, não só
+  pelo diagnóstico técnico da rodada passada.
+- O testador chegou à grade populada — sucesso do critério 3.
+- Atrito relatado (não bloqueador): "um usuário normal pode não saber
+  onde estão as pastas" — a mesma observação da rodada anterior (achado
+  2, ausência de seletor de pasta navegável). O dono comentou "isto
+  deveria ter sido resolvido", mas o item já está no backlog separado
+  (`task_16e8effc`, picker de pasta navegável + gauge de importação,
+  retomado pelo próprio dono em outra sessão) — D-04/D-05 mantêm essa
+  reconstrução de fluxo fora do escopo de LANC-03; não é trabalho novo
+  desta rodada.
+
+## Achados classificados
+
+**1. Bloqueador da rodada de 2026-08-17 — confirmado corrigido.** Ver
+detalhe técnico na seção anterior; esta rodada é a confirmação
+comportamental que faltava, com uma segunda pessoa sem instrução.
+
+**2. Atrito / não-bloqueador — sem seletor de pasta navegável.** Mesmo
+achado 2 da rodada anterior, reafirmado por um segundo testador. Fora de
+escopo aqui, já em backlog.
+
+## Recomendação
+
+| Ordem | Item | Classificação | Esforço |
+|---|---|---|---|
+| 1 | Backdrop translúcido demais no `ModalCaminho` | bloqueador — corrigido e confirmado por reteste | — (feito) |
+| 2 | Seletor de pasta navegável (árvore de diretório) | atrito — confirmado por dois testadores, já no backlog do dono | M/G (backlogged) |
+
+LANC-03 atendido: critério 3 da Fase 5 confirmado com evidência
+comportamental de dois testadores reais (rodada 2026-08-17: travou;
+rodada 2026-08-18, pós-fix: chegou à grade).
+
+---
+
 # Rodada de 2026-08-17 — teste de primeira execução (fase 5, LANC-03)
 
 **Não chegou a uma grade populada sem documentação.** O teste travou no
