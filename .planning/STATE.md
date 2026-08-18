@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 7 em andamento (07-09 fechado — score de llm_pasta medido e travado)
-stopped_at: "Phase 7 Plan 09 executed — próximo: 07-10-PLAN.md"
+status: Fase 7 em andamento (07-10 Task 1 feita — docs; Task 2/3 pendentes por escolha do dono)
+stopped_at: "Phase 7 Plan 10 Task 1 executed — Task 2 (sessão real com chave) adiada pelo dono"
 last_updated: "2026-08-18T23:11:18.217Z"
 last_activity: "2026-08-18 — 07-09 fechado: scripts/medir_score_llm_pasta.py mediu o classificador de pasta contra verdade determinística do catálogo (mesmo payload/schema de produção). Dono rodou a medição real no próprio terminal (4 pastas de amostra, zero erros nos dois campos: categoria 2/2 acerto, cidade/país 2/2 recusa segura de D-06) e decidiu manter SCORES_REFERENCIA[\"llm_pasta\"] em 0.55 — agora medido (D-081), não mais PROVISÓRIO. docs/CONFIANCA.md documenta a origem nova. Amostra explicitamente preliminar (ARCH-01 deferido). GENAI-03 continua Pending — 07-10 reserva a marcação dos três requisitos GENAI para depois de checkpoint humano com evidência real."
 progress:
@@ -32,8 +32,8 @@ do score de llm_pasta).
 ## Current Position
 
 Phase: 7 — Classificação de pasta por GenAI (In Progress)
-Plan: 9/10 concluído — próximo: 07-10-PLAN.md (fecha a fase: docs de arquitetura/privacidade + checkpoint humano)
-Status: Fase 7 em andamento (07-09 fechado — score de llm_pasta medido e travado, D-081)
+Plan: 9/10 concluído, 07-10 Task 1/3 concluída — próximo: 07-10 Task 2 (sessão real de 10 itens com a chave do dono, servidor precisa subir com ANTHROPIC_API_KEY no ambiente)
+Status: docs/ARQUITETURA.md e docs/PRIVACIDADE.md documentam o recurso (commit 81f0553). Task 2 (checkpoint humano, 10 itens, evidência real incl. payload enviado) e Task 3 (fechar GENAI-01..03 em REQUIREMENTS.md) adiadas por escolha explícita do dono (2026-08-18) — não são blocker técnico, é agenda. GENAI-01..03 continuam Pending até a evidência real existir.
 Last activity: 2026-08-18 — 07-09 fechado: scripts/medir_score_llm_pasta.py mediu o classificador de pasta contra verdade determinística do catálogo, mesmo payload/schema de produção. Dono rodou a medição real (4 pastas de amostra, zero erros nos dois campos — categoria 2/2 acerto, cidade/país 2/2 recusa segura de D-06) e decidiu manter SCORES_REFERENCIA["llm_pasta"] em 0.55 — sai de PROVISÓRIO para medido (D-081). docs/CONFIANCA.md documenta a origem nova, distinguindo-a de `llm` (advisor de cluster) e `pasta` (parse determinístico). Amostra explicitamente preliminar (base pequena da Fase 7, ARCH-01 deferido). GENAI-03 continua Pending — 07-10 reserva a marcação dos três requisitos GENAI para depois de checkpoint humano com evidência real.
 
 Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 9/10 planos)
