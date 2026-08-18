@@ -186,6 +186,8 @@ None yet.
 
 - ~~Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido~~ — **resolvido em parte por D-077 (06-04b, 2026-08-18):** o dono escolheu allowlist byte a byte (`verificacao.reclassificar_deslocamentos_de_offset`), não a extensão incondicional de `TAGS_ESTRUTURAIS_ESPERADAS` cogitada em D-076. `.jpg`/`.cr2` remedidos e aprovados (20/20, 12/12 amostras). `.dng` continua reprovado — duas de suas tags de offset (tiles demais) não dão para verificar byte a byte com o dump padrão do exiftool, fica fail-safe. `.tif` continua reprovado por motivo sempre não relacionado a offset. `.dng`/`.tif`/`.cr3`/`.heic`/`.heif` seguem no fallback de sidecar XMP.
 
+- **Atenção para 06-05 (ExifWriteExecutor):** o gate de verificação da escrita real não pode chamar só `verificacao.diferenca()` — precisa chamar `reclassificar_deslocamentos_de_offset()` depois (mesmo padrão de `testar_amostra()` em `scripts/testar_escrita_exif.py`, usando o backup `<alvo>_original` do writer como "antes" byte a byte). Sem isso, toda escrita real em `.jpg`/`.cr2` reprova de novo por `IFD1:ThumbnailOffset`/similares — regressão silenciosa da allowlist que D-077 acabou de aprovar. Ver `06-04b-SUMMARY.md` § Next Phase Readiness.
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
