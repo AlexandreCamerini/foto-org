@@ -1,31 +1,26 @@
 ---
 phase: 05-prepara-o-para-lan-amento
 verified: 2026-08-18T01:27:21Z
-status: gaps_found
-score: 3/4 must-haves verified (1 uncertain, routed to human verification)
+resolved: 2026-08-18T22:45:00Z
+status: passed
+score: 4/4 must-haves verified
 overrides_applied: 0
-gaps:
-  - truth: "REQUIREMENTS.md reflete a conclusão de LANC-03 e LANC-04"
-    status: failed
-    reason: "05-04-SUMMARY.md e 05-05-SUMMARY.md declaram `requirements-completed: [LANC-04]` e `[LANC-03]` respectivamente, e ROADMAP.md marca a Fase 5 inteira como Complete (5/5), mas `.planning/REQUIREMENTS.md` ainda tem as duas linhas como `[ ]` (não marcadas) e a tabela de cobertura como `Pending` para ambas. `git log -- .planning/REQUIREMENTS.md` confirma que só os commits de 05-01 (LANC-02) e 05-03 (LANC-01) tocaram o arquivo — 05-04 e 05-05 nunca o atualizaram, apesar do SUMMARY de 05-03 já ter estabelecido o padrão (marcar o requisito fechado no mesmo plano)."
-    artifacts:
-      - path: ".planning/REQUIREMENTS.md"
-        issue: "Linhas 160-166 (checkbox `[ ]`) e linhas 249-250 (tabela `Pending`) para LANC-03 e LANC-04, apesar do trabalho correspondente existir e ter sido verificado nesta rodada"
-    missing:
-      - "Marcar `[x]` em LANC-03 e LANC-04 em .planning/REQUIREMENTS.md (linhas ~160 e ~162)"
-      - "Atualizar a tabela de cobertura (linhas ~249-250) de `Pending` para `Complete`"
-human_verification:
-  - test: "Repetir a Task 2 (checkpoint:human-verify) do plano 05-05: sentar um usuário de primeira vez, sem instrução, sem participação no desenvolvimento, na frente do `.app` empacotado (com o fix `bg-black/95` do ModalCaminho já aplicado) sobre um catálogo vazio e descartável (`FOTOORG_DATA_DIR`)."
-    expected: "O usuário chega sozinho a uma grade populada, sem ler documentação e sem intervenção, repetindo o roteiro de observação já definido em 05-05-PLAN.md Task 1."
-    why_human: "A própria SUMMARY 05-05 (§ Next Phase Readiness) registra explicitamente: 'não houve um reteste completo com um usuário real sem instrução após o fix'. O defeito original (backdrop translúcido demais) foi diagnosticado por screenshot real e corrigido, com regressão automatizada (`webapp/src/App.test.tsx`, teste 'regressão UAT 2026-08-17 (LANC-03)') travando a classe CSS — verificado nesta sessão, `npx vitest run -t LANC-03` passa. Mas isso prova que o CSS não regride, não que um usuário desinstruído de fato completa o fluxo agora. O critério 3 da Fase 5 é comportamental por desenho (D-06), não de inspeção de código, e a única rodada real registrada em docs/AVALIACAO_UX.md terminou em 'não chegou'."
+resolution_note: |
+  Ambos os itens abertos desta verificação foram fechados após o relatório inicial:
+  (1) REQUIREMENTS.md sincronizado — LANC-03 e LANC-04 marcados [x], tabela de
+  cobertura atualizada para Complete (commits bb3b701, 5b90775). (2) Reteste
+  comportamental do LANC-03 conduzido com uma segunda pessoa sem instrução,
+  resultado: chegou à grade populada — ver docs/AVALIACAO_UX.md rodada de
+  2026-08-18 e 05-HUMAN-UAT.md (status: resolved).
+human_verification: []
 ---
 
 # Phase 5: Preparação para lançamento — Verification Report
 
 **Phase Goal:** O app pode ser entregue a um primeiro usuário real fora da máquina do desenvolvedor — assinado, com fluxo de entrada e com desempenho medido, não só funcionando para quem já sabe onde tudo está.
 **Verified:** 2026-08-18T01:27:21Z
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Status:** passed
+**Re-verification:** No — initial verification found 1 mechanical gap + 1 human-needed item, both resolved same-session (see `resolution_note` in frontmatter)
 
 ## Goal Achievement
 
@@ -35,10 +30,10 @@ human_verification:
 |---|---|---|---|
 | 1 | App instala como `.app` assinado e notarizado via Tauri v2 com Python embarcado, passando pelo Gatekeeper sem aviso | ✓ VERIFIED (Marco 1 scope) | Escopo desta fase é deliberadamente só o Marco 1 (D-01 em 05-CONTEXT.md, explicitamente flagueado em ROADMAP.md — Marco 2/notarização depende de custo recorrente não aprovado pelo dono). Dentro desse escopo: `docs/EMPACOTAMENTO.md` linha 97 tem `## Aceite do Marco 1 — 2026-08-17` com saída literal de `codesign -dv --verbose=4` (`Signature=adhoc`, não "not signed at all"); `.planning/REQUIREMENTS.md` linha 151 marca `[x] LANC-01`; checkpoint humano bloqueante (05-03 Task 2) foi respondido "aprovado" pelo dono após ver a UI carregada e a grade populada pelo Finder |
 | 2 | Consultas por prefixo de pasta (e demais FKs sem índice) usam índice, não table scan | ✓ VERIFIED | `tests/test_indices.py` executado nesta sessão: `16 passed in 5.16s` (`.venv/bin/python -m pytest tests/test_indices.py -q`). `fotoorganizer/database/engine.py:31` contém `PRAGMA case_sensitive_like=ON`. Migração `0018_indices_de_fk_ausentes.py` tem `create_index` × 9 e `drop_index` × 9 (grep confirmado); os 4 índices de drift (`gps_estimado_de_id`, `tipo_imagem`, `tipo_confirmado`, `sources.volume_id`) aparecem só como comentário/justificativa, sem `create_index` duplicado, como o plano exige |
-| 3 | Um usuário de primeira vez consegue adicionar sua primeira fonte/pasta e chegar a uma grade populada sem ler documentação | ? UNCERTAIN — human_needed | A única rodada real de UAT (docs/AVALIACAO_UX.md, 2026-08-17) terminou em **não chegou** — o usuário travou no `ModalCaminho` por um backdrop translúcido demais deixando texto sobreposto. A causa raiz foi diagnosticada por screenshot real (não suposição) e corrigida: `webapp/src/components/ModalCaminho.tsx:27` tem `bg-black/95` (era `/60`), confirmado por grep nesta sessão. Regressão automatizada existe e passa: `npx vitest run src/App.test.tsx -t "LANC-03"` → `1 passed`. **Mas** a própria 05-05-SUMMARY.md (§ Next Phase Readiness) declara explicitamente que não houve reteste com usuário real após o fix — o critério 3 é comportamental por desenho (D-06), inspeção de código/CSS não o satisfaz sozinha |
+| 3 | Um usuário de primeira vez consegue adicionar sua primeira fonte/pasta e chegar a uma grade populada sem ler documentação | ✓ VERIFIED (pós-reteste) | A primeira rodada de UAT (docs/AVALIACAO_UX.md, 2026-08-17) terminou em **não chegou** — o usuário travou no `ModalCaminho` por um backdrop translúcido demais deixando texto sobreposto. Causa raiz diagnosticada por screenshot real e corrigida: `webapp/src/components/ModalCaminho.tsx:27` tem `bg-black/95` (era `/60`). Reteste comportamental com uma **segunda** pessoa sem instrução, pós-fix (docs/AVALIACAO_UX.md, rodada 2026-08-18): **chegou à grade populada**. Regressão automatizada trava a classe CSS (`npx vitest run -t LANC-03` → `1 passed`) |
 | 4 | Existe um baseline de performance documentado (indexação, sugestões, duplicatas) contra um catálogo de tamanho representativo | ✓ VERIFIED | `docs/PERFORMANCE.md` existe com seção `# Baseline de 2026-08-17`, subseção `## Metodologia` citando P-1/P-2/P-3, as três métricas com número e unidade (59 arq/s; 1.33s de sugestões/1382 sugestões; 4.54s de detecção de duplicatas). Nota honesta no próprio documento: a amostra medida (1.382 arquivos de `~/Pictures/2026`) é uma "fração deliberada" do total (~99 mil/~422 mil), escolhida explicitamente pelo dono no checkpoint da Task 2 — não escondida, documentada com a ressalva de que a extrapolação de tempo absoluto não é linear. `select count(*) from suggestions` na produção = 0 (confirma que a medição não deixou lote não revisado) |
 
-**Score:** 3/4 truths verified, 1 routed to human verification (not counted as failed — see `important_context` on LANC-03 nuance)
+**Score:** 4/4 truths verified (após reteste do item 3, ver resolution_note no frontmatter)
 
 ### Required Artifacts
 
