@@ -93,9 +93,16 @@ _Nota: como em 07-04, a Task 3 é `tdd="true"` mas os testes foram escritos depo
 - **Files modified:** `webapp/src/components/ClassificacaoPasta.test.tsx`
 - **Commit:** `5b34119`
 
+**2. [Rule 1 - bug de contrato] `py-10` (40px) fora da escala de espaçamento do UI-SPEC**
+- **Found during:** revisão pré-conclusão (advisor), após o commit de docs do plano.
+- **Issue:** três estados de preenchimento (`Carregando…`, passo 3 "Rodando", marcador mínimo de revisão/concluído) usavam `py-10` (40px). `07-UI-SPEC.md` § Spacing Scale lista só 4/8/12/16/24px para esta fase e exclui explicitamente 32/48/64px ("dense modal wizard... not a marketing layout") — 40px estava além até do teto já excluído. O grep de aceite da Task 2 só cobria cor inventada (`text-\[#`/`bg-\[#`), não espaçamento, então passou despercebido até a revisão.
+- **Fix:** Trocado por `py-6` (24px, token `lg` já em uso nos passos 0 e de erro) nos três locais. Sem mudança de comportamento — `tsc`/`vitest`/`build` seguem verdes.
+- **Files modified:** `webapp/src/components/ClassificacaoPasta.tsx`
+- **Commit:** `6e09dd8`
+
 ---
 
-**Total deviations:** 1 auto-fixed (Rule 1, erro de tipo puro — nenhuma mudança de comportamento).
+**Total deviations:** 2 auto-fixados (ambos Rule 1 — um erro de tipo puro, um valor de espaçamento fora do UI-SPEC. Nenhuma mudança de comportamento).
 **Impact on plan:** Nenhum.
 
 ## Issues Encountered
