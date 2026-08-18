@@ -39,6 +39,8 @@ from fotoorganizer.classification.templates import (
 )
 from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
+from fotoorganizer.exif_write.executor import ExifWriteExecutor
+from fotoorganizer.exif_write.planner import ExifWritePlanner
 from fotoorganizer.geolocation.escala import metros_por_grau
 from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.grouping.correlacao import (
@@ -61,6 +63,7 @@ from fotoorganizer.models import (
 from fotoorganizer.operations import OperationExecutor, OperationPlanner
 from fotoorganizer.repositories import (
     DuplicateRepository,
+    ExifWriteRepository,
     MediaRepository,
     OperationRepository,
     SettingsRepository,
@@ -147,6 +150,14 @@ class PlanoBody(BaseModel):
 
 class EditarDestinoBody(BaseModel):
     destino: str
+
+
+class ExecutarExifBody(BaseModel):
+    # `None` preserva a seleção já persistida (D-02); lista vazia zera a
+    # seleção — o endpoint distingue os dois casos, não confunde "não
+    # mandou nada" com "mandou lista vazia" (mesma semântica de
+    # `aplicar_selecao`).
+    itens: list[int] | None = None
 
 
 class TemplateBody(BaseModel):
@@ -449,6 +460,9 @@ def create_app(
     settings_repo = SettingsRepository(session_factory)
     planner = OperationPlanner(session_factory)
     executor = OperationExecutor(session_factory)
+    exif_repo = ExifWriteRepository(session_factory)
+    exif_planner = ExifWritePlanner(session_factory)
+    exif_executor = ExifWriteExecutor(session_factory)
     thumb_cache = ThumbnailCache(settings.cache_dir)
     preview_dir = settings.cache_dir / "previews"
     jobs = JobManager(settings, session_factory)
@@ -1280,6 +1294,123 @@ def create_app(
         if not jobs.iniciar_execucao(plan_id):
             raise HTTPException(409, "já existe um trabalho em andamento")
         return jobs.estado()
+
+    # -- escrita EXIF de localização (plano → dry-run → seleção → execução,
+    # D-075) --------------------------------------------------------------
+    def _plano_exif_json(row) -> dict:
+        return {
+            "id": row.id,
+            "nome": row.nome,
+            "status": row.status.value,
+            "dry_run_em": row.dry_run_em.isoformat() if row.dry_run_em else None,
+            "criado_em": row.criado_em.isoformat(),
+            "total_itens": row.total_itens,
+            "prontos": row.prontos,
+            "problemas": row.problemas,
+            "campos_a_gravar": row.campos_a_gravar,
+            "sidecars": row.sidecars,
+            "nao_suportados": row.nao_suportados,
+            "sincronizados": row.sincronizados,
+            "gravados": row.gravados,
+            "com_erro": row.com_erro,
+            "executavel": row.executavel,
+        }
+
+    def _item_exif_json(row) -> dict:
+        # `campos` agrupa os três campos num sub-objeto: a UI renderiza os
+        # três como chips irmãos (06-UI-SPEC.md), e um objeto plano de nove
+        # chaves espalharia a mesma estrutura por três lugares em vez de um.
+        def _campo(valor, status, motivo) -> dict:
+            return {"valor": valor, "status": status.value, "motivo": motivo}
+
+        return {
+            "id": row.id,
+            "media_id": row.media_id,
+            "origem": row.origem,
+            "nome": Path(row.origem).name,
+            "incluido": row.incluido,
+            "formato_suportado": row.formato_suportado,
+            "motivo_nao_suportado": row.motivo_nao_suportado,
+            "sidecar_destino": row.sidecar_destino,
+            "pasta_sincronizada": row.pasta_sincronizada,
+            "erro": row.erro,
+            "backup_original": row.backup_original,
+            "campos": {
+                "gps": _campo(
+                    list(row.valor_gps) if row.valor_gps else None,
+                    row.status_gps, row.motivo_gps,
+                ),
+                "cidade": _campo(row.valor_cidade, row.status_cidade, row.motivo_cidade),
+                "pais": _campo(row.valor_pais, row.status_pais, row.motivo_pais),
+            },
+        }
+
+    @app.get("/api/exif")
+    def listar_planos_exif() -> list[dict]:
+        return [_plano_exif_json(p) for p in exif_repo.listar_planos()]
+
+    @app.post("/api/exif/plano")
+    def criar_plano_exif() -> dict:
+        """Sem corpo de requisição: o escopo é global e a escrita é
+        in-place, não há raiz de destino a escolher (06-UI-SPEC.md "Entry
+        point")."""
+        plan_id = exif_planner.criar_plano_exif()
+        if plan_id is None:
+            raise HTTPException(
+                409,
+                "nada a gravar — todo arquivo catalogado já tem "
+                "localização preenchida ou não tem valor inferido",
+            )
+        return _plano_exif_json(exif_repo.plano(plan_id))
+
+    @app.get("/api/exif/{plan_id}")
+    def detalhe_plano_exif(plan_id: int) -> dict:
+        plano = exif_repo.plano(plan_id)
+        if plano is None:
+            raise HTTPException(404, "plano não encontrado")
+        return {
+            **_plano_exif_json(plano),
+            "itens": [_item_exif_json(item) for item in exif_repo.itens(plan_id)],
+        }
+
+    @app.post("/api/exif/{plan_id}/dry-run")
+    def dry_run_plano_exif(plan_id: int) -> dict:
+        """Só lê: confere o que está vazio no arquivo agora, sem escrever
+        nada."""
+        if exif_repo.plano(plan_id) is None:
+            raise HTTPException(404, "plano não encontrado")
+        return exif_executor.dry_run(plan_id)
+
+    @app.post("/api/exif/{plan_id}/executar")
+    def executar_plano_exif(plan_id: int, body: ExecutarExifBody) -> dict:
+        plano = exif_repo.plano(plan_id)
+        if plano is None:
+            raise HTTPException(404, "plano não encontrado")
+        if plano.dry_run_em is None:
+            raise HTTPException(409, "rode o dry-run antes de gravar")
+        # A seleção (D-02) é persistida ANTES de o job começar — sobrevive
+        # à troca de thread e fica registrada na auditoria.
+        incluidos = exif_executor.aplicar_selecao(plan_id, body.itens)
+        if incluidos == 0:
+            raise HTTPException(409, "nenhum item selecionado para gravar")
+        if not jobs.iniciar_escrita_exif(plan_id):
+            raise HTTPException(409, "já existe um trabalho em andamento")
+        return jobs.estado()
+
+    @app.get("/api/exif/{plan_id}/auditoria")
+    def auditoria_plano_exif(plan_id: int) -> list[dict]:
+        if exif_repo.plano(plan_id) is None:
+            raise HTTPException(404, "plano não encontrado")
+        return [
+            {
+                "id": linha.id,
+                "quando": linha.quando.isoformat(),
+                "acao": linha.acao,
+                "resultado": linha.resultado,
+                "detalhe": linha.detalhe,
+            }
+            for linha in exif_repo.auditoria(plan_id)
+        ]
 
     # -- trabalhos em background (scan/importação) ---------------------------
     @app.post("/api/scan")
