@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-04 concluído (4/9)
-stopped_at: Plano 06-04 (teste empírico de escrita EXIF por formato, D-03/D-04) concluído — allowlist medida vazia, D-076 registrada
-last_updated: "2026-08-18T12:33:08.262Z"
-last_activity: 2026-08-18 — 06-04-PLAN.md executado (scripts/testar_escrita_exif.py, allowlist medida, D-076)
+status: Fase 6 em execução — plano 06-04 concluído (4/9), correção 06-04b (D-077) concluída
+stopped_at: "Correção de meio-de-fase 06-04b (D-077) concluída — allowlist byte a byte, jpg/cr2 aprovados; próximo: 06-05"
+last_updated: "2026-08-18T13:01:08.484Z"
+last_activity: "2026-08-18 — correção 06-04b executada (D-077: allowlist byte a byte para deslocamento de offset — jpg/cr2 remedidos e aprovados, dng/tif continuam reprovados)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 04 de 9 concluído — próximo: 06-05 (ExifWriteExecutor: dry-run autoritativo, escrita verificada, falha parcial e backup)
-Status: Fase 6 em execução — plano 06-04 concluído (4/9)
-Last activity: 2026-08-18 — 06-04-PLAN.md executado (scripts/testar_escrita_exif.py, allowlist medida, D-076)
+Plan: 04 de 9 concluído + correção 06-04b (D-077) aplicada — próximo: 06-05 (ExifWriteExecutor: dry-run autoritativo, escrita verificada, falha parcial e backup)
+Status: Fase 6 em execução — plano 06-04 concluído (4/9), correção 06-04b (D-077) concluída
+Last activity: 2026-08-18 — correção 06-04b executada (D-077: allowlist byte a byte para deslocamento de offset — jpg/cr2 remedidos e aprovados, dng/tif continuam reprovados)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -55,10 +55,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P02 | 9min | 3 tasks | 6 files |
 | 06 P03 | 14min | 2 tasks | 2 files |
 | 06 P04 | 55min | 2 tasks | 6 files |
+| 06 P04b (correção D-077) | ~90min | 5 tasks | 6 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-01 (24min), 06-02 (9min), 06-03 (14min), 06-04 (55min)
+- Last 5 plans: 06-01 (24min), 06-02 (9min), 06-03 (14min), 06-04 (55min), 06-04b (~90min, correção)
 - Trend: -
 
 *Updated after each plan completion*
@@ -140,6 +141,7 @@ Recent decisions affecting current work:
   plano, não o comportamento fim-a-fim (mesma disciplina de 06-01/06-02).
 
 - [Phase 06-04]: D-076: allowlist medida contra o acervo real — nenhum formato aprovou (jpg/cr2/dng/tif reprovam por deslocar offset de bloco binário pré-existente ao inserir metadado; tif também por avisos novos). FORMATOS_APROVADOS vira frozenset() vazio, sidecar XMP é o único caminho de escrita hoje. Estender TAGS_ESTRUTURAIS_ESPERADAS fica como decisão futura do dono, não decidida aqui. — Byte a byte da miniatura embutida idêntico antes/depois confirma que o deslocamento é relocação, não corrupção — mas mudar a allowlist anti-mascaramento (EXIF-04) é política de segurança fora do escopo de arquivo deste plano.
+- [Phase 06-04b]: D-077: dono escolheu allowlist byte a byte (AskUserQuestion) sobre o achado em aberto de D-076 — jpg/cr2 remedidos e aprovados (20/20, 12/12), dng/tif continuam reprovados por motivos distintos (dng: parsing de offset multi-tile; tif: causa não relacionada a offset, inalterada). verificacao.py ganha esperadas_condicionais/reclassificar_deslocamentos_de_offset, categoria distinta de TAGS_ESTRUTURAIS_ESPERADAS, fail-safe em toda borda.
 
 ### Pending Todos
 
@@ -182,7 +184,7 @@ None yet.
   reconciliação de boot para `OperationPlan.EXECUTANDO` travado. Ver
   `.planning/codebase/CONCERNS.md`.
 
-- Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido — D-076 (06-04): jpg/cr2/dng/tif reprovam por deslocarem offset de bloco binário pré-existente (miniatura/MPF/RAW) ao inserir metadado novo; verificado byte a byte que é relocação, não corrupção. Estender verificacao.TAGS_ESTRUTURAIS_ESPERADAS para reconhecer isso como andaime é candidato plausível, mas é mudança de política de segurança anti-mascaramento (EXIF-04) — decisão do dono, não tomada pelo executor. Até lá, todo arquivo cai no fallback de sidecar XMP (já funcional).
+- ~~Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido~~ — **resolvido em parte por D-077 (06-04b, 2026-08-18):** o dono escolheu allowlist byte a byte (`verificacao.reclassificar_deslocamentos_de_offset`), não a extensão incondicional de `TAGS_ESTRUTURAIS_ESPERADAS` cogitada em D-076. `.jpg`/`.cr2` remedidos e aprovados (20/20, 12/12 amostras). `.dng` continua reprovado — duas de suas tags de offset (tiles demais) não dão para verificar byte a byte com o dump padrão do exiftool, fica fail-safe. `.tif` continua reprovado por motivo sempre não relacionado a offset. `.dng`/`.tif`/`.cr3`/`.heic`/`.heif` seguem no fallback de sidecar XMP.
 
 ## Deferred Items
 
@@ -198,8 +200,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T12:33:08.251Z
-Stopped at: Plano 06-04 (teste empírico de escrita EXIF por formato, D-03/D-04) concluído — allowlist medida vazia, D-076 registrada
+Last session: 2026-08-18T13:00:03.688Z
+Stopped at: Correção de meio-de-fase 06-04b (D-077) concluída — allowlist byte a byte, jpg/cr2 aprovados; próximo: 06-05
 Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-05-PLAN.md
 
 ## Operator Next Steps
