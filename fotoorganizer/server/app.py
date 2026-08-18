@@ -37,6 +37,7 @@ from fotoorganizer.classification.templates import (
     TEMPLATE_PADRAO,
     render_destino,
 )
+from fotoorganizer.classification.location_advisor import ClassificadorDePasta
 from fotoorganizer.classification.tipo_imagem import TIPOS as TIPOS_IMAGEM
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.exif_write.executor import ExifWriteExecutor
@@ -73,6 +74,11 @@ from fotoorganizer.repositories.inventario import funil as levantar_funil, levan
 from fotoorganizer.repositories.media import ALCANCES, LACUNAS, MediaFilters
 from fotoorganizer.repositories.suggestions import SuggestionFilters, SuggestionRow
 from fotoorganizer.security.paths import CaminhoInvalido, caminho_relativo_seguro
+from fotoorganizer.server.genai_pasta import (
+    ClassificacaoIndisponivel,
+    RecursoDesligado,
+    SessaoDeClassificacaoDePasta,
+)
 from fotoorganizer.server.jobs import JobManager
 from fotoorganizer.sources.disponibilidade import verificar
 from fotoorganizer.sources.reapontar import (
@@ -162,6 +168,17 @@ class ExecutarExifBody(BaseModel):
 
 class TemplateBody(BaseModel):
     template: str
+
+
+class ConfigGenaiPastaBody(BaseModel):
+    # Grava só o opt-in PRÓPRIO do recurso (classificacao_pasta_genai) —
+    # nunca a chave mestra servicos_externos, que fica fora do alcance da
+    # UI por desenho (D-080).
+    habilitado: bool
+
+
+class PastasGenaiPastaBody(BaseModel):
+    pastas: list[str]
 
 
 # Fase 10: nenhum placeholder novo além destes — ver docstring de
@@ -419,8 +436,15 @@ def _enquadramento(pontos: list[dict]) -> dict:
 
 
 def create_app(
-    settings: Settings, session_factory: sessionmaker[Session]
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+    *,
+    classificador_pasta_genai: ClassificadorDePasta | None = None,
 ) -> FastAPI:
+    """`classificador_pasta_genai` é só para teste — injeta um
+    `ClassificadorDePasta` falso no construtor de
+    `SessaoDeClassificacaoDePasta` sem precisar de rede real (Fase 7,
+    plano 07-04). Em produção fica `None` e o serviço resolve sozinho."""
     app = FastAPI(title="Foto Organizer", version=__version__)
 
     @app.middleware("http")
@@ -466,6 +490,9 @@ def create_app(
     thumb_cache = ThumbnailCache(settings.cache_dir)
     preview_dir = settings.cache_dir / "previews"
     jobs = JobManager(settings, session_factory)
+    genai_pasta = SessaoDeClassificacaoDePasta(
+        settings, session_factory, classificador=classificador_pasta_genai
+    )
 
     # -- status e fontes ---------------------------------------------------
     @app.get("/api/status")
@@ -1516,6 +1543,56 @@ def create_app(
                 await asyncio.sleep(0.5)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    # -- classificação de pasta por GenAI (fase 7) ---------------------------
+    @app.get("/api/genai-pasta/config")
+    def obter_config_genai_pasta() -> dict:
+        return genai_pasta.config()
+
+    @app.put("/api/genai-pasta/config")
+    def salvar_config_genai_pasta(body: ConfigGenaiPastaBody) -> dict:
+        try:
+            return genai_pasta.habilitar(body.habilitado)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))  # genai_pasta: mestre desligado
+
+    @app.get("/api/genai-pasta/candidatas")
+    def candidatas_genai_pasta() -> list[dict]:
+        try:
+            return genai_pasta.candidatas()
+        except RecursoDesligado as exc:
+            raise HTTPException(409, str(exc))  # genai_pasta: gate fechado
+
+    @app.post("/api/genai-pasta/estimar-custo")
+    def estimar_custo_genai_pasta(body: PastasGenaiPastaBody) -> dict:
+        try:
+            return genai_pasta.estimar_custo(body.pastas)
+        except RecursoDesligado as exc:
+            raise HTTPException(409, str(exc))  # genai_pasta: gate fechado
+
+    @app.post("/api/genai-pasta/rodar")
+    def rodar_genai_pasta(body: PastasGenaiPastaBody) -> dict:
+        try:
+            return genai_pasta.rodar(body.pastas)
+        except RecursoDesligado as exc:
+            raise HTTPException(409, str(exc))  # genai_pasta: gate fechado
+        except ClassificacaoIndisponivel as exc:
+            # Never-crash de ponta a ponta: a UI monta a cópia de erro do
+            # UI-SPEC a partir de `detail` — o servidor continua
+            # respondendo ao pedido seguinte normalmente.
+            motivo = (
+                f"Não foi possível classificar: {exc}. Nenhum dado foi "
+                "perdido — tente novamente quando quiser."
+            )
+            raise HTTPException(502, motivo)
+
+    @app.get("/api/genai-pasta/propostas")
+    def propostas_genai_pasta() -> list[dict]:
+        return genai_pasta.propostas_pendentes()
+
+    @app.post("/api/genai-pasta/aprovar")
+    def aprovar_genai_pasta(body: PastasGenaiPastaBody) -> dict:
+        return genai_pasta.aprovar(body.pastas)
 
     # -- frontend estático -----------------------------------------------------
     if _WEBAPP_DIST.is_dir():
