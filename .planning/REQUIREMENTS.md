@@ -107,4 +107,37 @@ forma do GenAI, formato do índice de saúde) confirmadas via
 
 ## Traceability
 
-<!-- Preenchido pelo roadmapper ao mapear requisitos → fases. -->
+Mapeado pelo roadmapper em 2026-08-18. Cobertura: 16/16 requisitos v2.0 →
+exatamente uma fase cada, sem órfão e sem duplicata. Detalhe de cada fase
+em `.planning/ROADMAP.md` § Phase Details.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| EXIF-01 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-02 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-03 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-04 | Phase 6 — Escrita EXIF de localização | Pending |
+| GENAI-01 | Phase 7 — Classificação de pasta por GenAI | Pending |
+| GENAI-02 | Phase 7 — Classificação de pasta por GenAI | Pending |
+| GENAI-03 | Phase 7 — Classificação de pasta por GenAI | Pending |
+| PICKER-01 | Phase 8 — Picker nativo + progresso de importação | Pending |
+| PICKER-02 | Phase 8 — Picker nativo + progresso de importação | Pending |
+| SIDEBAR-01 | Phase 9 — Sidebar navegável | Pending |
+| SIDEBAR-02 | Phase 9 — Sidebar navegável | Pending |
+| CONF-01 | Phase 10 — Confiança como eixo + índice de saúde | Pending |
+| CONF-02 | Phase 10 — Confiança como eixo + índice de saúde | Pending |
+| CORR-01 | Phase 11 — Motor de corroboração generalizado | Pending |
+| CORR-02 | Phase 11 — Motor de corroboração generalizado | Pending |
+| CORR-03 | Phase 11 — Motor de corroboração generalizado | Pending |
+| LEARN-01 | — (v3+) | Deferred — depende de CONF e CORR existirem |
+| ARCH-01 | — (v3+) | Deferred — pendente de forma e aprovação do dono |
+
+### Nota de refinamento (EXIF-03 × D-075)
+
+D-075 escreve "hash antes/depois de cada escrita". EXIF-03 refina para
+**diff completo de tags** antes/depois: a escrita EXIF é mutação
+intencional do arquivo, então o hash do arquivo inteiro *tem* que mudar e
+não serve como critério de aprovação. O hash continua registrado como fato
+de auditoria; a verificação que aprova a escrita é a de tags. Refinamento
+de forma, não de escopo — o rigor de `operations/` que D-075 exige
+permanece.

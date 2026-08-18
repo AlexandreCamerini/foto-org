@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localizacao real e evidencia expandida
-status: planning
-last_updated: "2026-08-18T03:18:30.570Z"
+status: roadmapped
+last_updated: "2026-08-18T04:05:00.000Z"
 last_activity: 2026-08-18
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,17 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Toda sugestão é auditável até a evidência que a gerou;
 nenhuma operação física acontece sem revisão humana e dry-run.
-**Current focus:** Milestone complete
+**Current focus:** v2.0 — Fases 6-11 mapeadas; próximo passo é planejar a
+Fase 6 (escrita EXIF de localização).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 6 — Escrita EXIF de localização (não iniciada)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-08-18 — Milestone v2.0 started
+Status: Roadmap v2.0 escrito, nenhuma fase planejada em detalhe
+Last activity: 2026-08-18 — ROADMAP.md do milestone v2.0 criado (fases 6-11)
+
+Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
 ## Performance Metrics
 
@@ -64,6 +67,38 @@ Decisions are logged in PROJECT.md Key Decisions table (sample of the
 
 Recent decisions affecting current work:
 
+- Ordem das fases v2.0 fixada pelo dono na discussão de
+  `/gsd:new-milestone`: EXIF → GenAI → Picker → Sidebar → Confiança →
+  Corroboração. Não reordenar sem sinalizar. Coincide com a única troca
+  que a pesquisa recomendava (Picker antes de Sidebar, por conflito de
+  arquivo).
+
+- D-075 autoriza escrita EXIF de localização em campo vazio (revoga parte
+  do invariante 7). EXIF-03 refina "hash antes/depois" de D-075 para
+  **diff de tags** antes/depois — hash de arquivo inteiro muda por
+  construção numa mutação intencional. Ver nota em REQUIREMENTS.md §
+  Traceability.
+
+- GenAI de pasta é **interativa por sessão** (custo confirmado antes de
+  rodar), não varredura em lote — fecha a lacuna "batch vs. síncrono" da
+  pesquisa. Modelo é **Sonnet 5, nunca Haiku** (precedente D-059/D-060;
+  entrada esparsa aumenta risco de alucinação).
+
+- Índice de saúde é **distribuição por dimensão** (% alta em localização,
+  data, categoria + bucket "sem evidência"), nunca score único — score
+  combinado violaria o modelo elo-mais-fraco de D-017 um nível acima
+  (classe de bug que já vazou em D-071).
+
+- Progresso de importação continua **linear** com granularidade extra
+  (taxa, ETA, contagem) — gauge radial descartado explicitamente pelo
+  dono.
+
+- Corroboração generalizada aterrissa **estreita**, direto em
+  `grouping/correlacao.py`; abstração compartilhada só com segundo
+  consumidor real. Campo categórico usa correspondência exata, nunca
+  limiar fuzzy. Nenhum bônus de confiança sem medição própria contra
+  acervo real (a calibração de GPS de D-074 não transfere por analogia).
+
 - Roadmap scope: mapa do lugar estimado e demais itens 1-4 do backlog v2+
   do `docs/ROADMAP.md` já estavam implementados (confirmado via
   D-031/032/033/034/065 + implementação de templates 2026-08-02) — não
@@ -83,6 +118,23 @@ Recent decisions affecting current work:
 None yet.
 
 ### Blockers/Concerns
+
+- **Fase 11 é a de maior risco de regressão do milestone**: toca o
+  comportamento de herança de GPS já calibrado e medido por D-074
+  (40.678 fotos, cobertura 91,1%). Critério 5 da fase exige provar
+  que o GPS sai idêntico.
+
+- **Fases 7, 10 e 11 dependem de catálogo populado para medir.**
+  `catalog.db` de produção foi zerado em 2026-08-17 e hoje só tem
+  `~/Pictures/2026` (1.382 arquivos). Medição de custo do GenAI,
+  baseline de performance do filtro de confiança e calibração dos
+  comparadores de corroboração precisam de uma varredura completa antes.
+
+- **Lacunas de pesquisa a fechar antes/durante a Fase 6** (flagadas em
+  `research/SUMMARY.md`, confiança MÉDIA e de fonte externa): confiabilidade
+  de escrita em CR3/HEIC e comportamento de iCloud Drive/Dropbox sob
+  rename atômico do exiftool. Verificar contra a distribuição real de
+  formatos do acervo antes de fechar escopo da fase.
 
 - `catalog.db` de produção foi zerado em 2026-08-16 (backup em
   `catalog-antes-do-reset-20260816-013503.db`); nova varredura completa
@@ -109,11 +161,13 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-17T16:53:03.039Z
-Stopped at: Phase 5 context gathered
-ingest de 25 documentos; nenhuma fase planejada em detalhe ainda.
-Resume file: .planning/phases/05-prepara-o-para-lan-amento/05-CONTEXT.md
+Last session: 2026-08-18
+Stopped at: Roadmap v2.0 escrito — 6 fases (6-11), 16/16 requisitos mapeados.
+Resume file: .planning/ROADMAP.md
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Planejar a primeira fase com `/gsd:plan-phase 6`
+- Fases 6, 7, 8, 9 e 10 estão marcadas com `UI hint` no ROADMAP —
+  considerar `/gsd:ui-phase` antes de planejar cada uma (a da Fase 7 é
+  estreita: só a confirmação de custo)

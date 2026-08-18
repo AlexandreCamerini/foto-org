@@ -2764,6 +2764,13 @@ inteiro passa a ser contado numa passada só
   - Precisa do mesmo pipeline de `operations/`: plano dry-run revisado
     antes de aprovação explícita, hash antes/depois de cada escrita,
     audit log completo. Não é uma escrita direta sem revisão.
+  - Refinamento de forma feito no roadmap da Fase 6 (2026-08-18): "hash
+    antes/depois" aqui quer dizer fato de auditoria, não critério de
+    aprovação — a escrita é mutação intencional, então o hash do arquivo
+    inteiro sempre muda. O critério que aprova é diff completo de tags
+    (as tags de localização esperadas mudaram e nenhuma outra tag mudou).
+    O rigor exigido por este parágrafo continua o mesmo; só a métrica de
+    verificação foi precisada.
   - Sidecar XMP deixa de ser o único caminho, mas continua disponível como
     alternativa não-destrutiva quando o dono preferir não tocar o
     original.
