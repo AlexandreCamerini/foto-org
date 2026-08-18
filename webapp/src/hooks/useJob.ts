@@ -141,6 +141,10 @@ export function useJob() {
     detectarDuplicatas: () => disparar("/api/duplicatas/detectar", {}),
     executarPlano: (planId: number) =>
       disparar(`/api/operacoes/${planId}/executar`, {}),
+    // Único disparo de job que carrega seleção do dono no corpo — os
+    // outros só recebem o alvo. `itens: null` grava o plano inteiro.
+    executarEscritaExif: (planId: number, itens: number[] | null) =>
+      disparar(`/api/exif/${planId}/executar`, { itens }),
     cancelar: () => fetch("/api/job/cancelar", { method: "POST" }),
     pausar,
     continuar,

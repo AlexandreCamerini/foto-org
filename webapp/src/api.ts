@@ -348,6 +348,77 @@ export interface LinhaAuditoria {
   detalhe: Record<string, unknown> | null;
 }
 
+/** Um dos três campos de localização (gps/cidade/pais) de um item do plano
+ *  de escrita EXIF. `StatusCampoExif` é uma união literal, não `string`
+ *  solto: a UI mapeia status → cor/copy num `switch`, e um `string` deixaria
+ *  esse `switch` sem exaustividade — o TypeScript não acusaria quando um
+ *  status novo passasse a existir sem tratamento na tela. */
+export type StatusCampoExif =
+  | "pendente"
+  | "pronto"
+  | "pulado"
+  | "sem_valor"
+  | "gravado"
+  | "falha";
+
+export interface CampoExif {
+  valor: string | [number, number] | null;
+  status: StatusCampoExif;
+  motivo: string | null;
+}
+
+/** Item de um plano de escrita EXIF de localização (D-075): campo vazio
+ *  ganha valor inferido, campo já preenchido nunca é sobrescrito. Os três
+ *  campos são irmãos, não nove chaves planas — a UI sempre os renderiza
+ *  juntos, como três chips numa linha; achatar em `status_gps`/`motivo_gps`
+ *  etc. espalharia a mesma estrutura por três lugares em vez de um objeto
+ *  aninhado só. */
+export interface ItemPlanoExif {
+  id: number;
+  media_id: number;
+  origem: string;
+  nome: string;
+  incluido: boolean;
+  formato_suportado: boolean;
+  motivo_nao_suportado: string | null;
+  sidecar_destino: string | null;
+  pasta_sincronizada: string | null;
+  erro: string | null;
+  backup_original: string | null;
+  campos: { gps: CampoExif; cidade: CampoExif; pais: CampoExif };
+}
+
+/** Plano de escrita EXIF de localização: sempre in-place (nunca há para
+ *  onde copiar, é o próprio arquivo original que ganha o campo vazio). */
+export interface PlanoExif {
+  id: number;
+  nome: string;
+  status: string;
+  dry_run_em: string | null;
+  criado_em: string;
+  total_itens: number;
+  prontos: number | null;
+  problemas: number | null;
+  campos_a_gravar: number | null;
+  sidecars: number | null;
+  nao_suportados: number;
+  sincronizados: number;
+  gravados: number;
+  com_erro: number;
+  executavel: boolean;
+}
+
+export type PlanoExifDetalhe = PlanoExif & { itens: ItemPlanoExif[] };
+
+export interface RelatorioDryRunExif {
+  prontos: number;
+  problemas: string[];
+  campos_a_gravar: number;
+  sidecars: number;
+  nao_suportados: number;
+  sincronizados: number;
+}
+
 /** Template ativo que decide em que pasta cada foto cai ao criar um plano.
  *  `GET` nunca falha por ausência de preferência — cai no default do motor. */
 export interface TemplateConfiguravel {
@@ -552,6 +623,15 @@ export const api = {
     put<TemplateConfiguravel>("/api/configuracoes/template", { template }),
   previewTemplate: (template: string) =>
     post<PreviewTemplate>("/api/configuracoes/template/preview", { template }),
+  planosExif: () => json<PlanoExif[]>("/api/exif"),
+  planoExif: (id: number) => json<PlanoExifDetalhe>(`/api/exif/${id}`),
+  /** Sem parâmetro: escopo global, escrita in-place — não há raiz para
+   *  escolher, ao contrário de `criarPlano`. */
+  criarPlanoExif: () => post<PlanoExif>("/api/exif/plano"),
+  dryRunExif: (id: number) =>
+    post<RelatorioDryRunExif>(`/api/exif/${id}/dry-run`),
+  auditoriaExif: (id: number) =>
+    json<LinhaAuditoria[]>(`/api/exif/${id}/auditoria`),
 };
 
 export interface MembroDuplicata {
