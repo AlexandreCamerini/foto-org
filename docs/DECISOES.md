@@ -3109,3 +3109,52 @@ inteiro passa a ser contado numa passada só
   (b) pura, remover a chamada a `contar_exato()` do ponto de integração
   em 07-04 e a linha de custo real do passo 5.
 - Status: decidido pelo dono (não pelo planejador nem pelo executor).
+
+## D-080 — Opt-in de classificação de pasta por GenAI mora em `application_settings`, não em `PrivacySettings`/TOML
+
+- Fase: 7 — classificação de pasta por GenAI, Task 1 do plano 07-04.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: `07-RESEARCH.md` propôs `PrivacySettings.classificacao_pasta_genai`
+  no `config.toml`, no mesmo molde de `servicos_externos`. Mas
+  `07-UI-SPEC.md` (posterior e aprovado) exige que o passo 0 do assistente
+  LIGUE o flag por um checkbox na própria tela, com um link "Desligar"
+  sempre disponível depois — ou seja, a UI precisa GRAVAR essa preferência,
+  não só lê-la. `PrivacySettings` é uma dataclass `frozen` carregada do
+  TOML na subida do processo (`fotoorganizer/config/settings.py`), e o
+  servidor não escreve de volta no arquivo TOML em lugar nenhum do código
+  — não existe hoje (nem é desejável abrir) um caminho de escrita de
+  config.toml pelo processo do app. Colocar o flag lá criaria uma chave que
+  a UI mostra mas não consegue gravar.
+- Decisão: o opt-in PRÓPRIO do recurso (`classificacao_pasta_genai`) mora
+  em `application_settings`, via `SettingsRepository` — o mesmo mecanismo
+  que este projeto já usa para "o usuário decidiu algo pela interface"
+  (hoje só o template de destino; ver a docstring do próprio módulo).
+  `servicos_externos` (a chave MESTRA, invariante 4) continua só no TOML,
+  fora do alcance da UI — nenhum endpoint deste plano escreve
+  `PrivacySettings`. O gate do recurso é a CONJUNÇÃO dos dois:
+  `settings.privacidade.servicos_externos AND
+  SettingsRepository.genai_pasta_habilitado()`.
+- Por quê: reaproveitar `application_settings` evita inventar um segundo
+  mecanismo de "preferência gravável pela UI" quando um já existe e já é
+  testado (par `obter_template`/`salvar_template`); manter `servicos_externos`
+  fora do TOML preservaria a UI mostrando uma chave que ela não pode
+  alterar de fato, quebrando a expectativa de que todo controle visível na
+  tela funciona.
+- Impacto em código (executado nesta mesma sessão, plano 07-04):
+  `fotoorganizer/repositories/settings.py` ganha `CHAVE_GENAI_PASTA` e o
+  par `genai_pasta_habilitado()`/`definir_genai_pasta()`, no molde exato de
+  `obter_template()`/`salvar_template()`. `fotoorganizer/config/settings.py`
+  não ganha nenhum campo novo (`grep -c "classificacao_pasta_genai"` = 0
+  nesse arquivo). `fotoorganizer/server/genai_pasta.py::SessaoDeClassificacaoDePasta.liberado()`
+  é a conjunção dos dois flags — copiar o gate de UM flag só de
+  `jobs.py::_advisor` (que olha só `servicos_externos`) seria a regressão
+  nomeada em `07-RESEARCH.md` Pitfall 4, porque esse recurso tem opt-in
+  PRÓPRIO, separado do consentimento já dado ao Advisor de cluster.
+- Como reverter: mover a chave para `PrivacySettings` exigiria primeiro
+  abrir um caminho de escrita de `config.toml` pelo processo do app (mudança
+  maior, não coberta por este plano) — não é uma reversão trivial de uma
+  linha.
+- Status: decidido pelo executor durante a Task 1 do plano 07-04, conforme
+  a instrução explícita do `<action>` do plano (registrar a justificativa
+  já dada pelo planejador, não uma decisão nova em aberto).
