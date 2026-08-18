@@ -141,7 +141,7 @@ Plans:
 - [x] 06-02-PLAN.md — Writer exiftool, verificação por diff de tags, sync-detect e allowlist de formatos
 - [x] 06-03-PLAN.md — ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar
 - [x] 06-04-PLAN.md — Teste empírico de escrita por formato (D-03/D-04) e decisão medida em docs/DECISOES.md
-- [ ] 06-05-PLAN.md — ExifWriteExecutor: dry-run autoritativo, escrita verificada por campo, falha parcial e backup
+- [x] 06-05-PLAN.md — ExifWriteExecutor: dry-run autoritativo, escrita verificada por campo, falha parcial e backup
 - [ ] 06-06-PLAN.md — Repositório, job em background e rotas /api/exif/*
 - [ ] 06-07-PLAN.md — Frontend base: tipos, cliente, aba Localização e linhas tipo A
 - [ ] 06-08-PLAN.md — Frontend: checkbox por linha, badges de formato/sync e detalhamento por campo
@@ -411,7 +411,7 @@ Fases executam em ordem numérica: 6 → 7 → 8 → 9 → 10 → 11
 | 3. Revisão acessível e consistente | v1.0 | 2/2 | Complete | 2026-08-16 |
 | 4. Consistência visual secundária | v1.0 | 7/7 | Complete | 2026-08-17 |
 | 5. Preparação para lançamento | v1.0 | 5/5 | Complete | 2026-08-18 |
-| 6. Escrita EXIF de localização | v2.0 | 4/9 | In Progress|  |
+| 6. Escrita EXIF de localização | v2.0 | 6/9 | In Progress|  |
 | 7. Classificação de pasta por GenAI | v2.0 | 0/TBD | Not started | - |
 | 8. Picker nativo + progresso de importação | v2.0 | 0/TBD | Not started | - |
 | 9. Sidebar navegável | v2.0 | 0/TBD | Not started | - |

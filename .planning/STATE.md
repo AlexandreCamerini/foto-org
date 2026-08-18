@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-04 concluído (4/9), correção 06-04b (D-077) concluída
-stopped_at: "Correção de meio-de-fase 06-04b (D-077) concluída — allowlist byte a byte, jpg/cr2 aprovados; próximo: 06-05"
-last_updated: "2026-08-18T13:01:08.484Z"
-last_activity: "2026-08-18 — correção 06-04b executada (D-077: allowlist byte a byte para deslocamento de offset — jpg/cr2 remedidos e aprovados, dng/tif continuam reprovados)"
+status: Fase 6 em execução — plano 06-05 concluído (5/9 planos numerados; 6/9 SUMMARY no diretório contando a correção 06-04b)
+stopped_at: "06-05 (ExifWriteExecutor) concluído — dry-run autoritativo, execução verificada, falha parcial e backup; próximo: 06-06"
+last_updated: "2026-08-18T13:29:07.000Z"
+last_activity: "2026-08-18 — 06-05 executado (ExifWriteExecutor: dry-run autoritativo relendo o disco ao vivo, execução verificada por diff completo de tags com reclassificação de offset D-077 corretamente encadeada, falha parcial registrada campo a campo, backup _original só apagado após aprovação)"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 6
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 04 de 9 concluído + correção 06-04b (D-077) aplicada — próximo: 06-05 (ExifWriteExecutor: dry-run autoritativo, escrita verificada, falha parcial e backup)
-Status: Fase 6 em execução — plano 06-04 concluído (4/9), correção 06-04b (D-077) concluída
-Last activity: 2026-08-18 — correção 06-04b executada (D-077: allowlist byte a byte para deslocamento de offset — jpg/cr2 remedidos e aprovados, dng/tif continuam reprovados)
+Plan: 05 de 9 concluído (+ correção 06-04b) — próximo: 06-06 (UI de dry-run/execução)
+Status: Fase 6 em execução — plano 06-05 concluído (5/9)
+Last activity: 2026-08-18 — 06-05 executado (ExifWriteExecutor: dry-run autoritativo, execução verificada por diff completo de tags com reclassificação de offset D-077, falha parcial campo a campo, backup preservado até aprovação)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -56,10 +56,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P03 | 14min | 2 tasks | 2 files |
 | 06 P04 | 55min | 2 tasks | 6 files |
 | 06 P04b (correção D-077) | ~90min | 5 tasks | 6 files |
+| 06 P05 | ~35min | 3 tasks | 3 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-01 (24min), 06-02 (9min), 06-03 (14min), 06-04 (55min), 06-04b (~90min, correção)
+- Last 5 plans: 06-02 (9min), 06-03 (14min), 06-04 (55min), 06-04b (~90min, correção), 06-05 (~35min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -142,6 +143,7 @@ Recent decisions affecting current work:
 
 - [Phase 06-04]: D-076: allowlist medida contra o acervo real — nenhum formato aprovou (jpg/cr2/dng/tif reprovam por deslocar offset de bloco binário pré-existente ao inserir metadado; tif também por avisos novos). FORMATOS_APROVADOS vira frozenset() vazio, sidecar XMP é o único caminho de escrita hoje. Estender TAGS_ESTRUTURAIS_ESPERADAS fica como decisão futura do dono, não decidida aqui. — Byte a byte da miniatura embutida idêntico antes/depois confirma que o deslocamento é relocação, não corrupção — mas mudar a allowlist anti-mascaramento (EXIF-04) é política de segurança fora do escopo de arquivo deste plano.
 - [Phase 06-04b]: D-077: dono escolheu allowlist byte a byte (AskUserQuestion) sobre o achado em aberto de D-076 — jpg/cr2 remedidos e aprovados (20/20, 12/12), dng/tif continuam reprovados por motivos distintos (dng: parsing de offset multi-tile; tif: causa não relacionada a offset, inalterada). verificacao.py ganha esperadas_condicionais/reclassificar_deslocamentos_de_offset, categoria distinta de TAGS_ESTRUTURAIS_ESPERADAS, fail-safe em toda borda.
+- [Phase 06-05]: `ExifWriteExecutor.dry_run()`/`executar()` fecham o loop plano→dry-run→execução→auditoria: disco relido ao vivo em lote, reconferência TOCTOU antes de cada escrita, veredito sempre pelo diff completo de tags (nunca returncode), falha parcial registrada campo a campo, backup `_original` preservado até diff+avisos aprovarem tudo. `_executar_item` chama `reclassificar_deslocamentos_de_offset()` (D-077) depois de `diferenca()` — sem isso toda escrita real em `.jpg`/`.cr2` reprovaria de novo, regressão nomeada por 06-04b. Achado durante a integração: `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` precisou ganhar `File:FileType`/`FileTypeExtension`/`MIMEType` (andaime de criação de sidecar `.xmp` novo, nunca exercitado pela suíte de 06-02). Nenhum requisito EXIF-01..05 foi marcado como completo — falta a UI de aprovação (06-06+).
 
 ### Pending Todos
 
@@ -186,7 +188,7 @@ None yet.
 
 - ~~Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido~~ — **resolvido em parte por D-077 (06-04b, 2026-08-18):** o dono escolheu allowlist byte a byte (`verificacao.reclassificar_deslocamentos_de_offset`), não a extensão incondicional de `TAGS_ESTRUTURAIS_ESPERADAS` cogitada em D-076. `.jpg`/`.cr2` remedidos e aprovados (20/20, 12/12 amostras). `.dng` continua reprovado — duas de suas tags de offset (tiles demais) não dão para verificar byte a byte com o dump padrão do exiftool, fica fail-safe. `.tif` continua reprovado por motivo sempre não relacionado a offset. `.dng`/`.tif`/`.cr3`/`.heic`/`.heif` seguem no fallback de sidecar XMP.
 
-- **Atenção para 06-05 (ExifWriteExecutor):** o gate de verificação da escrita real não pode chamar só `verificacao.diferenca()` — precisa chamar `reclassificar_deslocamentos_de_offset()` depois (mesmo padrão de `testar_amostra()` em `scripts/testar_escrita_exif.py`, usando o backup `<alvo>_original` do writer como "antes" byte a byte). Sem isso, toda escrita real em `.jpg`/`.cr2` reprova de novo por `IFD1:ThumbnailOffset`/similares — regressão silenciosa da allowlist que D-077 acabou de aprovar. Ver `06-04b-SUMMARY.md` § Next Phase Readiness.
+- ~~**Atenção para 06-05 (ExifWriteExecutor):** o gate de verificação da escrita real não pode chamar só `verificacao.diferenca()` — precisa chamar `reclassificar_deslocamentos_de_offset()` depois.~~ — **resolvido em 06-05 (2026-08-18):** `_executar_item` chama a reclassificação no ponto exato especificado, com o backup `<alvo>_original` do writer como par "antes" byte a byte; provado de ponta a ponta por `test_executar_nao_regride_por_deslocamento_de_offset` (miniatura injetada via exiftool). Ver `06-05-SUMMARY.md`.
 
 ## Deferred Items
 
@@ -202,9 +204,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T13:00:03.688Z
-Stopped at: Correção de meio-de-fase 06-04b (D-077) concluída — allowlist byte a byte, jpg/cr2 aprovados; próximo: 06-05
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-05-PLAN.md
+Last session: 2026-08-18T13:29:07.000Z
+Stopped at: 06-05 (ExifWriteExecutor) concluído — dry-run autoritativo, execução verificada, falha parcial e backup; próximo: 06-06
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-06-PLAN.md
 
 ## Operator Next Steps
 
