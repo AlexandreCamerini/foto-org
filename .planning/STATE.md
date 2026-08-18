@@ -10,7 +10,7 @@ progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 19
-  completed_plans: 20
+  completed_plans: 19
   percent: 17
 ---
 
@@ -42,7 +42,7 @@ Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento,
 
 **Velocity:**
 
-- Total plans completed: 20
+- Total plans completed: 19
 - Average duration: - min
 - Total execution time: 0 hours
 
