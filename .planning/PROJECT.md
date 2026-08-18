@@ -123,6 +123,21 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
   barra da Biblioteca responsiva sem sobrepor o Inspetor abaixo de
   1024px (CONS-06), token `--font-weight-titulo` único para peso de
   ênfase (CONS-08) — Validado na Fase 4, 2026-08-17
+- ✓ Preparação para lançamento: índices de FK ausentes incl. `pasta`
+  (LANC-02, `_sob_a_pasta` usa `SEARCH` via índice + `PRAGMA
+  case_sensitive_like=ON`, não mais table scan); empacotamento Marco 1
+  via Tauri v2 + python-build-standalone, assinatura ad-hoc automática
+  confirmada por `codesign -dv` (LANC-01 — só Marco 1, Marco 2
+  assinado/notarizado segue fora de escopo por D-01, custo recorrente do
+  Apple Developer Program não aprovado); baseline de performance
+  documentado em `docs/PERFORMANCE.md` (59 arq/s varredura, 1,33s
+  geração de sugestões, 4,54s detecção de duplicatas — LANC-04); fluxo
+  de onboarding do primeiro acervo (LANC-03) — defeito real de UAT
+  (backdrop translúcido do `ModalCaminho` deixava texto sobrepor)
+  diagnosticado por screenshot e corrigido (`bg-black/95`), mas reteste
+  comportamental com usuário sem instrução pós-fix ainda pendente, ver
+  `05-HUMAN-UAT.md` — Validado na Fase 5, 2026-08-18 (LANC-03 com
+  ressalva)
 
 ### Active
 
@@ -131,9 +146,9 @@ docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
 prioritized fixes — see REQUIREMENTS.md for the full checklist and
 ROADMAP.md for phase mapping. -->
 
-- [ ] Preparação para lançamento: empacotamento assinado/notarizado,
-  índices de FK ausentes (incl. `pasta`), onboarding do primeiro acervo,
-  série de métricas de desempenho
+- Nenhum item ativo — Fase 5 fecha o roadmap v1 do milestone atual.
+  Próximo incremento depende de nova sessão de discussão/priorização
+  (ver Requirements v2 e o item de reconexão de volumes em Context).
 
 ### Out of Scope
 
@@ -155,13 +170,17 @@ ROADMAP.md for phase mapping. -->
 
 ## Context
 
-**Estado do catálogo (2026-08-16):** `catalog.db` de produção foi zerado
-hoje (backup em `catalog-antes-do-reset-20260816-013503.db`); uma nova
-varredura completa ainda não rodou. Tratar como estado operacional atual,
-não como decisão estrutural — os números medidos citados nas decisões
-(D-024 a D-030, D-034, D-046 etc.) vêm do acervo antes do reset e continuam
-válidos como evidência de prioridade, mesmo que o catálogo precise ser
-reconstruído.
+**Estado do catálogo (2026-08-17):** `catalog.db` de produção foi zerado de
+novo hoje (sem backup desta vez, decisão explícita do dono), para a medição
+de baseline da Fase 5 (LANC-04) — hoje só tem a fonte `~/Pictures/2026`
+(1.382 arquivos), não o acervo completo. Backup do reset anterior
+(2026-08-16) segue em `catalog-antes-do-reset-20260816-013503.db` e foi
+usado, somente leitura, para calibrar a interpolação de duas âncoras de GPS
+(D-074). Uma nova varredura completa do acervo real ainda não rodou. Tratar
+como estado operacional atual, não como decisão estrutural — os números
+medidos citados nas decisões (D-024 a D-030, D-034, D-046, D-074 etc.) vêm
+de acervos anteriores ao(s) reset(s) e continuam válidos como evidência de
+prioridade, mesmo que o catálogo precise ser reconstruído.
 
 **Composição do acervo real (medida, motiva a ordem do roadmap):**
 Pixel local é raro (~5% de ~99 mil registros conhecidos são arquivo real
@@ -243,4 +262,4 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
 
 ---
-*Last updated: 2026-08-17 — Phase 4 (Consistência visual secundária) complete*
+*Last updated: 2026-08-18 — Phase 5 (Preparação para lançamento) complete — última fase do roadmap v1 atual*
