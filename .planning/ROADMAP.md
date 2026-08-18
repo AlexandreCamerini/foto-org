@@ -213,7 +213,20 @@ de retrofitar uma faceta depois.
 
 **Explicitly out of scope**: envio de imagem; varredura em lote do catálogo
 inteiro; reabrir a escolha de modelo sem medição no método D-059/D-060.
-**Plans**: TBD
+**Plans:** 10 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Persistência: modelo `PastaClassificada`, migração 0020 e repositório com D-02 por campo
+- [ ] 07-02-PLAN.md — Cliente Claude Sonnet 5: chamada única em lote, payload sem imagem, never-crash
+- [ ] 07-03-PLAN.md — Pré-filtro de candidatas (D-01) e estimativa de custo (decisão: `count_tokens` × critério 2)
+- [ ] 07-04-PLAN.md — Gate de dois consentimentos e endpoints `/api/genai-pasta/*`
+- [ ] 07-05-PLAN.md — Degrau `llm_pasta` na cascata do `SuggestionEngine` e durabilidade entre rodadas
+- [ ] 07-06-PLAN.md — Cliente tipado em `api.ts` e assistente (passos 0-3: opt-in, candidatas, custo, rodando)
+- [ ] 07-07-PLAN.md — Assistente (passos 4-5: revisão antes/depois, resumo de D-06, conclusão)
+- [ ] 07-08-PLAN.md — Disparo na Revisão e pastilha de origem no `PorQue`
+- [ ] 07-09-PLAN.md — Medição do score `llm_pasta` contra o acervo real e decisão registrada
+- [ ] 07-10-PLAN.md — Documentação, verificação humana de sessão real e gate da fase
+
 **UI hint**: yes — escopo estreito: um ponto de confirmação de custo antes
 da sessão (modal/confirmação), não uma tela nova.
 
@@ -432,7 +445,7 @@ Fases executam em ordem numérica: 6 → 7 → 8 → 9 → 10 → 11
 | 4. Consistência visual secundária | v1.0 | 7/7 | Complete | 2026-08-17 |
 | 5. Preparação para lançamento | v1.0 | 5/5 | Complete | 2026-08-18 |
 | 6. Escrita EXIF de localização | v2.0 | 11/9 | Complete   | 2026-08-18 |
-| 7. Classificação de pasta por GenAI | v2.0 | 0/TBD | Not started | - |
+| 7. Classificação de pasta por GenAI | v2.0 | 0/10 | Planned | - |
 | 8. Picker nativo + progresso de importação | v2.0 | 0/TBD | Not started | - |
 | 9. Sidebar navegável | v2.0 | 0/TBD | Not started | - |
 | 10. Confiança como eixo + índice de saúde | v2.0 | 0/TBD | Not started | - |
