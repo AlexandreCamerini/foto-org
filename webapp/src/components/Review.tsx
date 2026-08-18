@@ -492,6 +492,15 @@ function PorQue({ mediaId }: { mediaId: number }) {
       {sugestao.evidencias.map((ev, i) => (
         <li key={i} className="flex gap-2 text-[11px]">
           <Confianca nivel={ev.nivel} rotulo={false} />
+          {/* `herdado`, não a pastilha neutra do selo de fonte (CONS-01,
+              linha 315): aquela já significa "colisão de fonte" nesta
+              tela — reusar a mesma cor faria uma proposta de IA parecer
+              outra coisa. */}
+          {ev.origem === "llm_pasta" && (
+            <span className="rounded-full border border-herdado/40 bg-herdado/10 px-1.5 py-0.5 text-[11px] text-herdado">
+              IA · pasta
+            </span>
+          )}
           <span className="text-texto-2">
             <span className="text-texto">{ev.campo}</span>: {ev.valor} —{" "}
             {ev.justificativa}
