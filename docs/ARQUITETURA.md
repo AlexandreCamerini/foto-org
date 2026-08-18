@@ -68,6 +68,45 @@ por inteiro (commit `2e0ef1a`, 31/07/2026).
 Índices: media_files(hash_rapido), (source_id, caminho) unique,
 (data_capturada), (mtime, tamanho); evidence(media_id); suggestions(status).
 
+## Módulo `exif_write/`
+
+Escreve GPS lat/long, cidade e país (só localização — D-075) no arquivo
+original ou num sidecar `.xmp`, só em campo já vazio, nunca sobrescreve.
+Autorizado pelo invariante 7 vigente (revogado em parte por D-075) e por
+`docs/DECISOES.md` D-075.
+
+**Por que é módulo próprio e não extensão de `operations/`:** a cópia se
+protege criando um caminho novo que ainda não existe (`open('xb')`);
+mutação in-place não tem equivalente disso. O modelo de segurança é outro
+(backup `_original` do exiftool + diff completo de tags, não hash de
+arquivo inteiro) e o modelo de status também é outro (por campo, não por
+item).
+
+**Fluxo:** planner (só banco, `ExifWritePlanner`) → dry-run (relê o disco
+ao vivo, em lote, reconfere TOCTOU) → seleção do dono (checkbox por linha,
+D-01/D-02) → executor (reconfere ao vivo, escreve via `exiftool`, verifica
+por diff completo de tags — nunca `returncode` — só então apaga o backup
+`_original`) → `AuditLog`.
+
+**Armadilha do `AuditLog`:** a coluna `plan_id` tem FK real para
+`operation_plans.id` (`PRAGMA foreign_keys=ON`). Linhas de auditoria da
+escrita EXIF reusam `AuditLog`, mas deixam `plan_id=NULL` e carregam o id
+do `ExifWritePlan`/`ExifWriteItem` dentro do JSON de `detalhe` — gravar o
+id do plano de EXIF direto em `plan_id` violaria a FK.
+
+**O que não é escrito:** qualquer campo fora de localização (data, câmera,
+autor etc.) e nunca sobre valor já preenchido, mesmo que a sugestão
+discorde do que já está gravado.
+
+**Allowlist de formato, medida contra o acervo real (não suposta):**
+`docs/DECISOES.md` D-075 (autorização), D-076 (medição inicial: nenhum
+formato aprova, por deslocamento de offset de bloco binário pré-existente
+ao inserir metadado novo), D-077 (verificação byte a byte estende D-076:
+`.jpg`/`.cr2` passam a aprovar), D-078 (`IPTC:EnvelopeRecordVersion` entra
+no andaime incondicional). Fonte de verdade de quais formatos entram é
+`fotoorganizer/exif_write/formatos.py` (`FORMATOS_APROVADOS`), atualizado
+por `scripts/testar_escrita_exif.py`.
+
 ## Decisões registradas
 
 | # | Decisão | Racional |
@@ -79,6 +118,7 @@ por inteiro (commit `2e0ef1a`, 31/07/2026).
 | 5 | Geocoding offline por padrão | Privacidade primeiro; serviço externo vira provider opt-in com cache. |
 | 6 | Confiança como enum+score por evidência, agregada por regra documentada | Prompt proíbe soma arbitrária (o score aditivo do legado morre aqui). |
 | 7 | Criptografia de embeddings via chave no Keychain (macOS) | Melhor prática viável num app local; limitação (quem tem a sessão do usuário acessa) documentada em PRIVACIDADE.md. |
+| 8 | Escrita EXIF de localização em campo vazio, módulo próprio (D-075); allowlist de formato medida byte a byte contra o acervo real, não suposta (D-076/D-077/D-078) | Sidecar XMP não é lido por parte do fluxo real do dono; verificação byte a byte evita aprovar pelo NOME da tag e mascarar corrupção real (EXIF-04). |
 
 ## Riscos principais
 
@@ -93,3 +133,13 @@ por inteiro (commit `2e0ef1a`, 31/07/2026).
    inventar localização; corrompidos registrados e pulados.
 5. **Scope creep (visão, rostos, serviços externos)** — congelados atrás de
    Protocols com stub até o núcleo (M0–M5) estar estável.
+6. **Escrita em pasta sincronizada (iCloud Drive/Dropbox/OneDrive)** —
+   risco de dessincronização silenciosa se o app grava enquanto o cliente
+   de sync ainda processa o arquivo. Mitigado por D-07: `pasta_sincronizada()`
+   detecta por prefixo de caminho resolvido (O(1), sem I/O de rede) e marca
+   aviso explícito no plano dry-run; o dono decide incluir ou desmarcar via
+   o mesmo checkbox de D-02, nunca bloqueio automático nem escrita silenciosa.
+7. **Formato sem amostra testável no acervo (CR3/HEIC)** — D-03 exige medir,
+   não supor, e o catálogo real hoje não tem nenhum arquivo desses formatos.
+   Mitigado por D-09: marcado "não testado" (nunca "reprovado" por omissão),
+   roteado para o fallback de sidecar XMP (EXIF-05) até existir amostra real.
