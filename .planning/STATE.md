@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-02 concluído (2/9)
-stopped_at: Plano 06-02 (writer exiftool, diff de tags, sync-detect, allowlist de formatos) concluído
-last_updated: "2026-08-18T11:46:14.596Z"
-last_activity: 2026-08-18 — 06-02-PLAN.md executado (ExifToolWriter, verificacao.diferenca, pasta_sincronizada, formatos.py)
+status: Fase 6 em execução — plano 06-03 concluído (3/9)
+stopped_at: Plano 06-03 (ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar) concluído
+last_updated: "2026-08-18T11:59:20.310Z"
+last_activity: 2026-08-18 — 06-03-PLAN.md executado (ExifWritePlanner.criar_plano_exif)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 02 de 9 concluído — próximo: 06-03 (ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar)
-Status: Fase 6 em execução — plano 06-02 concluído (2/9)
-Last activity: 2026-08-18 — 06-02-PLAN.md executado (ExifToolWriter, verificacao.diferenca, pasta_sincronizada, formatos.py)
+Plan: 03 de 9 concluído — próximo: 06-04 (teste empírico de escrita por formato — D-03/D-04)
+Status: Fase 6 em execução — plano 06-03 concluído (3/9)
+Last activity: 2026-08-18 — 06-03-PLAN.md executado (ExifWritePlanner.criar_plano_exif)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -53,10 +53,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 05 | 5 | - | - |
 | 06 P01 | 24min | 3 tasks | 4 files |
 | 06 P02 | 9min | 3 tasks | 6 files |
+| 06 P03 | 14min | 2 tasks | 2 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-01 (24min), 06-02 (9min)
+- Last 5 plans: 06-01 (24min), 06-02 (9min), 06-03 (14min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -125,6 +126,18 @@ Recent decisions affecting current work:
   disciplina que 06-01 já seguiu). `formatos.py` continua provisório
   (`MEDIDO_EM=None`) até 06-04 medir contra o acervo real.
 
+- Plano 06-03 entregou `ExifWritePlanner.criar_plano_exif()`: consulta
+  única de candidatos (GPS herdado ou cidade/país resolvidos), exclusão
+  de mídia já resolvida por plano anterior (com reabertura automática
+  após falha parcial), status/motivo por campo e classificação de linha
+  (sidecar opt-in D-06, sync opt-out-com-aviso D-07). Achado que valia a
+  pena registrar: `MediaFile.extensao` é gravada sem o ponto pelo
+  scanner, mas `formatos.suportado()/motivo()` (06-02) espera extensão
+  pontuada — todo chamador futuro dessas funções via `MediaFile.extensao`
+  precisa da mesma conversão `f".{extensao.lower()}"`. Nenhum requisito
+  EXIF-01/02/05 foi marcado como completo — este plano entrega o lado do
+  plano, não o comportamento fim-a-fim (mesma disciplina de 06-01/06-02).
+
 ### Pending Todos
 
 None yet.
@@ -180,9 +193,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T11:46:14.596Z
-Stopped at: Plano 06-02 (writer exiftool, diff de tags, sync-detect, allowlist de formatos) concluído
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-03-PLAN.md
+Last session: 2026-08-18T11:59:20.310Z
+Stopped at: Plano 06-03 (ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar) concluído
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-04-PLAN.md
 
 ## Operator Next Steps
 
