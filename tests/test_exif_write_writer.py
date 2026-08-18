@@ -113,6 +113,66 @@ def test_campo_gravado_exige_todas_as_tags_do_campo():
     assert campo_gravado("cidade", diff_parcial) is False
 
 
+# -- Correção de meio-de-fase pós-06-09 (D-078): IPTC:EnvelopeRecordVersion
+# ganha reconhecimento como andaime estrutural, mesma classe de
+# ApplicationRecordVersion — achado num JPEG real de produção (Canon EOS
+# R6m2) que reprovava a verificação por causa só desta tag. ---------------
+
+
+def test_diferenca_classifica_envelope_record_version_em_estruturais():
+    """`IPTC:EnvelopeRecordVersion` é o marcador de versão do registro de
+    ENVELOPE IPTC — distinto de `IPTC:ApplicationRecordVersion` (registro
+    de APLICAÇÃO, já allowlisted), mas mesma classe de andaime obrigatório
+    ao criar um bloco IPTC novo. Não pode virar `inesperada`.
+    """
+    antes: dict[str, str] = {}
+    depois = {
+        "GPS:GPSVersionID": "2 3 0 0",
+        "IPTC:ApplicationRecordVersion": "4",
+        "IPTC:EnvelopeRecordVersion": "4",
+        "File:CurrentIPTCDigest": "abc123",
+        "XMP-x:XMPToolkit": "Image::ExifTool 13.55",
+    }
+    diff = diferenca(antes, depois)
+    assert diff.estruturais == depois
+    assert diff.inesperadas == {}
+    assert diff.esperadas == {}
+
+
+def test_escrita_com_envelope_record_version_como_unico_efeito_colateral_passa_verificacao():
+    """Reproduz o achado real do checkpoint 06-09: uma escrita de
+    localização (GPS + cidade + país) num arquivo que nunca teve bloco
+    IPTC/GPS/XMP produz, como efeito colateral OBRIGATÓRIO, todo o andaime
+    de `TAGS_ESTRUTURAIS_ESPERADAS` — incluindo `EnvelopeRecordVersion`,
+    que antes desta correção sobrava em `inesperadas` e reprovava a
+    verificação mesmo com City/Country gravados corretamente.
+    """
+    antes: dict[str, str] = {}
+    depois = {
+        # dado de localização em si — precisa continuar em `esperadas`
+        "GPS:GPSLatitude": "-23.55052",
+        "GPS:GPSLatitudeRef": "S",
+        "GPS:GPSLongitude": "-46.633308",
+        "GPS:GPSLongitudeRef": "W",
+        "IPTC:City": "Rio de Janeiro",
+        "XMP-photoshop:City": "Rio de Janeiro",
+        "IPTC:Country-PrimaryLocationName": "Brasil",
+        "XMP-photoshop:Country": "Brasil",
+        # andaime obrigatório — nenhum destes é dado de localização
+        "GPS:GPSVersionID": "2 3 0 0",
+        "IPTC:ApplicationRecordVersion": "4",
+        "IPTC:EnvelopeRecordVersion": "4",
+        "File:CurrentIPTCDigest": "abc123",
+        "XMP-x:XMPToolkit": "Image::ExifTool 13.55",
+    }
+    diff = diferenca(antes, depois)
+
+    assert diff.inesperadas == {}
+    assert campo_gravado("gps", diff) is True
+    assert campo_gravado("cidade", diff) is True
+    assert campo_gravado("pais", diff) is True
+
+
 # -- Deviação (plano 06-04): avisos() colapsava duplicatas via -j e contava
 # o resumo "Validate" como se fosse ele próprio um aviso novo -------------
 
