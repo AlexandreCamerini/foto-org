@@ -3047,3 +3047,65 @@ inteiro passa a ser contado numa passada só
   falhar, sinalizando a reversão.
 - Status: decidido — achado da tag corrigido e medido; achado do digest
   registrado como blocker pendente, aguardando decisão futura do dono.
+
+## D-079 — Prévia de custo do GenAI de pasta: estimativa local antes de confirmar, contagem exata só depois (híbrida)
+
+- Fase: 7 — classificação de pasta por GenAI, `checkpoint:decision`
+  bloqueante da Task 1 do plano 07-03, respondido pelo dono via
+  `AskUserQuestion` antes da execução da tarefa.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: `07-RESEARCH.md` § Pattern 2 recomendava `client.messages
+  .count_tokens` para a prévia de custo do passo 2 do assistente (grátis,
+  exato, já no SDK pinado), e `07-UI-SPEC.md` chegou a escrever a tela em
+  cima disso (`"Entrada (exata): 3.420 tokens"`). O que a pesquisa não
+  considerou: `count_tokens` é uma chamada HTTP para `api.anthropic.com`
+  que transmite o payload inteiro (system, schema, lista de pastas) só
+  para contar — não custa dinheiro, mas os dados já saíram da máquina.
+  Isso colide de frente com o critério de sucesso 2 da Fase 7 no
+  `ROADMAP.md` ("nada é enviado antes de ele confirmar") e com o
+  invariante 4 do `CLAUDE.md` (indicação prévia do que sai, antes de
+  sair). Três opções foram postas ao dono: (a) contagem exata antes de
+  confirmar, com aviso explícito de que isso já envia o texto; (b)
+  estimativa local, nada sai antes do confirmar, número de entrada fica
+  aproximado; (c) híbrida — estimativa local antes, contagem exata depois
+  de confirmar, mostrada no resumo pós-execução.
+- Decisão: opção (c), híbrida. Nada sai da máquina antes do "Confirmar e
+  classificar" (critério 2 do ROADMAP intacto, sem reinterpretação). A
+  prévia do passo 2 mostra `Entrada (estimada)` — contagem local
+  deliberadamente conservadora (nunca abaixo do real). Depois que o dono
+  confirma, `contar_exato()` roda imediatamente antes de
+  `messages.create` — a mesma chamada de rede que já ia acontecer de
+  qualquer forma, agora só uma etapa adiantada dentro da mesma
+  transmissão consentida — e o passo 5 (resumo pós-execução) mostra o
+  custo real com a contagem exata de entrada.
+- Por quê: a opção (a) foi descartada por violar o critério 2 na letra —
+  o dado sairia antes do botão de confirmação, mesmo que o payload fosse
+  idêntico ao que seria enviado de qualquer forma; reinterpretar esse
+  critério não é decisão de implementação, é decisão do dono, e ele
+  preferiu não abrir essa exceção. A opção (b) pura foi descartada porque
+  descartava também o número exato que a opção (c) consegue entregar
+  sem violar o critério — bastava adiar a contagem exata para
+  depois da confirmação, não abrir mão dela. A opção (c) preserva o
+  critério 2 e entrega o número exato no mesmo fluxo, só que depois em
+  vez de antes — o dono acaba vendo os dois números (estimado e real) em
+  vez de só um, o que é estritamente mais informação, não menos.
+- Impacto em código (executado nesta mesma sessão, plano 07-03):
+  `custo_genai.py::estimar()` sempre devolve `entrada_exata=False`
+  (estimativa local, fator conservador documentado no código);
+  `custo_genai.py::contar_exato(client, corpo)` existe separado,
+  chamado só depois da confirmação (fora do escopo deste plano — o
+  ponto de chamada real fica em 07-04, o endpoint que orquestra a
+  sessão). `07-UI-SPEC.md` § Copywriting Contract atualizado no mesmo
+  commit desta decisão: rótulo do passo 2 vira `"Entrada (estimada):"`
+  (era `"Entrada (exata):"`), nota de honestidade do passo 2 reescrita
+  para declarar que nada foi enviado ainda, e o passo 5 (Concluído) ganha
+  uma linha nova de custo real com a contagem exata pós-confirmação.
+- Como reverter: para voltar à opção (a), trocar `estimar()` para receber
+  o cliente e chamar `contar_exato()` direto (com `entrada_exata=True`) e
+  reverter as três linhas do Copywriting Contract afetadas de volta a
+  `"Entrada (exata)"`; nenhuma chamada de rede nova foi introduzida por
+  esta decisão que precise ser desfeita além disso. Para voltar à opção
+  (b) pura, remover a chamada a `contar_exato()` do ponto de integração
+  em 07-04 e a linha de custo real do passo 5.
+- Status: decidido pelo dono (não pelo planejador nem pelo executor).

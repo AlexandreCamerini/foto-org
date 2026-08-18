@@ -238,26 +238,32 @@ call, not a placeholder.
 │                                                             │
 │ 12 pastas · 1 chamada ao Claude Sonnet 5                   │
 │                                                             │
-│ Entrada (exata):        3.420 tokens · R$ 0,034            │
+│ Entrada (estimada):     até 3.420 tokens · até R$ 0,034     │
 │ Saída (estimativa):     até 6.000 tokens · até R$ 0,300     │
 │ ─────────────────────────────────────────────────         │
 │ Total estimado:         até R$ 0,334 (US$ 0,067)            │
 │                                                             │
-│ A entrada é contada com exatidão antes do envio. A saída    │
-│ não pode ser contada antes da resposta — o valor acima é o  │
-│ teto, o custo real tende a ser menor.                       │
+│ Nada foi enviado ainda — os dois números acima são          │
+│ estimativas locais. Depois de confirmar, a contagem exata   │
+│ da entrada aparece no resumo final. O valor acima é o teto, │
+│ o custo real tende a ser menor.                             │
 │                                                             │
 │                              [Voltar]  [Confirmar e classificar]│
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **Honesty framing is load-bearing, not decorative** (`07-RESEARCH.md` Pitfall 3): input cost
-  renders in `--color-texto` (exact, confident), output cost renders in `--color-texto-3` with
-  the word `"até"` (up to) prefixed and `"(estimativa)"` suffixed on its own label — never
-  presented with the same visual confidence as the input line. The total line also carries
-  `"até"` — there is no single unqualified number anywhere on this screen. This directly extends
-  the same "nunca invente confiança sem base" discipline D-06 already applies to evidence, now
-  applied to a cost number.
+- **Honesty framing is load-bearing, not decorative** (`07-RESEARCH.md` Pitfall 3, resolved by
+  D-079 in `docs/DECISOES.md`): the dono chose the hybrid option over exact `count_tokens` before
+  confirm, because that call transmits the payload — a call this early would violate ROADMAP
+  Phase 7 success criterion 2 ("nada é enviado antes de ele confirmar"). Both numbers on this step
+  are therefore local estimates, not one exact and one approximate: input and output cost both
+  render in `--color-texto-3`, both carry `"até"` (up to) prefixed and `"(estimada)"` /
+  `"(estimativa)"` suffixed on their own label — neither line gets the confident/exact treatment.
+  The total line also carries `"até"` — there is no single unqualified number anywhere on this
+  screen. This directly extends the same "nunca invente confiança sem base" discipline D-06
+  already applies to evidence, now applied to a cost number. The exact number the input estimate
+  was standing in for shows up later, honestly, in step 5's post-confirmation summary (see Step 5
+  below) — the precision moves after the confirm gate instead of disappearing.
   - Do not use `--color-erro`/`--color-atencao` for the estimate — it's not a warning, it's an
     honest uncertainty band. Plain secondary-text token only.
   - Both currencies shown together (R$ primary, US$ parenthetical) — same "mesmo padrão do
@@ -363,6 +369,9 @@ call, not a placeholder.
 ┌──────────────────────────────────────────────────────────┐
 │ ✓ 10 pastas classificadas                                  │
 │                                                             │
+│ Custo real desta sessão: R$ 0,031 (3.180 tokens de entrada, │
+│ contagem exata)                                             │
+│                                                             │
 │ As sugestões aparecem em Revisão na próxima geração de       │
 │ sugestões.                                                  │
 │                                                             │
@@ -374,6 +383,14 @@ call, not a placeholder.
   the currently-open Revisão list — it feeds the *next* `SuggestionEngine.gerar()` run
   (`"Gerar/atualizar sugestões"` in `Review.tsx`), per the cascade design in `07-RESEARCH.md`.
   Do not imply an instant appearance in the grid behind the modal.
+- **Real-cost line (D-079, hybrid decision):** `text-texto-2`, sits between the heading and the
+  cascade-timing body copy. This is the payoff of the hybrid choice — the exact number step 2
+  could only estimate now renders with the confidence step 2 explicitly withheld. No `"até"`
+  prefix here (`contar_exato()` already ran, immediately before `messages.create`, so this is the
+  real transmitted count, not a ceiling). If `contar_exato()` failed (never-crash contract, 07-03)
+  and fell back to `0`, render the line with the estimated figure from step 2 instead and the
+  suffix `"(estimativa — contagem exata indisponível)"` rather than silently showing `R$ 0,00`,
+  which would misstate the real cost as free.
 
 ### Extension to `PorQue` (Review.tsx) — origin pill for GenAI evidence in the general flow
 
@@ -417,10 +434,10 @@ the dono compares a GenAI-derived suggestion against a deterministic one.
 | Step 1 empty state | `"Nenhuma pasta com categoria ou cidade/país vazios no catálogo atual."` |
 | Step 2 heading | `"Custo estimado desta sessão"` |
 | Step 2 summary line | `"{N} pastas · 1 chamada ao Claude Sonnet 5"` |
-| Step 2 input cost label | `"Entrada (exata):"` |
+| Step 2 input cost label | `"Entrada (estimada):"` (was `"Entrada (exata):"` — revised by D-079, hybrid decision: no data leaves the machine before confirm, so the pre-confirm input count is a local estimate too, not an exact `count_tokens` call) |
 | Step 2 output cost label | `"Saída (estimativa):"` |
 | Step 2 total label | `"Total estimado:"` (value always prefixed `"até"`) |
-| Step 2 honesty note | `"A entrada é contada com exatidão antes do envio. A saída não pode ser contada antes da resposta — o valor acima é o teto, o custo real tende a ser menor."` |
+| Step 2 honesty note | `"Nada foi enviado ainda — os dois números acima são estimativas locais. Depois de confirmar, a contagem exata da entrada aparece no resumo final. O valor acima é o teto, o custo real tende a ser menor."` (was `"A entrada é contada com exatidão antes do envio..."` — revised by D-079: the old copy implied a pre-confirm network call, which the hybrid decision rules out) |
 | Step 2 confirm | `"Confirmar e classificar"` |
 | Step 3 heading | `"Consultando Claude Sonnet 5… ({m}:{ss})"` |
 | Step 3 body | `"A chamada já foi enviada e não pode ser cancelada — aguarde a resposta."` |
@@ -434,6 +451,7 @@ the dono compares a GenAI-derived suggestion against a deterministic one.
 | Step 4 approve | `"Aprovar {N} selecionadas"` |
 | Step 4 close-without-approving | `"Fechar sem aprovar"` |
 | Step 5 heading | `"{N} pastas classificadas"` |
+| Step 5 real-cost line (new, D-079) | `"Custo real desta sessão: {valor} ({tokens} tokens de entrada, contagem exata)"` — falls back to `"{valor estimado} ({tokens estimados} tokens de entrada, estimativa — contagem exata indisponível)"` when `contar_exato()` returned `0` (never-crash fallback, 07-03) |
 | Step 5 body | `"As sugestões aparecem em Revisão na próxima geração de sugestões."` |
 | Step 5 close | `"Fechar"` |
 | Error state (API failure/timeout/429, step 3 → error) | `"Não foi possível classificar: {motivo técnico}. Nenhum dado foi perdido — tente novamente quando quiser."` — mirrors `EscritaExif.tsx`'s plan-level error tone (name the failure, offer the next step, never a bare "erro") |
