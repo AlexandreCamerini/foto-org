@@ -9,7 +9,12 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ClassificacaoPasta } from "./ClassificacaoPasta";
-import type { CandidataGenaiPasta, ConfigGenaiPasta, CustoGenaiPasta } from "../api";
+import type {
+  CandidataGenaiPasta,
+  ConfigGenaiPasta,
+  CustoGenaiPasta,
+  PropostaGenaiPasta,
+} from "../api";
 import { erro, montar, servirApi } from "../test/servidor";
 
 function config(
@@ -25,6 +30,15 @@ function candidata(
   campos_ausentes: CandidataGenaiPasta["campos_ausentes"],
 ): CandidataGenaiPasta {
   return { pasta, n_fotos, campos_ausentes, periodo: null };
+}
+
+function proposta(
+  pasta: string,
+  campo: PropostaGenaiPasta["campo"],
+  valor_proposto: string,
+  justificativa = "justificativa de teste",
+): PropostaGenaiPasta {
+  return { pasta, campo, valor_antes: null, valor_proposto, justificativa };
 }
 
 function custo(extra: Partial<CustoGenaiPasta> = {}): CustoGenaiPasta {
@@ -70,6 +84,34 @@ function servirApiComRodarPendente(rotas: Record<string, unknown>) {
       });
     }),
   );
+}
+
+/** Monta o assistente já com config/candidatas/custo de fundo prontos —
+ * cada teste só precisa fornecer `/api/genai-pasta/rodar` (e, quando
+ * quiser, `/api/genai-pasta/aprovar`) para chegar no passo 4. */
+function servirEMontar(
+  extra: Record<string, unknown>,
+  onFechar: () => void = vi.fn(),
+) {
+  const chamadas = servirApi({
+    "/api/genai-pasta/config": config(true, true),
+    "/api/genai-pasta/candidatas": [candidata("/fotos/a", 10, ["categoria"])],
+    "/api/genai-pasta/estimar-custo": custo(),
+    ...extra,
+  });
+  const usuario = userEvent.setup();
+  montar(<ClassificacaoPasta onFechar={onFechar} />);
+  return { usuario, chamadas };
+}
+
+/** Passos 1 e 2 percorridos com um clique cada — o que os testes do passo 4
+ * têm em comum, não o que cada um testa. */
+async function irParaRevisao(usuario: ReturnType<typeof userEvent.setup>) {
+  await usuario.click(await screen.findByRole("button", { name: "Avançar" }));
+  await usuario.click(
+    await screen.findByRole("button", { name: "Confirmar e classificar" }),
+  );
+  await screen.findByText(/^Revisão — /);
 }
 
 describe("ClassificacaoPasta", () => {
@@ -247,6 +289,201 @@ describe("ClassificacaoPasta", () => {
       await screen.findByText(
         "Não foi possível classificar: modelo indisponível no momento. " +
           "Nenhum dado foi perdido — tente novamente quando quiser.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("propostas nascem todas marcadas", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [
+          proposta("/fotos/a", "categoria", "Viagens"),
+          proposta("/fotos/b", "cidade", "Lisboa"),
+        ],
+        pastas_sem_resposta: [],
+        custo_real: null,
+      },
+    });
+    await irParaRevisao(usuario);
+
+    expect(
+      await screen.findByText("2 de 2 propostas selecionadas"),
+    ).toBeInTheDocument();
+  });
+
+  it("pastilha de origem aparece na linha depois", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [
+          proposta("/fotos/a", "categoria", "Viagens"),
+          proposta("/fotos/b", "cidade", "Lisboa"),
+        ],
+        pastas_sem_resposta: [],
+        custo_real: null,
+      },
+    });
+    await irParaRevisao(usuario);
+
+    expect(screen.getAllByText("IA · pasta")).toHaveLength(2);
+  });
+
+  it("duas propostas da mesma pasta viram uma linha", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [
+          proposta("/fotos/a", "categoria", "Viagens"),
+          proposta("/fotos/a", "cidade", "Lisboa"),
+        ],
+        pastas_sem_resposta: [],
+        custo_real: null,
+      },
+    });
+    await irParaRevisao(usuario);
+
+    expect(screen.getAllByText("/fotos/a")).toHaveLength(1);
+    expect(screen.getAllByText(/^depois:/)).toHaveLength(2);
+    expect(
+      await screen.findByText("1 de 1 propostas selecionadas"),
+    ).toBeInTheDocument();
+  });
+
+  it("resumo de sem-resposta é uma linha só", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [proposta("/fotos/a", "categoria", "Viagens")],
+        pastas_sem_resposta: ["/fotos/x", "/fotos/y"],
+        custo_real: null,
+      },
+    });
+    await irParaRevisao(usuario);
+
+    expect(
+      screen.getAllByText(/pastas sem resposta confiável/),
+    ).toHaveLength(1);
+    // Nenhuma linha em branco para as pastas sem resposta — os nomes só
+    // aparecem depois de "Ver quais »" expandir a lista (D-06).
+    expect(screen.queryByText("/fotos/x")).not.toBeInTheDocument();
+    expect(screen.queryByText("/fotos/y")).not.toBeInTheDocument();
+  });
+
+  it("sem pastas sem resposta, sem linha de resumo", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [proposta("/fotos/a", "categoria", "Viagens")],
+        pastas_sem_resposta: [],
+        custo_real: null,
+      },
+    });
+    await irParaRevisao(usuario);
+
+    expect(
+      screen.queryByText(/pastas sem resposta confiável/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Ver quais expande os nomes", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [proposta("/fotos/a", "categoria", "Viagens")],
+        pastas_sem_resposta: ["/fotos/x"],
+        custo_real: null,
+      },
+    });
+    await irParaRevisao(usuario);
+
+    expect(screen.queryByText("/fotos/x")).not.toBeInTheDocument();
+    await usuario.click(screen.getByText("Ver quais »"));
+    expect(await screen.findByText("/fotos/x")).toBeInTheDocument();
+  });
+
+  it("aprovar envia só as marcadas", async () => {
+    const { usuario, chamadas } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [
+          proposta("/fotos/a", "categoria", "Viagens"),
+          proposta("/fotos/b", "cidade", "Lisboa"),
+        ],
+        pastas_sem_resposta: [],
+        custo_real: null,
+      },
+      "/api/genai-pasta/aprovar": { aprovadas: 1, descartadas: 1 },
+    });
+    await irParaRevisao(usuario);
+
+    await usuario.click(
+      screen.getByRole("checkbox", { name: "Aprovar proposta para /fotos/a" }),
+    );
+    await usuario.click(
+      await screen.findByRole("button", { name: "Aprovar 1 selecionadas" }),
+    );
+
+    const chamadaAprovar = await vi.waitFor(() => {
+      const achada = chamadas.find(
+        (chamada) => chamada.caminho === "/api/genai-pasta/aprovar",
+      );
+      if (!achada) throw new Error("aprovar ainda não chamado");
+      return achada;
+    });
+    expect(chamadaAprovar.corpo).toEqual({ pastas: ["/fotos/b"] });
+  });
+
+  it("fechar sem aprovar não chama aprovar", async () => {
+    const onFechar = vi.fn();
+    const { usuario, chamadas } = servirEMontar(
+      {
+        "/api/genai-pasta/rodar": {
+          propostas: [proposta("/fotos/a", "categoria", "Viagens")],
+          pastas_sem_resposta: [],
+          custo_real: null,
+        },
+      },
+      onFechar,
+    );
+    await irParaRevisao(usuario);
+
+    await usuario.click(
+      screen.getByRole("button", { name: "Fechar sem aprovar" }),
+    );
+
+    expect(onFechar).toHaveBeenCalled();
+    expect(
+      chamadas.some((c) => c.caminho === "/api/genai-pasta/aprovar"),
+    ).toBe(false);
+  });
+
+  it("abre no passo 4 quando há proposta pendente", async () => {
+    servirApi({
+      "/api/genai-pasta/config": config(true, true),
+      "/api/genai-pasta/propostas": [
+        proposta("/fotos/a", "categoria", "Viagens"),
+      ],
+    });
+    montar(<ClassificacaoPasta onFechar={vi.fn()} />);
+
+    expect(await screen.findByText(/^Revisão — /)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Avançar" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("passo concluído mostra a frase de expectativa", async () => {
+    const { usuario } = servirEMontar({
+      "/api/genai-pasta/rodar": {
+        propostas: [proposta("/fotos/a", "categoria", "Viagens")],
+        pastas_sem_resposta: [],
+        custo_real: null,
+      },
+      "/api/genai-pasta/aprovar": { aprovadas: 1, descartadas: 0 },
+    });
+    await irParaRevisao(usuario);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Aprovar 1 selecionadas" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "As sugestões aparecem em Revisão na próxima geração de sugestões.",
       ),
     ).toBeInTheDocument();
   });
