@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 7 em andamento (07-04 fechado — gate de dois consentimentos e endpoints /api/genai-pasta/*)
-stopped_at: "Phase 7 Plan 04 executed — próximo: 07-05-PLAN.md"
-last_updated: "2026-08-18T21:20:42.968Z"
-last_activity: "2026-08-18 — 07-04 fechado: SessaoDeClassificacaoDePasta liga persistência (07-01), cliente Claude (07-02) e pré-filtro/custo (07-03) atrás da conjunção servicos_externos AND classificacao_pasta_genai (D-080). Sete endpoints /api/genai-pasta/* no ar, gate fechado devolve 409 com ZERO chamadas ao classificador, falha da API vira 502 sem derrubar o servidor. 10 testes verdes, 985 na suíte inteira. GENAI-01/GENAI-02 continuam Pending — falta 07-06/07-07 (frontend) para o comportamento ficar visível/acionável pelo dono."
+status: Fase 7 em andamento (07-05 fechado — degrau llm_pasta na cascata do SuggestionEngine)
+stopped_at: "Phase 7 Plan 05 executed — próximo: 07-06-PLAN.md"
+last_updated: "2026-08-18T21:34:52.972Z"
+last_activity: "2026-08-18 — 07-05 fechado: SCORES_REFERENCIA['llm_pasta'] provisório (0.55, PROVISÓRIO até 07-09 medir), degrau 2c em _evidencias_geo (país/cidade) e 3b em _categoria (categoria), evento condicional em _evidencias_para — sempre fallback, atrás de todo determinístico e do advisor de cluster. SuggestionEngine(pastas_classificadas=...) lido em lote por gerar(); jobs.py repassa ClassificacaoPastaRepository.aprovadas() do cache local. 7 testes verdes (origem própria, durabilidade sem chamada externa, precedência determinística, não-regressão), 992 na suíte inteira. GENAI-03 continua Pending — falta 07-06/07-07 (frontend) para o comportamento ficar visível/acionável pelo dono."
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 19
-  completed_plans: 15
+  completed_plans: 16
   percent: 17
 ---
 
@@ -24,17 +24,17 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 nenhuma operação física acontece sem revisão humana e dry-run.
 **Current focus:** v2.0 — Fase 7 em andamento (classificação de pasta por
 GenAI); 07-01 (persistência), 07-02 (cliente Claude), 07-03 (pré-filtro +
-custo) e 07-04 (gate + endpoints) fechados, próximo é 07-05 (integração na
-cascata do SuggestionEngine).
+custo), 07-04 (gate + endpoints) e 07-05 (integração na cascata) fechados,
+próximo é 07-06 (frontend de revisão).
 
 ## Current Position
 
 Phase: 7 — Classificação de pasta por GenAI (In Progress)
-Plan: 4/10 concluído — próximo: 07-05-PLAN.md (integração na cascata)
-Status: Fase 7 em andamento (07-04 fechado — gate de dois consentimentos e endpoints /api/genai-pasta/*)
-Last activity: 2026-08-18 — 07-04 fechado: SessaoDeClassificacaoDePasta liga persistência (07-01), cliente Claude (07-02) e pré-filtro/custo (07-03) atrás da conjunção servicos_externos AND classificacao_pasta_genai (D-080). Sete endpoints /api/genai-pasta/* no ar, gate fechado devolve 409 com ZERO chamadas ao classificador, falha da API vira 502 sem derrubar o servidor. 10 testes verdes, 985 na suíte inteira. GENAI-01/GENAI-02 continuam Pending — falta 07-06/07-07 (frontend) para o comportamento ficar visível/acionável pelo dono.
+Plan: 5/10 concluído — próximo: 07-06-PLAN.md (frontend de revisão)
+Status: Fase 7 em andamento (07-05 fechado — degrau llm_pasta na cascata do SuggestionEngine)
+Last activity: 2026-08-18 — 07-05 fechado: SCORES_REFERENCIA['llm_pasta'] provisório (0.55, PROVISÓRIO até 07-09 medir), degrau 2c em _evidencias_geo (país/cidade) e 3b em _categoria (categoria), evento condicional em _evidencias_para — sempre fallback, atrás de todo determinístico e do advisor de cluster. SuggestionEngine(pastas_classificadas=...) lido em lote por gerar(); jobs.py repassa ClassificacaoPastaRepository.aprovadas() do cache local. 7 testes verdes, 992 na suíte inteira. GENAI-03 continua Pending — falta 07-06/07-07 (frontend) para o comportamento ficar visível/acionável pelo dono.
 
-Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 4/10 planos)
+Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 5/10 planos)
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento,
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 07 P05 | ~15min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,7 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-02: ClassificacaoDePastaClaude — chamada única em lote (D-03), categoria restrita ao vocabulário canônico de engine.py, D-02/D-06 reaplicados sobre a resposta do modelo (não só no prompt). GENAI-02 continua Pending — falta 07-04 conectar o cliente a um trigger real de UI/endpoint.
 - [Phase 07]: 07-03: D-079 — dono decidiu (via AskUserQuestion, respondendo o checkpoint:decision da Task 1) a opção híbrida sobre a colisão count_tokens × critério 2 do ROADMAP: estimativa local conservadora antes de confirmar (nada sai da máquina), contagem exata só depois, mostrada no resumo pós-execução (passo 5). candidatas_de_pasta.py::candidatas() (D-01) e custo_genai.py::estimar()/contar_exato() (D-04/D-05) implementados conforme a decisão; 07-UI-SPEC.md atualizado no mesmo commit. GENAI-01 continua Pending — falta 07-04 conectar as duas peças a um endpoint/UI real.
 - [Phase 07-04]: SessaoDeClassificacaoDePasta liga o gate de dois consentimentos (D-080) aos endpoints /api/genai-pasta/*. GENAI-01/GENAI-02 continuam Pending até 07-06/07-07 (frontend) existirem.
+- [Phase 07-05]: llm_pasta é degrau PROVISÓRIO (score 0.55) e SEMPRE fallback na cascata — entra em _evidencias_geo depois da hierarquia de pasta falhar e em _categoria depois do advisor de cluster; medição fica para 07-09. `SuggestionEngine(pastas_classificadas=...)` lido em lote por `gerar()`, jobs.py repassa `ClassificacaoPastaRepository.aprovadas()`. GENAI-03 continua Pending — falta 07-06/07-07 (UI) para o comportamento ficar visível/acionável.
 
 ### Pending Todos
 
@@ -223,8 +225,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T21:19:44.796Z
-Stopped at: Phase 7 Plan 04 executed — próximo: 07-05-PLAN.md
+Last session: 2026-08-18T21:34:52.964Z
+Stopped at: Phase 7 Plan 05 executed — próximo: 07-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
