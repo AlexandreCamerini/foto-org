@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-01 concluído (1/9)
-stopped_at: Plano 06-01 (modelo de dados da escrita EXIF) concluído
-last_updated: "2026-08-18T11:31:36.858Z"
-last_activity: 2026-08-18 — 06-01-PLAN.md executado (ExifWritePlan/ExifWriteItem + migração 0019)
+status: Fase 6 em execução — plano 06-02 concluído (2/9)
+stopped_at: Plano 06-02 (writer exiftool, diff de tags, sync-detect, allowlist de formatos) concluído
+last_updated: "2026-08-18T11:46:14.596Z"
+last_activity: 2026-08-18 — 06-02-PLAN.md executado (ExifToolWriter, verificacao.diferenca, pasta_sincronizada, formatos.py)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 01 de 9 concluído — próximo: 06-02 (writer exiftool, diff de tags, sync-detect, allowlist de formatos)
-Status: Fase 6 em execução — plano 06-01 concluído (1/9)
-Last activity: 2026-08-18 — 06-01-PLAN.md executado (ExifWritePlan/ExifWriteItem + migração 0019)
+Plan: 02 de 9 concluído — próximo: 06-03 (ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar)
+Status: Fase 6 em execução — plano 06-02 concluído (2/9)
+Last activity: 2026-08-18 — 06-02-PLAN.md executado (ExifToolWriter, verificacao.diferenca, pasta_sincronizada, formatos.py)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -52,10 +52,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 04 | 7 | - | - |
 | 05 | 5 | - | - |
 | 06 P01 | 24min | 3 tasks | 4 files |
+| 06 P02 | 9min | 3 tasks | 6 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-01 (24min)
+- Last 5 plans: 06-01 (24min), 06-02 (9min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -115,6 +116,15 @@ Recent decisions affecting current work:
   (não ADR-locked) nesta sessão, por aprovação explícita do dono — ver
   `.planning/INGEST-CONFLICTS.md`.
 
+- Plano 06-02 entregou as primitivas de escrita (`ExifToolWriter.escrever`,
+  `verificacao.diferenca`/`campo_gravado`, `pasta_sincronizada`,
+  `formatos.suportado`/`motivo`) — verificação por diff completo de tags é
+  o único sinal de sucesso aceito (exit code do exiftool provadamente
+  insuficiente, Pitfall 2). Nenhum requisito EXIF-02/03/04/05 foi marcado
+  como completo — são fundação, não o comportamento fim-a-fim (mesma
+  disciplina que 06-01 já seguiu). `formatos.py` continua provisório
+  (`MEDIDO_EM=None`) até 06-04 medir contra o acervo real.
+
 ### Pending Todos
 
 None yet.
@@ -170,9 +180,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T11:31:29.861Z
-Stopped at: Plano 06-01 (modelo de dados da escrita EXIF) concluído
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-02-PLAN.md
+Last session: 2026-08-18T11:46:14.596Z
+Stopped at: Plano 06-02 (writer exiftool, diff de tags, sync-detect, allowlist de formatos) concluído
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-03-PLAN.md
 
 ## Operator Next Steps
 

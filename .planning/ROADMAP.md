@@ -138,7 +138,7 @@ para formato reprovado — EXIF-05 — não um caminho paralelo geral).
 
 Plans:
 - [x] 06-01-PLAN.md — Modelos ExifWritePlan/ExifWriteItem (status por campo) + migração 0019
-- [ ] 06-02-PLAN.md — Writer exiftool, verificação por diff de tags, sync-detect e allowlist de formatos
+- [x] 06-02-PLAN.md — Writer exiftool, verificação por diff de tags, sync-detect e allowlist de formatos
 - [ ] 06-03-PLAN.md — ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar
 - [ ] 06-04-PLAN.md — Teste empírico de escrita por formato (D-03/D-04) e decisão medida em docs/DECISOES.md
 - [ ] 06-05-PLAN.md — ExifWriteExecutor: dry-run autoritativo, escrita verificada por campo, falha parcial e backup
