@@ -81,6 +81,7 @@ Each task was committed atomically:
 - `AuditLog` não ganhou coluna nova; a integração com o domínio de escrita EXIF é só via `detalhe` JSON. Justificativa completa no docstring de `exif_write.py` e no docstring da migração 0019.
 - Enum `CampoStatus` distingue `PULADO` (campo já preenchido, não sobrescrito) de `SEM_VALOR` (motor não inferiu nada) — os dois viram cópias diferentes na UI (plano futuro).
 - `incluido` nasce `True` para itens normais; a decisão de nascer `False` para linha de sidecar (D-06, opt-in) fica para o planner (plano futuro), não para o modelo em si — o modelo só documenta a intenção no comentário.
+- **REQUIREMENTS.md NÃO foi marcado como completo para EXIF-01/03/05.** O frontmatter `requirements-completed` acima copia o campo `requirements` do plano (convenção do template), mas EXIF-01, EXIF-03 e EXIF-05 também aparecem nos planos 06-03, 06-04, 06-05, 06-06, 06-08 e 06-09 — este plano só entrega a fundação de esquema, não o comportamento fim-a-fim que o texto de cada requisito descreve (dry-run aprovável, escrita verificada por diff de tags, oferta de sidecar visível). Rodei `requirements.mark-complete` por engano e revertido antes do commit final; os checkboxes ficam `[ ]` até o plano que efetivamente fecha cada requisito.
 
 ## Deviations from Plan
 
