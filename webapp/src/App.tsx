@@ -9,6 +9,7 @@ import Loupe from "./components/Loupe";
 import Mapa from "./components/Mapa";
 import ModalCaminho from "./components/ModalCaminho";
 import Duplicates from "./components/Duplicates";
+import EscritaExif from "./components/EscritaExif";
 import Operations from "./components/Operations";
 import Panorama from "./components/Panorama";
 import type { Recorte } from "./components/Panorama";
@@ -28,6 +29,7 @@ const ABAS = [
   "Revisão",
   "Duplicatas",
   "Operações",
+  "Localização",
 ] as const;
 type Aba = (typeof ABAS)[number];
 
@@ -41,6 +43,8 @@ const DICAS: Record<Aba, string> = {
   Revisão: "aprove ou rejeite; o destino só sai do papel em Operações · [ fontes",
   Duplicatas: "escolha a principal de cada grupo",
   Operações: "plano → dry-run → cópia verificada; o original nunca é tocado",
+  Localização:
+    "revise o plano linha a linha; desmarque o que não quer gravar — o original só muda depois de aprovar",
 };
 
 // O mapa tem outro vocabulário que a grade, e um atalho que não aparece na
@@ -307,6 +311,7 @@ export default function App() {
           {aba === "Revisão" && <Review job={job} fonte={fonte ?? undefined} />}
           {aba === "Duplicatas" && <Duplicates job={job} />}
           {aba === "Operações" && <Operations job={job} />}
+          {aba === "Localização" && <EscritaExif job={job} />}
           {aba === "Biblioteca" && (
             <>
               <div className="flex flex-col gap-2 border-b border-borda px-3 py-2 lg:flex-row lg:items-center lg:gap-2">
