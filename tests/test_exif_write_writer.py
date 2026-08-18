@@ -16,7 +16,7 @@ import pytest
 
 from fotoorganizer.exif_write.formatos import caminho_sidecar, motivo, suportado
 from fotoorganizer.exif_write.sync_detect import pasta_sincronizada
-from fotoorganizer.exif_write.verificacao import DiffTags, campo_gravado, diferenca
+from fotoorganizer.exif_write.verificacao import DiffTags, avisos, campo_gravado, diferenca
 from fotoorganizer.exif_write.writer import ExifToolWriter, ValorInvalido, validar_campos
 from fotoorganizer.metadata.exiftool import ExifToolExtractor
 from fotoorganizer.security.hashing import sha256_full
@@ -105,6 +105,61 @@ def test_campo_gravado_exige_todas_as_tags_do_campo():
 
     diff_parcial = diferenca({}, {"IPTC:City": "São Paulo"})
     assert campo_gravado("cidade", diff_parcial) is False
+
+
+# -- Deviação (plano 06-04): avisos() colapsava duplicatas via -j e contava
+# o resumo "Validate" como se fosse ele próprio um aviso novo -------------
+
+
+def test_avisos_nao_conta_melhora_do_resumo_validate_como_aviso_novo(monkeypatch):
+    """Achado da medição real (plano 06-04): um JPEG com "3 Warnings" antes
+    da escrita virou "Validate: OK" depois (exiftool renormalizou o IFD),
+    o que um diff textual ingênuo contaria como aviso NOVO — é melhora, não
+    regressão. `Validate` não é warning nem error; fica fora do conjunto.
+    """
+    saida_antes = (
+        "Validate                        : 3 Warnings (all minor)\n"
+        "Warning                         : [minor] Odd offset for ExifIFD tag\n"
+    )
+    saida_depois = "Validate                        : OK\n"
+
+    respostas = iter([saida_antes, saida_depois])
+
+    def _fake_run(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=_args, returncode=0, stdout=next(respostas), stderr=""
+        )
+
+    monkeypatch.setattr("subprocess.run", _fake_run)
+    antes = avisos(Path("qualquer.jpg"))
+    depois = avisos(Path("qualquer.jpg"))
+    assert depois - antes == set()
+    assert "Validate: OK" not in depois
+    assert "Validate: 3 Warnings (all minor)" not in antes
+
+
+def test_avisos_preserva_todos_os_warnings_duplicados(monkeypatch):
+    """Achado da medição real: a saída `-j` do exiftool colapsa tags
+    `Warning` repetidas em uma só (verificado contra um TIFF real com 6
+    warnings, JSON devolvia 1) — texto plano lista cada ocorrência."""
+    saida = (
+        "Validate                        : 6 Warnings (3 minor)\n"
+        "Warning                         : Non-standard format (undef) for IFD0\n"
+        "Warning                         : [minor] IPTC TimeCreated too short\n"
+        "Warning                         : Missing required TIFF ExifIFD tag\n"
+        "Warning                         : [minor] ExifIFD tag not allowed in TIFF (a)\n"
+        "Warning                         : [minor] ExifIFD tag not allowed in TIFF (b)\n"
+        "Warning                         : Invalid value for IFD0 tag Compression\n"
+    )
+
+    def _fake_run(*_args, **_kwargs):
+        return subprocess.CompletedProcess(args=_args, returncode=0, stdout=saida, stderr="")
+
+    monkeypatch.setattr("subprocess.run", _fake_run)
+    resultado = avisos(Path("qualquer.tif"))
+    assert len(resultado) == 6
+    assert all(chave.startswith("Warning:") for chave in resultado)
+    assert not any(chave.startswith("Validate") for chave in resultado)
 
 
 # -- Task 2: writer.py — validação Python-side e escrita direta + sidecar ---

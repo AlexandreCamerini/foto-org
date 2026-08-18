@@ -175,27 +175,38 @@ def avisos(caminho: Path, binario: str = "exiftool") -> set[str]:
     avisos depois" — uma fixture sintética pode já carregar aviso
     pré-existente. Esta função só coleta o estado bruto; o delta é
     responsabilidade de quem chama, comparando duas chamadas.
+
+    Texto plano, não `-j`: verificado empiricamente (plano 06-04, medição
+    contra o acervo real) que a saída `-j` do exiftool **colapsa** tags
+    `Warning`/`Error` repetidas em uma só — um TIFF com 6 warnings reais
+    devolve só 1 no JSON, silenciando 5. Em texto plano cada ocorrência é
+    uma linha própria. `Validate` (o resumo agregado, ex. "6 Warnings (3
+    minor)") é descartado deste conjunto: não é warning nem error — é uma
+    contagem derivada que muda de valor sempre que a contagem muda, inclusive
+    quando ela MELHORA (uma reescrita que renormaliza o IFD e resolve um
+    warning pré-existente também muda o texto de `Validate`, o que um diff
+    ingênuo contaria como aviso "novo" — verificado num JPEG real: 3
+    Warnings -> "OK" depois de uma escrita limpa). O conteúdo que interessa
+    já está inteiro nas linhas `Warning:`/`Error:` individuais.
     """
     try:
         resultado = subprocess.run(
-            [binario, "-validate", "-warning", "-error", "-a", "-j", str(caminho)],
+            [binario, "-validate", "-warning", "-error", "-a",
+             "-charset", "filename=utf8", str(caminho)],
             capture_output=True, text=True, check=False, timeout=_TIMEOUT_S,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         log.warning("exiftool -validate falhou em %s (%s)", caminho, exc)
         return set()
-    try:
-        dados = json.loads(resultado.stdout)
-    except json.JSONDecodeError:
-        return set()
-    if not dados:
-        return set()
-    item = dados[0]
-    return {
-        f"{chave}: {valor}"
-        for chave, valor in item.items()
-        if chave != "SourceFile"
-    }
+    coletados: set[str] = set()
+    for linha in resultado.stdout.splitlines():
+        chave, separador, valor = linha.partition(":")
+        if not separador:
+            continue
+        chave = chave.strip()
+        if chave in ("Warning", "Error"):
+            coletados.add(f"{chave}: {valor.strip()}")
+    return coletados
 
 
 @dataclass(frozen=True, slots=True)
