@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Roadmap v2.0 escrito, nenhuma fase planejada em detalhe
-stopped_at: Phase 6 context gathered
-last_updated: "2026-08-18T10:06:02.014Z"
-last_activity: 2026-08-18 — ROADMAP.md do milestone v2.0 criado (fases 6-11)
+status: Fase 6 em execução — plano 06-01 concluído (1/9)
+stopped_at: Plano 06-01 (modelo de dados da escrita EXIF) concluído
+last_updated: "2026-08-18T11:31:36.858Z"
+last_activity: 2026-08-18 — 06-01-PLAN.md executado (ExifWritePlan/ExifWriteItem + migração 0019)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 9
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,10 +27,10 @@ Fase 6 (escrita EXIF de localização).
 
 ## Current Position
 
-Phase: 6 — Escrita EXIF de localização (não iniciada)
-Plan: —
-Status: Roadmap v2.0 escrito, nenhuma fase planejada em detalhe
-Last activity: 2026-08-18 — ROADMAP.md do milestone v2.0 criado (fases 6-11)
+Phase: 6 — Escrita EXIF de localização (em execução)
+Plan: 01 de 9 concluído — próximo: 06-02 (writer exiftool, diff de tags, sync-detect, allowlist de formatos)
+Status: Fase 6 em execução — plano 06-01 concluído (1/9)
+Last activity: 2026-08-18 — 06-01-PLAN.md executado (ExifWritePlan/ExifWriteItem + migração 0019)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -51,10 +51,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 03 | 2 | - | - |
 | 04 | 7 | - | - |
 | 05 | 5 | - | - |
+| 06 P01 | 24min | 3 tasks | 4 files |
 
 **Recent Trend:**
 
-- Last 5 plans: -
+- Last 5 plans: 06-01 (24min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -169,9 +170,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T10:06:02.009Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-CONTEXT.md
+Last session: 2026-08-18T11:31:29.861Z
+Stopped at: Plano 06-01 (modelo de dados da escrita EXIF) concluído
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-02-PLAN.md
 
 ## Operator Next Steps
 
