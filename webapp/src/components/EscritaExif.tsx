@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { CampoExif, PlanoExif, RelatorioDryRunExif } from "../api";
+import type {
+  CampoExif,
+  ItemPlanoExif,
+  PlanoExif,
+  RelatorioDryRunExif,
+} from "../api";
 import type { Job } from "../hooks/useJob";
 import Botao from "../ui/Botao";
 
@@ -30,17 +35,20 @@ function formatarValorCampo(
   return `${ROTULO_CAMPO[chave]} ${valor ?? ""}`;
 }
 
-/** Um dos três chips de campo de uma linha tipo A. O `switch` sobre
+/** Um dos três chips de campo de uma linha tipo A/C (ou de uma linha tipo B
+ *  rumo ao sidecar — `sufixo` marca isso, ex. " → .xmp"). O `switch` sobre
  *  `StatusCampoExif` é exaustivo de propósito: `gravado`/`falha` só passam
- *  a existir de fato no plano 06-08 (execução real e detalhamento
- *  pós-gravação), mas cair aqui já hoje garante que o TypeScript acusa
- *  quando aquele plano esquecer de tratar um caso. */
+ *  a existir de fato quando a gravação roda de verdade (plano 06-08,
+ *  próxima tarefa), mas cair aqui já hoje garante que o TypeScript acusa
+ *  quando aquele tratamento esquecer um caso. */
 function ChipCampo({
   chave,
   campo,
+  sufixo = "",
 }: {
   chave: "gps" | "cidade" | "pais";
   campo: CampoExif;
+  sufixo?: string;
 }) {
   const rotulo = ROTULO_CAMPO[chave];
   switch (campo.status) {
@@ -51,17 +59,19 @@ function ChipCampo({
           title={campo.motivo ?? undefined}
         >
           {formatarValorCampo(chave, campo.valor)}
+          {sufixo}
         </span>
       );
     case "pulado":
       // Comportamento esperado, não erro: mesmo token de "pulado" usado em
-      // toda a tela — nunca text-erro.
+      // toda a tela — nunca a cor reservada a erro.
       return (
         <span
           className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-texto-2"
           title={campo.motivo ?? undefined}
         >
           {JA_PREENCHIDO[chave]}
+          {sufixo}
         </span>
       );
     case "sem_valor":
@@ -70,7 +80,7 @@ function ChipCampo({
           className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-texto-3"
           title={campo.motivo ?? undefined}
         >
-          {rotulo} —
+          {rotulo} —{sufixo}
         </span>
       );
     case "pendente":
@@ -82,9 +92,54 @@ function ChipCampo({
           title={campo.motivo ?? undefined}
         >
           {rotulo}
+          {sufixo}
         </span>
       );
   }
+}
+
+/** Motivo exato travado na UI-SPEC (Copywriting Contract, "Sync-folder
+ *  warning" tooltip) — aviso, nunca bloqueio (D-07). */
+const AVISO_PASTA_SINCRONIZADA =
+  "O app de sincronização pode sobrescrever este arquivo com a versão antiga ou gerar conflito silencioso. Você decide incluir ou não.";
+
+/** Linha tipo B (EXIF-05/D-05): badge do motivo de formato não suportado,
+ *  motivo sempre visível como texto (não só no `title` — D-05). */
+function BadgeFormato({ item }: { item: ItemPlanoExif }) {
+  return (
+    <span
+      className="rounded-full border border-atencao/40 bg-atencao/10 px-2 py-0.5 text-[11px] text-atencao"
+      title={item.motivo_nao_suportado ?? undefined}
+    >
+      ⚠ Formato não suportado — {item.motivo_nao_suportado}
+    </span>
+  );
+}
+
+/** Badge 2 da linha tipo B (D-06): sinal redundante de que esta linha NÃO
+ *  escreve no original — sempre junto do badge de formato, nunca sozinho. */
+function BadgeSidecar({ item }: { item: ItemPlanoExif }) {
+  return (
+    <span
+      className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-herdado"
+      title={item.sidecar_destino ?? undefined}
+    >
+      ⇢ sidecar .xmp
+    </span>
+  );
+}
+
+/** Linha tipo C (D-07): aviso aditivo, a linha continua marcada por
+ *  padrão — nunca bloqueio. */
+function BadgeSync({ item }: { item: ItemPlanoExif }) {
+  return (
+    <span
+      className="rounded-full border border-atencao/40 bg-atencao/10 px-2 py-0.5 text-[11px] text-atencao"
+      title={AVISO_PASTA_SINCRONIZADA}
+    >
+      ☁ Pasta sincronizada — {item.pasta_sincronizada}
+    </span>
+  );
 }
 
 /** O que o dry-run concluiu — a frase que decide se dá para gravar.
@@ -109,6 +164,12 @@ export default function EscritaExif({ job }: { job: Job }) {
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [relatorio, setRelatorio] = useState<RelatorioDryRunExif | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // Ids marcados para entrar na próxima execução (D-01/D-02): o dono aprova
+  // o lote inteiro de uma vez e desmarca linhas pontuais. Semeado a partir
+  // do servidor (useEffect abaixo), nunca de "todos marcados" — o backend
+  // já decidiu o default por tipo de linha (tipo B nasce desmarcado, D-06 é
+  // opt-in), e duplicar essa regra no cliente criaria duas verdades.
+  const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const queryClient = useQueryClient();
 
   const { data: planos } = useQuery({
@@ -128,6 +189,16 @@ export default function EscritaExif({ job }: { job: Job }) {
 
   // Relatório é sempre do plano em tela — trocar de plano zera a evidência.
   useEffect(() => setRelatorio(null), [selecionado]);
+
+  // Semeia a seleção a partir do plano sempre que o detalhe muda (troca de
+  // plano, dry-run recarregando, execução recarregando). Não reage a
+  // toggles locais do dono: o `Set` só é substituído quando `plano` (a
+  // referência do react-query) muda.
+  useEffect(() => {
+    if (plano) {
+      setMarcados(new Set(plano.itens.filter((i) => i.incluido).map((i) => i.id)));
+    }
+  }, [plano]);
 
   const criar = useMutation({
     mutationFn: () => api.criarPlanoExif(),
@@ -155,8 +226,10 @@ export default function EscritaExif({ job }: { job: Job }) {
   });
 
   const executando = job.rodando && job.estado.tipo === "escrita_exif";
-  // Ter rodado o dry-run não basta: ele precisa ter aprovado algo gravável.
-  const podeGravar = plano != null && plano.executavel && !job.rodando;
+  // Ter rodado o dry-run não basta: precisa ter aprovado algo gravável E
+  // ter ao menos uma linha marcada (D-02) — desmarcar tudo desabilita a CTA.
+  const podeGravar =
+    plano != null && plano.executavel && marcados.size > 0 && !job.rodando;
 
   return (
     <div className="flex h-full flex-col">
@@ -218,10 +291,11 @@ export default function EscritaExif({ job }: { job: Job }) {
                 <Botao
                   variante="solido"
                   onClick={() =>
-                    // Ainda sem checkbox por linha — `itens: null` grava o
-                    // plano inteiro. A seleção pontual entra no 06-08.
+                    // A seleção real do dono (D-01/D-02) — nunca `null`,
+                    // mesmo quando tudo está marcado, para o servidor
+                    // persistir exatamente o que a tela mostrava.
                     job
-                      .executarEscritaExif(plano.id, null)
+                      .executarEscritaExif(plano.id, Array.from(marcados))
                       .catch((e: Error) => setErro(e.message))
                   }
                   disabled={!podeGravar}
@@ -230,12 +304,13 @@ export default function EscritaExif({ job }: { job: Job }) {
                       ? "Rode o dry-run antes de gravar"
                       : !plano.executavel
                         ? "O dry-run não encontrou nenhum campo gravável"
-                        : "Grava os campos vazios no arquivo original"
+                        : marcados.size === 0
+                          ? "Nenhum arquivo marcado para gravar"
+                          : "Grava os campos vazios no arquivo original"
                   }
                   className="whitespace-nowrap"
                 >
-                  Gravar {plano.prontos ?? plano.total_itens - plano.gravados}{" "}
-                  arquivos
+                  Gravar {marcados.size} arquivos
                 </Botao>
                 {executando && (
                   <Botao
@@ -284,21 +359,93 @@ export default function EscritaExif({ job }: { job: Job }) {
               )}
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {plano.itens.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 border-b border-borda px-3 py-1.5"
-                  >
-                    <span className="min-w-0 flex-1 truncate font-titulo">
-                      {item.nome}
-                    </span>
-                    <div className="flex shrink-0 gap-3">
-                      <ChipCampo chave="gps" campo={item.campos.gps} />
-                      <ChipCampo chave="cidade" campo={item.campos.cidade} />
-                      <ChipCampo chave="pais" campo={item.campos.pais} />
+                {plano.itens.map((item) => {
+                  // Tipo B (EXIF-05/D-05/D-06): sem caminho de escrita
+                  // direto — o checkbox controla o sidecar .xmp, não o
+                  // arquivo original.
+                  const ehTipoB = !item.formato_suportado;
+                  // Tipo C (D-07): aviso aditivo, não muda a semântica do
+                  // checkbox (a não ser que a linha também seja tipo B).
+                  const ehTipoC = item.pasta_sincronizada !== null;
+                  // Uma linha pode ser B e C ao mesmo tempo (arquivo não
+                  // suportado dentro de pasta sincronizada) — os dois
+                  // badges renderizam lado a lado, e a semântica do
+                  // checkbox segue a de B (sidecar), nunca a de C.
+                  const rotuloCheckbox = ehTipoB
+                    ? "Gravar sidecar .xmp para este arquivo"
+                    : `Gravar localização em ${item.nome}`;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`border-b border-borda px-3 py-1.5 ${
+                        ehTipoB ? "bg-atencao/5" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 shrink-0 rounded-sm border-borda-forte accent-acento"
+                          checked={marcados.has(item.id)}
+                          onChange={() =>
+                            setMarcados((atual) => {
+                              const novo = new Set(atual);
+                              if (novo.has(item.id)) novo.delete(item.id);
+                              else novo.add(item.id);
+                              return novo;
+                            })
+                          }
+                          aria-label={rotuloCheckbox}
+                        />
+                        <span className="min-w-0 flex-1 truncate font-titulo">
+                          {item.nome}
+                        </span>
+                        {(ehTipoB || ehTipoC) && (
+                          <div className="flex shrink-0 gap-1.5">
+                            {ehTipoB && <BadgeFormato item={item} />}
+                            {ehTipoB && <BadgeSidecar item={item} />}
+                            {ehTipoC && <BadgeSync item={item} />}
+                          </div>
+                        )}
+                        {!ehTipoB && (
+                          <div className="flex shrink-0 gap-3">
+                            <ChipCampo chave="gps" campo={item.campos.gps} />
+                            <ChipCampo
+                              chave="cidade"
+                              campo={item.campos.cidade}
+                            />
+                            <ChipCampo chave="pais" campo={item.campos.pais} />
+                          </div>
+                        )}
+                      </div>
+
+                      {ehTipoB && (
+                        <div className="flex items-center gap-3 pl-7 pt-1">
+                          <span className="text-[11px] text-texto-2">
+                            Gravar sidecar .xmp para este arquivo
+                          </span>
+                          <div className="flex shrink-0 gap-3">
+                            <ChipCampo
+                              chave="gps"
+                              campo={item.campos.gps}
+                              sufixo=" → .xmp"
+                            />
+                            <ChipCampo
+                              chave="cidade"
+                              campo={item.campos.cidade}
+                              sufixo=" → .xmp"
+                            />
+                            <ChipCampo
+                              chave="pais"
+                              campo={item.campos.pais}
+                              sufixo=" → .xmp"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {auditoria && auditoria.length > 0 && (
