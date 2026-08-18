@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 7 em andamento (07-07 fechado — passos 4-5 do assistente GenAI de pasta)
-stopped_at: "Phase 7 Plan 07 executed — próximo: 07-08-PLAN.md"
-last_updated: "2026-08-18T19:15:00.000Z"
-last_activity: "2026-08-18 — 07-07 fechado: ClassificacaoPasta.tsx ganhou os passos 4 (revisão antes/depois agrupada por pasta, pastilha 'IA · pasta' distinguível, justificativa expansível, resumo nomeado de D-06 para pastas sem resposta) e 5 (concluído, custo real honesto). Montagem do modal ganhou recuperação de sessão paga não aprovada (D-07). 10 testes vitest novos (19 no arquivo, 182 na suíte inteira do webapp). GENAI-01/02/03 continuam Pending — falta 07-08 (ponto de entrada em Review.tsx) para o dono conseguir de fato abrir e usar o recurso."
+status: Fase 7 em andamento (07-08 fechado — ponto de entrada em Review.tsx)
+stopped_at: "Phase 7 Plan 08 executed — próximo: 07-09-PLAN.md"
+last_updated: "2026-08-18T19:25:00.000Z"
+last_activity: "2026-08-18 — 07-08 fechado: Review.tsx ganhou o botão \"Classificar pastas por IA…\" (montagem condicional do modal, sem aba nova) e o PorQue ganhou a pastilha \"IA · pasta\" para evidências de origem llm_pasta. Ponto de montagem verificado por leitura do arquivo (07-PATTERNS.md § Open Items item 5), não assumido. 4 testes vitest novos (24 no arquivo, 186 na suíte inteira do webapp). GENAI-03 continua Pending — 07-10 reserva a marcação dos três requisitos GENAI para depois de checkpoint humano com evidência real."
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 20
   percent: 17
 ---
 
@@ -25,23 +25,24 @@ nenhuma operação física acontece sem revisão humana e dry-run.
 **Current focus:** v2.0 — Fase 7 em andamento (classificação de pasta por
 GenAI); 07-01 (persistência), 07-02 (cliente Claude), 07-03 (pré-filtro +
 custo), 07-04 (gate + endpoints), 07-05 (integração na cascata), 07-06
-(assistente frontend, passos 0-3) e 07-07 (assistente frontend, passos 4-5)
-fechados, próximo é 07-08 (ponto de entrada em Review.tsx).
+(assistente frontend, passos 0-3), 07-07 (assistente frontend, passos 4-5)
+e 07-08 (ponto de entrada em Review.tsx) fechados, próximo é 07-09 (medição
+do score de llm_pasta).
 
 ## Current Position
 
 Phase: 7 — Classificação de pasta por GenAI (In Progress)
-Plan: 7/10 concluído — próximo: 07-08-PLAN.md (botão de entrada em Review.tsx, pastilha no PorQue)
-Status: Fase 7 em andamento (07-07 fechado — passos 4-5 do assistente GenAI de pasta)
-Last activity: 2026-08-18 — 07-07 fechado: ClassificacaoPasta.tsx ganhou os passos 4 (revisão antes/depois agrupada por pasta, pastilha "IA · pasta" distinguível, justificativa expansível, resumo nomeado de D-06) e 5 (concluído, custo real honesto). Montagem do modal ganhou recuperação de sessão paga não aprovada (D-07). 10 testes vitest novos (19 no arquivo, 182 na suíte inteira do webapp). GENAI-01/02/03 continuam Pending — falta 07-08 para o dono conseguir de fato abrir e usar o recurso.
+Plan: 8/10 concluído — próximo: 07-09-PLAN.md (medição do score de llm_pasta contra o acervo real)
+Status: Fase 7 em andamento (07-08 fechado — ponto de entrada em Review.tsx)
+Last activity: 2026-08-18 — 07-08 fechado: Review.tsx ganhou o botão "Classificar pastas por IA…" (montagem condicional do modal, sem aba nova) e o PorQue ganhou a pastilha "IA · pasta" para evidências de origem llm_pasta. Ponto de montagem verificado por leitura do arquivo antes de editar (07-PATTERNS.md § Open Items item 5, antes não verificado). 4 testes vitest novos (24 no arquivo, 186 na suíte inteira do webapp). GENAI-03 continua Pending — 07-10 reserva a marcação dos três requisitos GENAI para depois de checkpoint humano com evidência real, mesmo padrão da Fase 6.
 
-Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 7/10 planos)
+Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 8/10 planos)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -71,13 +72,14 @@ Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento,
 
 **Recent Trend:**
 
-- Last 5 plans: 07-03 (~15min), 07-04 (~20min), 07-05 (~15min), 07-06 (~35min), 07-07 (~50min)
+- Last 5 plans: 07-04 (~20min), 07-05 (~15min), 07-06 (~35min), 07-07 (~50min), 07-08 (~25min)
 - Trend: -
 
 *Updated after each plan completion*
 | Phase 07 P05 | ~15min | 3 tasks | 4 files |
 | Phase 07 P06 | ~35min | 3 tasks | 3 files |
 | Phase 07 P07 | ~50min | 3 tasks | 2 files |
+| Phase 07 P08 | ~25min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -169,6 +171,7 @@ Recent decisions affecting current work:
 - [Phase 07-05]: llm_pasta é degrau PROVISÓRIO (score 0.55) e SEMPRE fallback na cascata — entra em _evidencias_geo depois da hierarquia de pasta falhar e em _categoria depois do advisor de cluster; medição fica para 07-09. `SuggestionEngine(pastas_classificadas=...)` lido em lote por `gerar()`, jobs.py repassa `ClassificacaoPastaRepository.aprovadas()`. GENAI-03 continua Pending — falta 07-06/07-07 (UI) para o comportamento ficar visível/acionável.
 - [Phase 07-06]: `api.ts` ganhou os tipos/funções de `/api/genai-pasta/*`; `ClassificacaoPasta.tsx` entrega os passos 0-3 do assistente (gate de dois consentimentos, candidatas opt-out D-01, custo sempre "até" com a nota de honestidade D-079, chamada em voo não-cancelável). `pastaCurta` foi reproduzida localmente em vez de importada de `Review.tsx` (não exportada lá, e Review.tsx importa este componente em 07-08 — importar de volta criaria ciclo de módulos). Passos 4/5 (revisão/aprovação) são marcador mínimo até 07-07. GENAI-01 continua Pending — falta 07-07 (revisão/aprovação) e 07-08 (ponto de entrada em Review.tsx) para o dono conseguir usar o recurso de ponta a ponta.
 - [Phase 07-07]: `ClassificacaoPasta.tsx` fecha o assistente com os passos 4 (revisão agrupada por PASTA — propostas achatadas por campo no backend, reagrupadas no cliente, D-01/D-03; pastilha "IA · pasta" em paleta `herdado`, nível de confiança fixo "média" porque `SCORES_REFERENCIA["llm_pasta"]` (0.55, provisório) não é devolvido por proposta; resumo de D-06 para `pastas_sem_resposta` como uma linha só) e 5 (concluído, custo real honesto via D-079). Montagem do modal ganhou recuperação de sessão paga não aprovada (`api.propostasGenaiPasta()`, D-07) — falha na consulta cai no caminho normal, nunca trava. 19 testes vitest no arquivo (182 na suíte). GENAI-01/02/03 continuam Pending — falta 07-08 (ponto de entrada em Review.tsx) para o dono conseguir abrir o modal.
+- [Phase 07-08]: `Review.tsx` ganha o botão "Classificar pastas por IA…" (contorno/md, imediatamente antes de "Gerar/atualizar sugestões") e a montagem condicional de `ClassificacaoPasta` como último filho do elemento de raiz — ponto de montagem confirmado por leitura íntegra do arquivo pré-edição (`return (` em 134, raiz 135-380, exatamente 500 linhas), não assumido do `07-PATTERNS.md`, que registrava o item como não verificado. `PorQue` ganha a pastilha "IA · pasta" (paleta `herdado`, distinta da neutra de colisão de fonte CONS-01) para `ev.origem === "llm_pasta"` — `ev.origem` já trafegava ponta a ponta, nenhuma mudança de backend/`api.ts` foi necessária. 4 testes vitest novos (24 no arquivo, 186 na suíte). **GENAI-03 NÃO foi marcado completo** apesar de estar no `requirements:` do frontmatter deste plano — 07-10 reserva explicitamente a marcação dos três requisitos GENAI para depois de um checkpoint humano com evidência real (mesmo rigor da Fase 6); marcar aqui anteciparia essa conclusão. Ver `07-08-SUMMARY.md` § Deviations para duas correções de registro (nenhuma de código): números de linha do commit da Task 1 estavam imprecisos (arquivo batia exatamente com o que o plano assumia, sem divergência), e a acceptance criteria de grep da Task 1 subconta por 1 (`setClassificacaoAberta` não casa com o padrão minúsculo por case-sensitivity, não por ausência do disparo).
 
 ### Pending Todos
 
@@ -230,15 +233,19 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T19:15:00.000Z
-Stopped at: Phase 7 Plan 07 executed — próximo: 07-08-PLAN.md
+Last session: 2026-08-18T19:25:00.000Z
+Stopped at: Phase 7 Plan 08 executed — próximo: 07-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Executar `07-08-PLAN.md` (botão "Classificar pastas por IA…" em
-  `Review.tsx` + pastilha "IA · pasta" no `PorQue`) para o assistente
-  GenAI de pasta ficar acionável de ponta a ponta pelo dono
+- Executar `07-09-PLAN.md` (medição do score de `llm_pasta` contra o
+  acervo real — `autonomous: false`, roda no terminal do dono com a
+  própria chave de API; esta sessão nunca manuseia a credencial)
+
+- Depois de 07-09, `07-10-PLAN.md` fecha a fase: documentação de
+  arquitetura/privacidade e checkpoint humano com evidência real antes de
+  marcar GENAI-01/02/03 como completos em REQUIREMENTS.md
 
 - Fases 6, 7, 8, 9 e 10 estão marcadas com `UI hint` no ROADMAP —
   considerar `/gsd:ui-phase` antes de planejar cada uma (a da Fase 7 é
