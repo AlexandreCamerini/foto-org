@@ -461,6 +461,72 @@ export interface FunilAcervo {
   registros: number;
 }
 
+/** Estado do gate de dois consentimentos (D-080): `servicos_externos` é a
+ *  chave MESTRA, TOML-only, sem UI própria; `classificacao_pasta_genai` é o
+ *  opt-in PRÓPRIO deste recurso, gravável por esta tela. Os dois precisam
+ *  ser verdadeiros para o assistente sair do passo 0 — nunca um só (mesma
+ *  regressão de um-flag-só documentada em `jobs.py::_advisor`). */
+export interface ConfigGenaiPasta {
+  servicos_externos: boolean;
+  classificacao_pasta_genai: boolean;
+}
+
+/** União literal, não `string` solto: a etiqueta do passo 1 mapeia cada
+ *  valor para um rótulo fixo ("categoria"/"cidade/país") num `switch`, e um
+ *  `string` deixaria essa exaustividade sem checagem — mesmo motivo do
+ *  comentário em `StatusCampoExif` acima. */
+export type CampoAusenteGenaiPasta = "categoria" | "cidade_pais";
+
+/** Uma pasta candidata do pré-filtro D-01: ao menos um dos dois campos
+ *  (categoria OU cidade/país) está vazio. */
+export interface CandidataGenaiPasta {
+  pasta: string;
+  n_fotos: number;
+  campos_ausentes: CampoAusenteGenaiPasta[];
+  periodo: string | null;
+}
+
+/** Custo de uma sessão (D-04/D-05, D-079): os dois números pré-confirmação
+ *  são ESTIMATIVAS locais (nunca uma chamada real de `count_tokens`, que
+ *  transmitiria o payload antes do consentimento) — `entrada_exata` só vira
+ *  `true` no resumo pós-execução (passo 5), nunca aqui. */
+export interface CustoGenaiPasta {
+  tokens_entrada: number;
+  entrada_exata: boolean;
+  custo_entrada_usd: number;
+  teto_tokens_saida: number;
+  teto_custo_saida_usd: number;
+  teto_custo_total_usd: number;
+  teto_custo_total_brl: number;
+  cambio_usd_brl: number;
+  cambio_fonte: string;
+}
+
+/** União literal, não `string` solto: mesmo motivo de `CampoAusenteGenaiPasta`
+ *  — a tela de revisão (07-07) mapeia `campo` para rótulo/cor num `switch`. */
+export type CampoGenaiPasta = "categoria" | "cidade" | "pais" | "evento";
+
+/** Uma linha por CAMPO proposto, não por pasta (o backend já achata em
+ *  `_achatar_proposta`) — `valor_antes` é sempre `null`: o pré-filtro D-01
+ *  garante que só campo VAZIO chega aqui como candidato. */
+export interface PropostaGenaiPasta {
+  pasta: string;
+  campo: CampoGenaiPasta;
+  valor_antes: string | null;
+  valor_proposto: string;
+  justificativa: string;
+}
+
+/** Resultado de UMA chamada ao modelo (D-03) para a sessão inteira.
+ *  `custo_real` é `null` quando o classificador é local/nulo ou quando a
+ *  contagem exata falhou (never-crash, 07-03) — o passo 5 cai no fallback
+ *  de estimativa nesse caso. */
+export interface RodadaGenaiPasta {
+  propostas: PropostaGenaiPasta[];
+  pastas_sem_resposta: string[];
+  custo_real: CustoGenaiPasta | null;
+}
+
 async function json<T>(url: string): Promise<T> {
   const resposta = await fetch(url);
   if (!resposta.ok) throw new Error(`${resposta.status} em ${url}`);
@@ -632,6 +698,24 @@ export const api = {
     post<RelatorioDryRunExif>(`/api/exif/${id}/dry-run`),
   auditoriaExif: (id: number) =>
     json<LinhaAuditoria[]>(`/api/exif/${id}/auditoria`),
+  configGenaiPasta: () => json<ConfigGenaiPasta>("/api/genai-pasta/config"),
+  /** Grava só o opt-in PRÓPRIO (D-080) — nunca a chave mestra
+   *  `servicos_externos`, que não tem endpoint de escrita nesta fase. */
+  habilitarGenaiPasta: (habilitado: boolean) =>
+    put<ConfigGenaiPasta>("/api/genai-pasta/config", { habilitado }),
+  candidatasGenaiPasta: () =>
+    json<CandidataGenaiPasta[]>("/api/genai-pasta/candidatas"),
+  estimarCustoGenaiPasta: (pastas: string[]) =>
+    post<CustoGenaiPasta>("/api/genai-pasta/estimar-custo", { pastas }),
+  rodarGenaiPasta: (pastas: string[]) =>
+    post<RodadaGenaiPasta>("/api/genai-pasta/rodar", { pastas }),
+  propostasGenaiPasta: () =>
+    json<PropostaGenaiPasta[]>("/api/genai-pasta/propostas"),
+  aprovarGenaiPasta: (pastas: string[]) =>
+    post<{ aprovadas: number; descartadas: number }>(
+      "/api/genai-pasta/aprovar",
+      { pastas },
+    ),
 };
 
 export interface MembroDuplicata {
