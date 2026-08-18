@@ -229,8 +229,10 @@ app) e `ClaudeAdvisor` não têm teste dedicado.
   toda fase.
 - **Stack fixa**: Python 3.12+/SQLite WAL/SQLAlchemy 2/Alembic no core;
   FastAPI 127.0.0.1-only + React/Vite/TS/Tailwind (`webapp/`) como única
-  UI; Tauri v2 é o alvo de empacotamento futuro. Não trocar sem
-  justificativa de ganho concreto.
+  UI; empacotamento via Tauri v2 + python-build-standalone, Marco 1
+  (assinatura ad-hoc) entregue na Fase 5 — Marco 2 (assinado/notarizado)
+  segue como próximo passo, pendente de aprovação de custo recorrente.
+  Não trocar sem justificativa de ganho concreto.
 - **Escala**: acervo real já mediu ~422.738 registros de catálogo em uma
   rodada de auditoria; toda fase que toca consulta/filtro deve continuar
   virtualizada e sem N+1, sem regressão de performance medida.
@@ -259,6 +261,7 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Detecção facial local desce de 1º para 6º no v2 — ROADMAP.md, D-028 | 90% dos registros conhecidos não têm pixel local alcançável hoje | ✓ Good |
 | Visão local em vez de remota, sem opção de API externa — PLANO_IA_E_PRODUTO §8 decisão 2 | Mantém invariante 4 sem asterisco; qualidade menor é aceita pelo dono | ✓ Good |
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
+| Herança de GPS confronta doadora antes E depois, não só a mais próxima — D-074 | Duas âncoras concordantes corroboram sem inventar bônus de confiança; medido contra 40.678 fotos reais, subconjunto discordante tinha cobertura de só 91,1% (chão de 50,9% numa banda) | ✓ Good |
 
 ---
-*Last updated: 2026-08-18 — Phase 5 (Preparação para lançamento) complete — última fase do roadmap v1 atual*
+*Last updated: 2026-08-18 — Milestone v1.0 shipped (Phases 1-5)*

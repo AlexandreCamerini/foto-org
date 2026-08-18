@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: milestone_complete
-stopped_at: Milestone complete (Phase 05 was final phase)
-last_updated: 2026-08-18T01:29:52.053Z
-last_activity: 2026-08-17 -- Phase 05 execution started
+status: Awaiting next milestone
+stopped_at: Phase 5 context gathered
+last_updated: "2026-08-18T01:55:24.207Z"
+last_activity: 2026-08-18 — Milestone v1.0 completed and archived
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 16
   completed_plans: 16
-  percent: 80
+  percent: 100
 ---
 
 # Project State
@@ -26,13 +26,10 @@ nenhuma operação física acontece sem revisão humana e dry-run.
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-08-18
-STATE.md criados a partir do ingest de 25 documentos (`new-project-from-ingest`)
-
-Progress: [░░░░░░░░░░] 0%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-18 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -109,6 +106,7 @@ Items acknowledged and carried forward from previous milestone close:
 | Metadados | META-01 sidecar XMP (v2) | Deferred — sem destino de escrita para ~90 mil registros | Roadmap init, 2026-08-16 |
 | Infraestrutura | SYNC-01 SyncProvider, DAM-01 lacunas de esquema (v2) | Deferred — sem urgência medida / não-bloqueio de MVP (D-008) | Roadmap init, 2026-08-16 |
 | Decisão pendente | ARCH-01 reconectar volumes (v2) | Pending dono — maior alavancagem medida, forma ainda não aprovada | Roadmap init, 2026-08-16 |
+| UAT | Fase 2 — verificação visual humana do filtro "Tudo" (acervo × testemunha) | Deferred — pendente desde 2026-08-16 (catálogo estava zerado na época), `02-HUMAN-UAT.md` (1 cenário aberto), `02-VERIFICATION.md` status `human_needed` | Milestone v1.0 close, 2026-08-18 |
 
 ## Session Continuity
 
@@ -116,3 +114,7 @@ Last session: 2026-08-17T16:53:03.039Z
 Stopped at: Phase 5 context gathered
 ingest de 25 documentos; nenhuma fase planejada em detalhe ainda.
 Resume file: .planning/phases/05-prepara-o-para-lan-amento/05-CONTEXT.md
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
