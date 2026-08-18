@@ -1,10 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: Localizacao real e evidencia expandida
-status: roadmapped
-last_updated: "2026-08-18T04:05:00.000Z"
-last_activity: 2026-08-18
+milestone_name: Localização real e evidência expandida
+status: Roadmap v2.0 escrito, nenhuma fase planejada em detalhe
+stopped_at: Phase 6 context gathered
+last_updated: "2026-08-18T10:06:02.014Z"
+last_activity: 2026-08-18 — ROADMAP.md do milestone v2.0 criado (fases 6-11)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -168,9 +169,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18
-Stopped at: Roadmap v2.0 escrito — 6 fases (6-11), 16/16 requisitos mapeados.
-Resume file: .planning/ROADMAP.md
+Last session: 2026-08-18T10:06:02.009Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-CONTEXT.md
 
 ## Operator Next Steps
 
