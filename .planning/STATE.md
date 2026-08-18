@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-08 concluído (8/9)
-stopped_at: "06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo) concluído — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)"
-last_updated: "2026-08-18T14:25:13.180Z"
-last_activity: 2026-08-18 — 06-08 executado (checkbox por linha semeado do servidor D-01/D-02, badges de linha tipo B/formato não suportado e tipo C/pasta sincronizada, CORES_CAMPO e detalhamento pós-execução de 3 segmentos nomeando o campo em falha EXIF-03, 12 testes vitest; EXIF-01/EXIF-03/EXIF-05 marcados completos)
+status: Fase 6 em execução — plano 06-08 concluído (8/9), correção 06-08b (D-078) concluída
+stopped_at: "Correção 06-08b (D-078) concluída: IPTC:EnvelopeRecordVersion na allowlist estrutural, JPEG do Canon R6m2 do checkpoint 06-09 — próximo: retomar 06-09 (documentação de arquitetura, gate completo, verificação humana)"
+last_updated: "2026-08-18T17:47:59.117Z"
+last_activity: 2026-08-18 — correção 06-08b: IPTC:EnvelopeRecordVersion reconhecida como andaime estrutural (D-078), achado real do checkpoint 06-09 contra JPEG de produção (Canon R6m2). .jpg remedido 20/20, sem mudança em FORMATOS_APROVADOS. Achado à parte registrado como blocker (aviso "IPTCDigest is not current" em JPEG com bloco IPTC pré-existente de outra ferramenta), fora do escopo desta correção.
 progress:
   total_phases: 6
   completed_phases: 0
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 08 de 9 concluído (+ correção 06-04b) — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)
-Status: Fase 6 em execução — plano 06-08 concluído (8/9)
-Last activity: 2026-08-18 — 06-08 executado (checkbox por linha semeado do servidor D-01/D-02, badges de linha tipo B/formato não suportado e tipo C/pasta sincronizada, CORES_CAMPO e detalhamento pós-execução de 3 segmentos nomeando o campo em falha EXIF-03, 12 testes vitest; EXIF-01/EXIF-03/EXIF-05 marcados completos em REQUIREMENTS.md)
+Plan: 08 de 9 concluído (+ correções 06-04b e 06-08b) — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)
+Status: Fase 6 em execução — plano 06-08 concluído (8/9), correção 06-08b (D-078) concluída
+Last activity: 2026-08-18 — correção 06-08b: `IPTC:EnvelopeRecordVersion` reconhecida como andaime estrutural (D-078), achado real do checkpoint 06-09 contra JPEG de produção (Canon R6m2). `.jpg` remedido 20/20, sem mudança em `FORMATOS_APROVADOS`. Achado à parte registrado como blocker (aviso "IPTCDigest is not current" em JPEG com bloco IPTC pré-existente de outra ferramenta), fora do escopo desta correção.
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -60,10 +60,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P06 | ~25min | 3 tasks | 5 files |
 | 06 P07 | ~20min | 2 tasks | 4 files |
 | 06 P08 | ~25min | 3 tasks | 2 files |
+| 06 P08b (correção D-078) | ~35min | 4 tasks | 4 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-04b (~90min, correção), 06-05 (~35min), 06-06 (~25min), 06-07 (~20min), 06-08 (~25min)
+- Last 5 plans: 06-05 (~35min), 06-06 (~25min), 06-07 (~20min), 06-08 (~25min), 06-08b (~35min, correção)
 - Trend: -
 
 *Updated after each plan completion*
@@ -150,6 +151,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-06: seis endpoints /api/exif/* espelhando /api/operacoes*, ExifWriteRepository lendo veredito e auditoria via detalhe['exif_plan_id'], JobManager.iniciar_escrita_exif rodando ExifWriteExecutor em background. Nenhum requisito EXIF-01/02/03/05 marcado completo — aprovação do dono via UI (06-07+) ainda falta.
 - [Phase 06]: 06-07: EscritaExif.tsx (esqueleto) no molde de Operations.tsx, sem campo de destino (escrita in-place, D-075) — sidebar de planos, veredito com verbo "gravar", CTA "Gravar N arquivos" desabilitada sem dry-run aprovado (já dispara job.executarEscritaExif(id, null) — plano inteiro, sem seleção), estado vazio "Nada para gravar" e linha por item com os três chips de campo (GPS/Cidade/País: pronto/pulado/sem_valor). Checkbox por linha, linhas B/C (sidecar/pasta sincronizada) e detalhamento pós-execução ficam para 06-08 por delimitação explícita do próprio plano. Aba "Localização" global (fora de ABAS_COM_FONTE). Nenhum requisito EXIF-01/02 marcado completo — comportamento pós-execução (parte de EXIF-03) só fecha com 06-08.
 - [Phase 06]: 06-08: EscritaExif.tsx completo — checkbox por linha (`Set<number> marcados`) semeado do servidor a cada troca de plano, nunca de "todos marcados" (D-01/D-02); CTA envia `Array.from(marcados)`, nunca `null`. Linha tipo B (formato não suportado): fundo `bg-atencao/5`, motivo sempre visível como texto (D-05), badge redundante de sidecar `.xmp` (D-06), checkbox nasce desmarcado, chips com sufixo `→ .xmp`. Linha tipo C (pasta sincronizada): badge aditivo, linha continua marcada (D-07). Linha B+C mostra os dois badges. `CORES_CAMPO` declarado no próprio arquivo (não estende `Operations.tsx::CORES_STATUS` — sem categoria para "pulado deliberado"). Detalhamento pós-execução de 3 segmentos (✓/✗/—) com linha `falha — {Campo}: {motivo}` por campo em falha (EXIF-03), `item.erro`/`backup_original` surfaceados quando existem. 12 testes vitest presos ao Copywriting Contract da UI-SPEC. **EXIF-01, EXIF-03 e EXIF-05 marcados completos em REQUIREMENTS.md** — fecham o comportamento visível ao dono para os três; EXIF-02/EXIF-04 continuam Pending (garantias de backend, fora do `requirements` frontmatter deste plano). Achado de execução: `roadmap.update-plan-progress` conta arquivos `*-PLAN.md` vs `*-SUMMARY.md` na pasta da fase e os dois batem em 9 mesmo com 06-09 (gate/verificação) ainda não executado, porque `06-04b-SUMMARY.md` (correção sem PLAN.md numerado próprio) infla a contagem de summaries — a ferramenta marcou a Fase 6 como Complete por engano; corrigido manualmente para 8/9 In Progress. Falta 06-09 (documentação de arquitetura, gate completo, verificação humana) antes de fechar a fase de verdade.
+- [Phase 06]: D-078: IPTC:EnvelopeRecordVersion entra no andaime incondicional (achado real do checkpoint 06-09, JPEG Canon R6m2) — .jpg remedido 20/20, sem mudança em FORMATOS_APROVADOS. Achado à parte, registrado como blocker: JPEG com bloco IPTC pré-existente (Lightroom) produz aviso novo do exiftool ao escrever, sem allowlist de avisos hoje — fora do escopo desta correção.
 
 ### Pending Todos
 
@@ -195,6 +197,7 @@ None yet.
 - ~~Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido~~ — **resolvido em parte por D-077 (06-04b, 2026-08-18):** o dono escolheu allowlist byte a byte (`verificacao.reclassificar_deslocamentos_de_offset`), não a extensão incondicional de `TAGS_ESTRUTURAIS_ESPERADAS` cogitada em D-076. `.jpg`/`.cr2` remedidos e aprovados (20/20, 12/12 amostras). `.dng` continua reprovado — duas de suas tags de offset (tiles demais) não dão para verificar byte a byte com o dump padrão do exiftool, fica fail-safe. `.tif` continua reprovado por motivo sempre não relacionado a offset. `.dng`/`.tif`/`.cr3`/`.heic`/`.heif` seguem no fallback de sidecar XMP.
 
 - ~~**Atenção para 06-05 (ExifWriteExecutor):** o gate de verificação da escrita real não pode chamar só `verificacao.diferenca()` — precisa chamar `reclassificar_deslocamentos_de_offset()` depois.~~ — **resolvido em 06-05 (2026-08-18):** `_executar_item` chama a reclassificação no ponto exato especificado, com o backup `<alvo>_original` do writer como par "antes" byte a byte; provado de ponta a ponta por `test_executar_nao_regride_por_deslocamento_de_offset` (miniatura injetada via exiftool). Ver `06-05-SUMMARY.md`.
+- Escrita EXIF em JPEG com bloco IPTC pré-existente (gravado por outra ferramenta antes deste app, ex. Lightroom) produz aviso novo do exiftool "IPTCDigest is not current. XMP may be out of sync" — reprova a verificação D-04 mesmo com IPTC:EnvelopeRecordVersion já corrigido (D-078). Não existe allowlist de avisos hoje (TAGS_ESTRUTURAIS_ESPERADAS só cobre tags). Achado real testando /Users/acamerini/Pictures/2026/Serena 15 Anos/ACM_7122.JPG (cópia descartável), fora do escopo de D-078. Mesma classe de decisão que D-076/D-077 (allowlist byte a byte de offset) — aguarda dono.
 
 ## Deferred Items
 
@@ -210,8 +213,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T14:25:13.172Z
-Stopped at: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo) concluído — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)
+Last session: 2026-08-18T17:47:46.652Z
+Stopped at: Correção D-078 concluída (IPTC:EnvelopeRecordVersion na allowlist estrutural, JPEG do Canon R6m2 do checkpoint 06-09) — próximo: retomar 06-09 (documentação de arquitetura, gate completo, verificação humana)
 Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-09-PLAN.md
 
 ## Operator Next Steps
