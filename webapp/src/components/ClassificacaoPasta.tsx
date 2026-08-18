@@ -14,9 +14,7 @@ import type {
 import { Confianca } from "./Confianca";
 import Botao from "../ui/Botao";
 
-/** Os passos do assistente (UI-SPEC § Wizard state machine). `concluido` é
- *  declarado aqui e implementado na Task 2 deste plano — até lá renderiza
- *  um marcador mínimo para não quebrar a máquina de estados. */
+/** Os passos do assistente (UI-SPEC § Wizard state machine). */
 type Passo =
   | "gate"
   | "candidatas"
@@ -535,13 +533,74 @@ function PassoRevisao({
   );
 }
 
+// -- Passo 5 — Concluído -------------------------------------------------------
+
+function PassoConcluido({
+  aprovadas,
+  custoReal,
+  custoEstimado,
+  onFechar,
+}: {
+  aprovadas: number;
+  custoReal: CustoGenaiPasta | null;
+  custoEstimado: CustoGenaiPasta | null;
+  onFechar: () => void;
+}) {
+  // D-079 (decisão híbrida): o custo real da entrada só existe depois da
+  // chamada, calculado por `contar_exato()`. Quando falha (never-crash,
+  // 07-03) ou a rodada veio de uma sessão recuperada sem custo próprio,
+  // cai no valor estimado do passo 2 com a ressalva — nunca mostra R$ 0,00
+  // como se a chamada não tivesse custado nada.
+  const linhaCusto = custoReal
+    ? {
+        valor: formatarMoeda(
+          custoReal.custo_entrada_usd * custoReal.cambio_usd_brl,
+          "R$",
+        ),
+        tokens: formatarTokens(custoReal.tokens_entrada),
+        sufixo: "contagem exata",
+      }
+    : custoEstimado
+      ? {
+          valor: formatarMoeda(
+            custoEstimado.custo_entrada_usd * custoEstimado.cambio_usd_brl,
+            "R$",
+          ),
+          tokens: formatarTokens(custoEstimado.tokens_entrada),
+          sufixo: "estimativa — contagem exata indisponível",
+        }
+      : null;
+
+  return (
+    <div className="flex flex-col gap-3 py-6">
+      <div className="flex items-center gap-2">
+        <span className="text-ok">✓</span>
+        <span className="font-titulo">{aprovadas} pastas classificadas</span>
+      </div>
+      {linhaCusto && (
+        <p className="text-texto-2">
+          Custo real desta sessão: {linhaCusto.valor} ({linhaCusto.tokens} tokens de entrada, {linhaCusto.sufixo})
+        </p>
+      )}
+      <p className="text-texto-2">
+        As sugestões aparecem em Revisão na próxima geração de sugestões.
+      </p>
+      <div className="flex justify-end">
+        <Botao variante="solido" onClick={onFechar}>
+          Fechar
+        </Botao>
+      </div>
+    </div>
+  );
+}
+
 // -- Componente principal ----------------------------------------------------
 
 /** Assistente de classificação de pasta por GenAI (GENAI-01): portão de
- *  consentimento, lista de candidatas, custo, chamada em voo e revisão
- *  antes/depois (passos 0-4, Task 1 deste plano); conclusão (passo 5) chega
- *  na Task 2. Casca de modal copiada de `ModalCaminho.tsx`, painel mais
- *  largo (multi-linha, não um campo só). */
+ *  consentimento, lista de candidatas, custo, chamada em voo, revisão
+ *  antes/depois e conclusão — os cinco passos do UI-SPEC. Casca de modal
+ *  copiada de `ModalCaminho.tsx`, painel mais largo (multi-linha, não um
+ *  campo só). */
 export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
   const [passo, setPasso] = useState<Passo | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
@@ -552,6 +611,7 @@ export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
     string | null
   >(null);
   const [semRespostaExpandido, setSemRespostaExpandido] = useState(false);
+  const [aprovadasCount, setAprovadasCount] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
   const [segundos, setSegundos] = useState(0);
   const queryClient = useQueryClient();
@@ -561,19 +621,48 @@ export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
     queryFn: api.configGenaiPasta,
   });
 
-  // Semeia o passo inicial UMA vez, a partir do gate real do servidor —
-  // não reage a refetches depois (o dono já está navegando no assistente
-  // nesse ponto, e `habilitarMutation` já move o passo por conta própria).
+  // Recuperação de sessão paga não aprovada (D-07): uma chamada ao modelo
+  // já foi COBRADA se `propostas` existir no servidor — perder essas linhas
+  // por causa de um refresh do navegador cobraria duas vezes pelo mesmo
+  // resultado. Só roda depois de saber que o gate está aberto; o UI-SPEC não
+  // previu este caminho porque a persistência de proposta foi decidida
+  // depois (07-01).
+  const { data: pendentes, isError: pendentesFalhou } = useQuery({
+    queryKey: ["propostasGenaiPasta"],
+    queryFn: api.propostasGenaiPasta,
+    enabled: !!config?.classificacao_pasta_genai && passo === null,
+  });
+
+  // Semeia o passo inicial UMA vez, a partir do gate real do servidor e da
+  // recuperação acima — não reage a refetches depois (o dono já está
+  // navegando no assistente nesse ponto, e cada mutação move o passo por
+  // conta própria). Uma falha na consulta de recuperação (never-crash) não
+  // trava o assistente: cai no caminho normal do passo 1.
   useEffect(() => {
-    if (config && passo === null) {
-      setPasso(config.classificacao_pasta_genai ? "candidatas" : "gate");
+    if (!config || passo !== null) return;
+    if (!config.classificacao_pasta_genai) {
+      setPasso("gate");
+      return;
     }
-  }, [config, passo]);
+    if (pendentes === undefined && !pendentesFalhou) return; // aguardando
+    if (pendentes && pendentes.length > 0) {
+      setRodada({ propostas: pendentes, pastas_sem_resposta: [], custo_real: null });
+      setPasso("revisao");
+    } else {
+      setPasso("candidatas");
+    }
+  }, [config, passo, pendentes, pendentesFalhou]);
 
   const { data: candidatas } = useQuery({
     queryKey: ["candidatasGenaiPasta"],
     queryFn: api.candidatasGenaiPasta,
-    enabled: passo !== null && passo !== "gate",
+    // Não busca mais quando o passo já é revisão/concluído — a sessão
+    // recuperada pula direto para lá e não precisa da lista de candidatas.
+    enabled:
+      passo !== null &&
+      passo !== "gate" &&
+      passo !== "revisao" &&
+      passo !== "concluido",
   });
 
   // Nasce com TODAS marcadas (D-01: fraseologia é opt-out, "desmarque o que
@@ -629,8 +718,9 @@ export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
 
   const aprovarMutation = useMutation({
     mutationFn: (pastas: string[]) => api.aprovarGenaiPasta(pastas),
-    onSuccess: () => {
+    onSuccess: (resultado) => {
       setErro(null);
+      setAprovadasCount(resultado.aprovadas);
       setPasso("concluido");
     },
     onError: (e: Error) => setErro(e.message),
@@ -757,9 +847,12 @@ export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
         )}
 
         {passo === "concluido" && (
-          // Passo 5 chega na Task 2 deste plano — marcador mínimo para não
-          // quebrar a máquina de estados enquanto isso.
-          <div className="py-6 text-center text-texto-2">Concluído.</div>
+          <PassoConcluido
+            aprovadas={aprovadasCount}
+            custoReal={rodada?.custo_real ?? null}
+            custoEstimado={custo}
+            onFechar={onFechar}
+          />
         )}
       </div>
     </div>
