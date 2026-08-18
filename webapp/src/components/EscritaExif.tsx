@@ -7,6 +7,7 @@ import type {
   ItemPlanoExif,
   PlanoExif,
   RelatorioDryRunExif,
+  StatusCampoExif,
 } from "../api";
 import type { Job } from "../hooks/useJob";
 import Botao from "../ui/Botao";
@@ -25,6 +26,23 @@ const JA_PREENCHIDO: Record<"gps" | "cidade" | "pais", string> = {
   pais: "País já preenchido",
 };
 
+/** Cor de texto por `StatusCampoExif`, tabela travada na UI-SPEC §
+ *  "Post-execution status vocabulary". `pulado` é neutro (`text-texto-2`)
+ *  de propósito — é comportamento esperado (campo já preenchido, D-075
+ *  proíbe sobrescrever), nunca `text-erro`. Declarado aqui, não importado
+ *  do mapa de cores de status de `Operations.tsx`: aquele mapa tem 4 estados
+ *  (concluida/erro/cancelada/executando) sem categoria para "pulado
+ *  deliberado" — estender um mapa alheio para um domínio diferente
+ *  confundiria os dois — não é reuso, é escopo diferente. */
+const CORES_CAMPO: Record<StatusCampoExif, string> = {
+  pendente: "text-texto-3",
+  pronto: "text-texto-2",
+  pulado: "text-texto-2",
+  sem_valor: "text-texto-3",
+  gravado: "text-ok",
+  falha: "text-erro",
+};
+
 function formatarValorCampo(
   chave: "gps" | "cidade" | "pais",
   valor: CampoExif["valor"],
@@ -35,12 +53,13 @@ function formatarValorCampo(
   return `${ROTULO_CAMPO[chave]} ${valor ?? ""}`;
 }
 
-/** Um dos três chips de campo de uma linha tipo A/C (ou de uma linha tipo B
- *  rumo ao sidecar — `sufixo` marca isso, ex. " → .xmp"). O `switch` sobre
- *  `StatusCampoExif` é exaustivo de propósito: `gravado`/`falha` só passam
- *  a existir de fato quando a gravação roda de verdade (plano 06-08,
- *  próxima tarefa), mas cair aqui já hoje garante que o TypeScript acusa
- *  quando aquele tratamento esquecer um caso. */
+/** Um dos três chips de campo de uma linha tipo A/C antes da execução (ou
+ *  de uma linha tipo B rumo ao sidecar — `sufixo` marca isso). O `switch`
+ *  sobre `StatusCampoExif` é exaustivo de propósito: `gravado`/`falha` só
+ *  aparecem de fato depois que a gravação roda, e nesse ponto a linha já
+ *  trocou este chip pelo detalhamento de `Detalhamento` — mas manter o
+ *  `switch` completo aqui garante que o TypeScript acusa se um status novo
+ *  entrar sem tratamento. */
 function ChipCampo({
   chave,
   campo,
@@ -51,11 +70,12 @@ function ChipCampo({
   sufixo?: string;
 }) {
   const rotulo = ROTULO_CAMPO[chave];
+  const cor = CORES_CAMPO[campo.status];
   switch (campo.status) {
     case "pronto":
       return (
         <span
-          className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-texto-2"
+          className={`rounded-full border border-borda px-2 py-0.5 text-[11px] ${cor}`}
           title={campo.motivo ?? undefined}
         >
           {formatarValorCampo(chave, campo.valor)}
@@ -63,11 +83,11 @@ function ChipCampo({
         </span>
       );
     case "pulado":
-      // Comportamento esperado, não erro: mesmo token de "pulado" usado em
-      // toda a tela — nunca a cor reservada a erro.
+      // Comportamento esperado, não uma falha: mesmo token neutro usado em
+      // toda a tela para "pulado", nunca a cor reservada a erro.
       return (
         <span
-          className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-texto-2"
+          className={`rounded-full border border-borda px-2 py-0.5 text-[11px] ${cor}`}
           title={campo.motivo ?? undefined}
         >
           {JA_PREENCHIDO[chave]}
@@ -77,7 +97,7 @@ function ChipCampo({
     case "sem_valor":
       return (
         <span
-          className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-texto-3"
+          className={`rounded-full border border-borda px-2 py-0.5 text-[11px] ${cor}`}
           title={campo.motivo ?? undefined}
         >
           {rotulo} —{sufixo}
@@ -88,7 +108,7 @@ function ChipCampo({
     case "falha":
       return (
         <span
-          className="rounded-full border border-borda px-2 py-0.5 text-[11px] text-texto-3"
+          className={`rounded-full border border-borda px-2 py-0.5 text-[11px] ${cor}`}
           title={campo.motivo ?? undefined}
         >
           {rotulo}
@@ -96,6 +116,80 @@ function ChipCampo({
         </span>
       );
   }
+}
+
+/** Glifo + cor do detalhamento pós-execução de 3 segmentos (UI-SPEC §
+ *  "Post-execution per-tag failure breakdown"). Cor aqui é literal, não
+ *  `CORES_CAMPO`: naquele mapa geral `pulado` é `text-texto-2` (neutro no
+ *  chip pré-execução), mas no detalhamento denso pós-execução tudo que não
+ *  é `✓`/`✗` cai no mesmo `text-texto-3` apagado — são dois contextos
+ *  visuais diferentes para o mesmo status, ambos exigidos pela UI-SPEC. */
+function glifoDetalhamento(status: StatusCampoExif): {
+  glifo: string;
+  cor: string;
+} {
+  switch (status) {
+    case "gravado":
+      return { glifo: "✓", cor: "text-ok" };
+    case "falha":
+      return { glifo: "✗", cor: "text-erro" };
+    case "pulado":
+    case "sem_valor":
+    case "pendente":
+    case "pronto":
+      return { glifo: "—", cor: "text-texto-3" };
+  }
+}
+
+/** Um item já foi executado quando ao menos um dos três campos terminou em
+ *  `gravado` ou `falha` — os dois únicos status que só existem depois que
+ *  `ExifWriteExecutor` roda. */
+function itemExecutado(item: ItemPlanoExif): boolean {
+  return (
+    item.campos.gps.status === "gravado" ||
+    item.campos.gps.status === "falha" ||
+    item.campos.cidade.status === "gravado" ||
+    item.campos.cidade.status === "falha" ||
+    item.campos.pais.status === "gravado" ||
+    item.campos.pais.status === "falha"
+  );
+}
+
+/** Detalhamento de 3 segmentos (EXIF-03/D-04): substitui os chips de valor
+ *  assim que a linha executou. Cada campo mostra ✓/✗/— e, para todo campo
+ *  em falha, uma linha nomeando o campo e o motivo — nunca um "erro" nu
+ *  (a UI-SPEC exige o campo sempre nomeado). */
+function Detalhamento({ item }: { item: ItemPlanoExif }) {
+  const campos: { chave: "gps" | "cidade" | "pais"; campo: CampoExif }[] = [
+    { chave: "gps", campo: item.campos.gps },
+    { chave: "cidade", campo: item.campos.cidade },
+    { chave: "pais", campo: item.campos.pais },
+  ];
+  const falhas = campos.filter(({ campo }) => campo.status === "falha");
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex shrink-0 gap-3">
+        {campos.map(({ chave, campo }) => {
+          const { glifo, cor } = glifoDetalhamento(campo.status);
+          return (
+            <span
+              key={chave}
+              className={`flex items-center gap-1 text-[11px] ${cor}`}
+              title={campo.motivo ?? undefined}
+            >
+              <span>{glifo}</span>
+              <span>{ROTULO_CAMPO[chave]}</span>
+            </span>
+          );
+        })}
+      </div>
+      {falhas.map(({ chave, campo }) => (
+        <div key={chave} className="text-[11px] text-erro">
+          falha — {ROTULO_CAMPO[chave]}: {campo.motivo}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Motivo exato travado na UI-SPEC (Copywriting Contract, "Sync-folder
@@ -367,6 +461,7 @@ export default function EscritaExif({ job }: { job: Job }) {
                   // Tipo C (D-07): aviso aditivo, não muda a semântica do
                   // checkbox (a não ser que a linha também seja tipo B).
                   const ehTipoC = item.pasta_sincronizada !== null;
+                  const executado = itemExecutado(item);
                   // Uma linha pode ser B e C ao mesmo tempo (arquivo não
                   // suportado dentro de pasta sincronizada) — os dois
                   // badges renderizam lado a lado, e a semântica do
@@ -407,16 +502,22 @@ export default function EscritaExif({ job }: { job: Job }) {
                             {ehTipoC && <BadgeSync item={item} />}
                           </div>
                         )}
-                        {!ehTipoB && (
-                          <div className="flex shrink-0 gap-3">
-                            <ChipCampo chave="gps" campo={item.campos.gps} />
-                            <ChipCampo
-                              chave="cidade"
-                              campo={item.campos.cidade}
-                            />
-                            <ChipCampo chave="pais" campo={item.campos.pais} />
-                          </div>
-                        )}
+                        {!ehTipoB &&
+                          (executado ? (
+                            <Detalhamento item={item} />
+                          ) : (
+                            <div className="flex shrink-0 gap-3">
+                              <ChipCampo chave="gps" campo={item.campos.gps} />
+                              <ChipCampo
+                                chave="cidade"
+                                campo={item.campos.cidade}
+                              />
+                              <ChipCampo
+                                chave="pais"
+                                campo={item.campos.pais}
+                              />
+                            </div>
+                          ))}
                       </div>
 
                       {ehTipoB && (
@@ -424,23 +525,44 @@ export default function EscritaExif({ job }: { job: Job }) {
                           <span className="text-[11px] text-texto-2">
                             Gravar sidecar .xmp para este arquivo
                           </span>
-                          <div className="flex shrink-0 gap-3">
-                            <ChipCampo
-                              chave="gps"
-                              campo={item.campos.gps}
-                              sufixo=" → .xmp"
-                            />
-                            <ChipCampo
-                              chave="cidade"
-                              campo={item.campos.cidade}
-                              sufixo=" → .xmp"
-                            />
-                            <ChipCampo
-                              chave="pais"
-                              campo={item.campos.pais}
-                              sufixo=" → .xmp"
-                            />
+                          {executado ? (
+                            <Detalhamento item={item} />
+                          ) : (
+                            <div className="flex shrink-0 gap-3">
+                              <ChipCampo
+                                chave="gps"
+                                campo={item.campos.gps}
+                                sufixo=" → .xmp"
+                              />
+                              <ChipCampo
+                                chave="cidade"
+                                campo={item.campos.cidade}
+                                sufixo=" → .xmp"
+                              />
+                              <ChipCampo
+                                chave="pais"
+                                campo={item.campos.pais}
+                                sufixo=" → .xmp"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {item.erro && (
+                        <div className="pl-7 pt-1">
+                          <div className="text-[11px] text-erro">
+                            {item.erro}
                           </div>
+                          {item.backup_original && (
+                            <div
+                              className="text-[11px] text-texto-2"
+                              title={item.backup_original}
+                            >
+                              Cópia de recuperação preservada — é a forma de
+                              desfazer esta gravação.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
