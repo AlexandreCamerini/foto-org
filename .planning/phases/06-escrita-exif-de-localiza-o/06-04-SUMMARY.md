@@ -45,6 +45,23 @@ completed: 2026-08-18
 
 # Phase 6 Plan 04: Teste empírico de escrita EXIF por formato (D-03/D-04) Summary
 
+> **CORRIGIDO EM 2026-08-18 — ver D-077.** A afirmação abaixo ("nenhum
+> formato aprovou") descreve o resultado ORIGINAL deste plano, sob a
+> allowlist incondicional de `verificacao.TAGS_ESTRUTURAIS_ESPERADAS`.
+> Numa correção de meio-de-fase no mesmo dia, o dono escolheu
+> explicitamente estender a verificação com uma allowlist byte a byte
+> (`verificacao.reclassificar_deslocamentos_de_offset`, D-077):
+> `.jpg` e `.cr2` foram remedidos e **passam a aprovar** (20/20 e 12/12
+> amostras — todo deslocamento de offset medido prova relocação byte a
+> byte, não perda de conteúdo). `.dng` e `.tif` continuam reprovados,
+> sem mudança — `.dng` porque duas de suas tags de offset (tiles
+> demais) não dão para verificar byte a byte com o dump do exiftool;
+> `.tif` por um motivo sempre não-relacionado a offset. `FORMATOS_
+> APROVADOS` em `formatos.py` reflete o resultado remedido, não mais
+> `frozenset()`. Ver D-077 em `docs/DECISOES.md` para a tabela completa
+> e os critérios; o texto original abaixo é preservado como registro
+> histórico da medição inicial, não como estado atual.
+
 **Medição real contra o acervo de produção (1.399 arquivos de acervo) mostra que nenhum dos 4 formatos testados (.jpg, .cr2, .dng, .tif) passa no critério de D-04 — todo formato cai hoje no fallback de sidecar XMP; a causa raiz (deslocamento de offset de bloco binário pré-existente) é registrada como candidato a decisão futura, não resolvida por este plano.**
 
 ## Performance
@@ -128,6 +145,10 @@ None — `exiftool` já confirmado instalado (13.55); nenhuma dependência nova.
 ## Next Phase Readiness
 
 - **Achado de escopo relevante para o dono (não é um blocker técnico, é uma decisão pendente):** com a allowlist medida vazia, a Fase 6 hoje entrega escrita EXIF direta para **zero formatos** — todo arquivo cai no fallback de sidecar XMP (D-06/EXIF-05), que já está implementado desde 06-02/06-03 e continua funcionando. O alcance de "GPS/cidade/país no arquivo original" (feature #1 do roadmap v2.0) fica bloqueado até uma decisão do dono sobre estender `TAGS_ESTRUTURAIS_ESPERADAS` para reconhecer deslocamento de offset de bloco binário pré-existente como andaime — candidato plausível pela evidência (byte a byte idêntico), mas não decidido aqui. Registrado em D-076 e nos Blockers/Concerns de STATE.md.
+  **Superado em 2026-08-18 por D-077:** o dono decidiu (byte a byte
+  condicional, não allowlist incondicional) e `.jpg`/`.cr2` já entregam
+  escrita EXIF direta — só `.dng`/`.tif` continuam no fallback de
+  sidecar. Ver banner no topo deste documento.
 - **Nenhum requisito EXIF-03/04/05 foi marcado como completo em REQUIREMENTS.md**, seguindo a mesma disciplina de 06-01/06-02/06-03: este plano mede e fecha a allowlist (D-03/D-04), mas EXIF-03/04 exigem o executor real com audit log (06-05, ainda não construído) e EXIF-05 exige o comportamento fim-a-fim de UI (06-06+). `requirements.mark-complete` não foi executado.
 - `scripts/testar_escrita_exif.py` está pronto para reexecução: se/quando `TAGS_ESTRUTURAIS_ESPERADAS` for revisada (decisão do dono), rodar `.venv/bin/python scripts/testar_escrita_exif.py --json` de novo refaz a medição contra o catálogo atual sem nenhuma mudança de código.
 - Suíte completa (`.venv/bin/python -m pytest -q`) verde: 906 passed.
