@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from fotoorganizer.exif_write.formatos import caminho_sidecar, motivo, suportado
+from fotoorganizer.exif_write.sync_detect import pasta_sincronizada
 from fotoorganizer.exif_write.verificacao import DiffTags, campo_gravado, diferenca
 from fotoorganizer.exif_write.writer import ExifToolWriter, ValorInvalido, validar_campos
 from fotoorganizer.metadata.exiftool import ExifToolExtractor
@@ -214,3 +216,70 @@ def test_escrever_tag_gps_malformada_falha_sozinha(tmp_path):
     diff = diferenca(antes, depois)
     assert campo_gravado("gps", diff) is False
     assert campo_gravado("cidade", diff) is True
+
+
+# -- Task 3: sync_detect.py e formatos.py ------------------------------------
+
+
+def test_pasta_sincronizada_detecta_icloud_drive():
+    caminho = Path("~/Library/Mobile Documents/com~apple~CloudDocs/f.jpg").expanduser()
+    assert pasta_sincronizada(caminho) == "iCloud Drive"
+
+
+def test_pasta_sincronizada_detecta_cloudstorage():
+    caminho = Path("~/Library/CloudStorage/OneDrive-Pessoal/f.jpg").expanduser()
+    assert pasta_sincronizada(caminho) == "Nuvem (File Provider)"
+
+
+def test_pasta_sincronizada_detecta_dropbox_legado():
+    caminho = Path("~/Dropbox/f.jpg").expanduser()
+    assert pasta_sincronizada(caminho) == "Dropbox (legado)"
+
+
+def test_pasta_sincronizada_fora_de_qualquer_raiz_devolve_none(tmp_path):
+    assert pasta_sincronizada(tmp_path / "f.jpg") is None
+
+
+def test_pasta_sincronizada_resolve_symlink_antes_de_comparar(tmp_path):
+    raiz_simulada = tmp_path / "raiz_sync"
+    raiz_simulada.mkdir()
+    alvo_real = raiz_simulada / "f.jpg"
+    alvo_real.write_bytes(b"")
+
+    link_dir = tmp_path / "Desktop"
+    link_dir.symlink_to(raiz_simulada)
+
+    resultado = pasta_sincronizada(
+        link_dir / "f.jpg", raizes={"Sync Simulado": raiz_simulada}
+    )
+    assert resultado == "Sync Simulado"
+
+
+def test_pasta_sincronizada_nunca_propaga_oserror(monkeypatch, tmp_path):
+    def _explode(self, *_args, **_kwargs):
+        raise OSError("símile de falha de resolução")
+
+    monkeypatch.setattr(Path, "resolve", _explode)
+    assert pasta_sincronizada(tmp_path / "f.jpg") is None
+
+
+def test_suportado_case_insensitive_e_recusa_cr3():
+    assert suportado(".JPG") is True
+    assert suportado(".cr3") is False
+
+
+def test_motivo_cr3_cita_sem_teste_de_escrita():
+    texto = motivo(".cr3")
+    assert texto is not None
+    assert "sem teste de escrita neste acervo" in texto
+    assert "CR3" in texto
+
+
+def test_motivo_extensao_desconhecida_nunca_e_none():
+    texto = motivo(".xyz")
+    assert texto is not None
+    assert texto != ""
+
+
+def test_caminho_sidecar_convencao_foto_ext_xmp():
+    assert caminho_sidecar(Path("/a/foto.CR3")) == Path("/a/foto.CR3.xmp")
