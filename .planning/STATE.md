@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 7 em andamento (07-02 fechado — cliente Claude de classificação de pasta)
-stopped_at: "Phase 7 Plan 02 executed — próximo: 07-03-PLAN.md"
-last_updated: "2026-08-18T20:41:12.002Z"
-last_activity: "2026-08-18 — 07-02 fechado: ClassificacaoDePastaClaude (location_advisor.py) com chamada única em lote (D-03), schema estruturado, never-crash e filtro anti-alucinação + D-02/D-06 reaplicados sobre a resposta. 8 testes verdes sem tocar rede. GENAI-02 continua Pending — falta 07-04 conectar o cliente a um trigger real de UI/endpoint."
+status: Fase 7 em andamento (07-03 fechado — pré-filtro de candidatas e estimativa de custo)
+stopped_at: "Phase 7 Plan 03 executed — próximo: 07-04-PLAN.md"
+last_updated: "2026-08-18T20:56:20.000Z"
+last_activity: "2026-08-18 — 07-03 fechado: D-079 registra a decisão híbrida do dono sobre count_tokens × critério 2 do ROADMAP (estimativa local antes de confirmar, contagem exata só depois, no resumo). candidatas_de_pasta.py::candidatas() (D-01, 2 consultas agregadas) e custo_genai.py::estimar()/contar_exato() (D-04/D-05) implementados. 19 testes verdes. GENAI-01 continua Pending — falta 07-04 conectar as duas peças a um endpoint/UI real."
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 19
-  completed_plans: 13
-  percent: 17
+  completed_plans: 14
+  percent: 18
 ---
 
 # Project State
@@ -23,23 +23,23 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 **Core value:** Toda sugestão é auditável até a evidência que a gerou;
 nenhuma operação física acontece sem revisão humana e dry-run.
 **Current focus:** v2.0 — Fase 7 em andamento (classificação de pasta por
-GenAI); 07-01 (persistência) e 07-02 (cliente Claude) fechados, próximo é
-07-03 (estimativa de custo).
+GenAI); 07-01 (persistência), 07-02 (cliente Claude) e 07-03 (pré-filtro +
+custo) fechados, próximo é 07-04 (endpoints).
 
 ## Current Position
 
 Phase: 7 — Classificação de pasta por GenAI (In Progress)
-Plan: 2/10 concluído — próximo: 07-03-PLAN.md (estimativa de custo)
-Status: Fase 7 em andamento (07-02 fechado — cliente Claude de classificação de pasta)
-Last activity: 2026-08-18 — 07-02 fechado: ClassificacaoDePastaClaude (location_advisor.py) com chamada única em lote (D-03), schema estruturado, never-crash e filtro anti-alucinação + D-02/D-06 reaplicados sobre a resposta. 8 testes verdes sem tocar rede. GENAI-02 continua Pending — falta 07-04 conectar o cliente a um trigger real de UI/endpoint.
+Plan: 3/10 concluído — próximo: 07-04-PLAN.md (endpoints)
+Status: Fase 7 em andamento (07-03 fechado — pré-filtro de candidatas e estimativa de custo)
+Last activity: 2026-08-18 — 07-03 fechado: D-079 registra a decisão híbrida do dono sobre count_tokens × critério 2 do ROADMAP (estimativa local antes de confirmar, contagem exata só depois, no resumo). candidatas_de_pasta.py::candidatas() (D-01, 2 consultas agregadas) e custo_genai.py::estimar()/contar_exato() (D-04/D-05) implementados. 19 testes verdes. GENAI-01 continua Pending — falta 07-04 conectar as duas peças a um endpoint/UI real.
 
-Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 2/10 planos)
+Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 3/10 planos)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 18
+- Total plans completed: 19
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -64,10 +64,11 @@ Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento,
 | 06 P08b (correção D-078) | ~35min | 4 tasks | 4 files |
 | 07 P01 | ~20min | 3 tasks | 5 files |
 | 07 P02 | ~25min | 3 tasks | 2 files |
+| 07 P03 | ~15min | 3 tasks | 5 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-07 (~20min), 06-08 (~25min), 06-08b (~35min, correção), 07-01 (~20min), 07-02 (~25min)
+- Last 5 plans: 06-08 (~25min), 06-08b (~35min, correção), 07-01 (~20min), 07-02 (~25min), 07-03 (~15min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -157,6 +158,7 @@ Recent decisions affecting current work:
 - [Phase 06]: D-078: IPTC:EnvelopeRecordVersion entra no andaime incondicional (achado real do checkpoint 06-09, JPEG Canon R6m2) — .jpg remedido 20/20, sem mudança em FORMATOS_APROVADOS. Achado à parte, registrado como blocker: JPEG com bloco IPTC pré-existente (Lightroom) produz aviso novo do exiftool ao escrever, sem allowlist de avisos hoje — fora do escopo desta correção.
 - [Phase 07]: 07-01: D-02 aplicada por CAMPO em ClassificacaoPastaRepository.salvar_propostas (mais estrita que a guarda por linha de LexicoRepository) — cidade/pais/categoria/evento preenchidos nunca são sobrescritos; linha origem='manual' é inteiramente intocável.
 - [Phase 07]: 07-02: ClassificacaoDePastaClaude — chamada única em lote (D-03), categoria restrita ao vocabulário canônico de engine.py, D-02/D-06 reaplicados sobre a resposta do modelo (não só no prompt). GENAI-02 continua Pending — falta 07-04 conectar o cliente a um trigger real de UI/endpoint.
+- [Phase 07]: 07-03: D-079 — dono decidiu (via AskUserQuestion, respondendo o checkpoint:decision da Task 1) a opção híbrida sobre a colisão count_tokens × critério 2 do ROADMAP: estimativa local conservadora antes de confirmar (nada sai da máquina), contagem exata só depois, mostrada no resumo pós-execução (passo 5). candidatas_de_pasta.py::candidatas() (D-01) e custo_genai.py::estimar()/contar_exato() (D-04/D-05) implementados conforme a decisão; 07-UI-SPEC.md atualizado no mesmo commit. GENAI-01 continua Pending — falta 07-04 conectar as duas peças a um endpoint/UI real.
 
 ### Pending Todos
 
@@ -218,8 +220,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T20:41:11.991Z
-Stopped at: Phase 7 Plan 02 executed — próximo: 07-03-PLAN.md
+Last session: 2026-08-18T20:56:20.000Z
+Stopped at: Phase 7 Plan 03 executed — próximo: 07-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
