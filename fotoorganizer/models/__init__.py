@@ -44,6 +44,7 @@ from fotoorganizer.models.people import (
     Person,
 )
 from fotoorganizer.models.lexico import NomeClassificado
+from fotoorganizer.models.pasta_classificacao import PastaClassificada
 from fotoorganizer.models.settings import ApplicationSetting
 from fotoorganizer.models.tagging import MediaTag, Tag
 
@@ -62,4 +63,5 @@ __all__ = [
     "ExifWritePlan", "ExifWriteItem", "ExifWriteStatus", "CampoStatus",
     "ApplicationSetting",
     "NomeClassificado",
+    "PastaClassificada",
 ]
