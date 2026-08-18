@@ -395,27 +395,31 @@ def _classificador_de_pasta(self):
 
 **If this table is empty:** N/A — see entries above; all are medium-or-lower risk and none touches privacy/security invariants (which are all `[CITED]`/`[VERIFIED]`, not assumed).
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Exact `SCORES_REFERENCIA["llm_pasta"]` value — deliberately left open by this research**
+1. **(RESOLVED → plano 07-05 + 07-09)** Exact `SCORES_REFERENCIA["llm_pasta"]` value — deliberately left open by this research
    - What we know: placement should be below `"pasta"` (0.60, deterministic) and distinguishable from `"llm"` (0.55, different kind of claim per `docs/CONFIANCA.md`'s no-summing rule); `.planning/research/ARCHITECTURE.md` already flagged this exact question at milestone level with the same "close to 0.55, not measured" conclusion.
    - What's unclear: no measurement (à la D-074/D-059/D-060) has been run for this specific evidence type, and this project's convention is to measure before locking a score.
    - Recommendation: do not have the plan silently hardcode a number. Route this through discuss-phase as a numbered decision, or gate it behind a `checkpoint:human-verify` step in the plan, matching this project's established practice of measuring scores rather than assigning them by analogy. If a placeholder is needed to keep planning moving, mark it unmistakably provisional (e.g. a `# TODO(D-0XX): confirmar score medido` comment plus a plan task to revisit) rather than presenting it as settled.
+   - Resolution: 07-05 lands `SCORES_REFERENCIA["llm_pasta"]` as an explicit `# PROVISÓRIO` constant with a pointer to 07-09; 07-09 measures against the acervo real (mesmo método D-059/D-060) and its acceptance criteria require `grep -c "PROVISÓRIO"` == 0 after the dono decide o número medido. Provisional-to-measured lifecycle enforced, not just documented.
 
-2. **CLI/env override for the new opt-in flag**
+2. **(RESOLVED → nenhum plano adiciona override)** CLI/env override for the new opt-in flag
    - What we know: `fotoorganizer/cli.py:111-157` (read in full this session) shows `servicos_externos` has a CLI/env override (`escolhido("servicos_externos", "SERVICOS_EXTERNOS", bool)`, line 146-148) but `reconhecimento_facial` — the closer structural analog, a second independent privacy opt-in — does **not**. The codebase's own precedent is mixed, not uniform.
    - What's unclear: CONTEXT.md doesn't specify whether GENAI-01's flag needs CLI/env control or should be UI/TOML-only, and the existing code doesn't establish a single clear convention to default to.
    - Recommendation: default to TOML + UI-only (matching `reconhecimento_facial`, the more similar precedent — a feature-specific privacy toggle, not a general operational flag like `servicos_externos`), unless the planner has a specific reason (e.g. scripted/headless sessions) to need a CLI override. Either choice is defensible; just don't assume `servicos_externos`'s treatment is "the" pattern to copy, since it isn't uniformly applied even within `PrivacySettings` today.
+   - Resolution: nenhum plano adiciona override de CLI/env para `classificacao_pasta_genai` — bate com a recomendação (TOML/UI-only). O flag em si migrou de `PrivacySettings`/TOML para `application_settings` via `SettingsRepository` (decisão de 07-04, já que o servidor não escreve TOML e o UI-SPEC exige ligar/desligar pela tela), mas a ausência de override continua a mesma conclusão desta pesquisa.
 
-3. **Exact wording/scope of "metadados já catalogados" sent per folder (GENAI-02)**
+3. **(RESOLVED → plano 07-02, `PastaPayload`)** Exact wording/scope of "metadados já catalogados" sent per folder (GENAI-02)
    - What we know: `ClusterInfo` (`advisor.py:33-41`) already defines a reasonable metadata payload shape (folder names, sample filenames, period, photo count, known places) that `.planning/research/ARCHITECTURE.md:169-173` already identified as reusable for this feature's payload too.
    - What's unclear: whether Phase 7's payload should be `ClusterInfo` reused as-is, or a narrower folder-scoped variant (a single folder's own already-catalogued fields — e.g. any partial `Evidence.pais`/`Evidence.categoria` already present — rather than a full session/cluster shape). D-02 ("só complementa o campo que falta") implies the payload should communicate *which field is already known* so the model doesn't waste effort re-guessing a field D-02 says must never be overwritten anyway.
    - Recommendation: design a folder-scoped payload dataclass (not `ClusterInfo` verbatim) that includes existing partial evidence explicitly, so the schema/prompt can instruct "only propose the field(s) marked missing" — this is a planning-level schema design decision, not fully closed by this research.
+   - Resolution: 07-02 define `PastaPayload` como dataclass própria (não `ClusterInfo` reaproveitado), exatamente como recomendado, com o campo já conhecido marcado explicitamente para o prompt instruir "só proponha o que falta".
 
-4. **Where the new-table proposal (Pattern 3) should be confirmed before it's built**
+4. **(RESOLVED → CONTEXT.md D-07, confirmado via AskUserQuestion)** Where the new-table proposal (Pattern 3) should be confirmed before it's built
    - What we know: this research derived the need for durable persistence from reading `engine.py`'s regeneration logic directly (Pitfall 1) — it's a real problem, not speculative — but the specific solution shape (a new table mirroring `NomeClassificado`) is this research's own design, not a decision the user or ROADMAP.md made.
    - What's unclear: whether the planner should treat this as settled-enough-to-plan (the precedent is strong and low-risk) or should explicitly loop the user in before a migration lands.
    - Recommendation: given this project's pattern of the dono reviewing and approving architectural proposals during discuss-phase/plan-review (see D-062's "desenho pronto para implementar, mas não implementado" precedent for the folder-inventory feature), treat this the same way — present the table design as a ready-to-approve proposal in the plan, not as an already-locked implementation detail.
+   - Resolution: dono confirmou explicitamente (não assumido) via `AskUserQuestion` após esta pesquisa — ver D-07 em `07-CONTEXT.md`, registrado 2026-08-18.
 
 ## Validation Architecture
 
