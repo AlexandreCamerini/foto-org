@@ -3,6 +3,11 @@ from fotoorganizer.repositories.duplicates import (
     GroupRow,
     MemberRow,
 )
+from fotoorganizer.repositories.exif_write import (
+    ExifWriteRepository,
+    ItemRowExif,
+    PlanRowExif,
+)
 from fotoorganizer.repositories.media import MediaFilters, MediaRepository
 from fotoorganizer.repositories.operations import (
     AuditRow,
@@ -24,13 +29,16 @@ __all__ = [
     "AuditRow",
     "CHAVE_TEMPLATE_DESTINO",
     "DuplicateRepository",
+    "ExifWriteRepository",
     "GroupRow",
     "ItemRow",
+    "ItemRowExif",
     "MemberRow",
     "MediaFilters",
     "MediaRepository",
     "OperationRepository",
     "PlanRow",
+    "PlanRowExif",
     "SettingsRepository",
     "SuggestionFilters",
     "SuggestionRepository",
