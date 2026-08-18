@@ -4,9 +4,18 @@ decisão híbrida D-079) da classificação de pasta por GenAI.
 
 from datetime import datetime
 
+import pytest
+
 from fotoorganizer.classification.candidatas_de_pasta import (
     CandidataDePasta,
     candidatas,
+)
+from fotoorganizer.classification.custo_genai import (
+    CAMBIO_FONTE_PADRAO,
+    PRECO_ENTRADA_USD_POR_MTOK,
+    PRECO_SAIDA_USD_POR_MTOK,
+    contar_exato,
+    estimar,
 )
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.models import ConfidenceLevel, Evidence, MediaFile, MediaRole, Source
@@ -216,3 +225,107 @@ def test_candidatas_ordenadas_por_pasta_deterministico(migrated_engine):
         "/Users/eu/Pictures/Meio",
         "/Users/eu/Pictures/Zebra",
     ]
+
+
+# -- estimar() / contar_exato() — D-04/D-05, decisão híbrida D-079 ---------
+
+class _ContagemFalsa:
+    def __init__(self, input_tokens: int) -> None:
+        self.input_tokens = input_tokens
+
+
+class _ClienteDeContagem:
+    def __init__(self, resultado) -> None:
+        self._resultado = resultado
+        self.chamado_com: dict | None = None
+
+    @property
+    def messages(self):
+        return self
+
+    def count_tokens(self, **kw):
+        self.chamado_com = kw
+        if isinstance(self._resultado, Exception):
+            raise self._resultado
+        return self._resultado
+
+
+def _corpo(max_tokens=16000, pastas=2):
+    return {
+        "model": "claude-sonnet-5",
+        "max_tokens": max_tokens,
+        "thinking": {"type": "disabled"},
+        "system": "Você classifica PASTAS de um acervo de fotos pessoal.",
+        "messages": [{
+            "role": "user",
+            "content": '{"pastas": [' + ", ".join(
+                f'{{"pasta": "p{i}"}}' for i in range(pastas)
+            ) + "]}",
+        }],
+    }
+
+
+def test_custo_calcula_entrada_e_saida_pelas_constantes_de_preco():
+    custo = estimar(_corpo(), cambio_usd_brl=5.0)
+
+    assert custo.custo_entrada_usd == pytest.approx(
+        custo.tokens_entrada / 1_000_000 * PRECO_ENTRADA_USD_POR_MTOK
+    )
+    assert custo.teto_custo_saida_usd == pytest.approx(
+        custo.teto_tokens_saida / 1_000_000 * PRECO_SAIDA_USD_POR_MTOK
+    )
+
+
+def test_teto_tokens_saida_vem_do_max_tokens_do_corpo():
+    custo = estimar(_corpo(max_tokens=16000), cambio_usd_brl=5.0)
+    assert custo.teto_tokens_saida == 16000
+
+
+def test_custo_total_soma_entrada_e_saida_e_converte_para_brl():
+    custo = estimar(_corpo(), cambio_usd_brl=5.0)
+
+    assert custo.teto_custo_total_usd == pytest.approx(
+        custo.custo_entrada_usd + custo.teto_custo_saida_usd
+    )
+    assert custo.teto_custo_total_brl == pytest.approx(
+        custo.teto_custo_total_usd * 5.0
+    )
+
+
+def test_entrada_exata_false_na_estimativa_local():
+    custo = estimar(_corpo(), cambio_usd_brl=5.0)
+    assert custo.entrada_exata is False
+
+
+def test_cambio_fonte_nunca_vazio():
+    custo = estimar(_corpo(), cambio_usd_brl=5.0)
+    assert custo.cambio_fonte
+    assert custo.cambio_fonte == CAMBIO_FONTE_PADRAO
+
+
+def test_estimar_sessao_vazia_devolve_custo_zero():
+    custo = estimar({}, cambio_usd_brl=5.0)
+
+    assert custo.tokens_entrada == 0
+    assert custo.custo_entrada_usd == 0.0
+    assert custo.teto_tokens_saida == 0
+    assert custo.teto_custo_saida_usd == 0.0
+    assert custo.teto_custo_total_usd == 0.0
+    assert custo.teto_custo_total_brl == 0.0
+    assert custo.entrada_exata is False
+
+
+def test_contar_exato_devolve_input_tokens_do_client():
+    cliente = _ClienteDeContagem(_ContagemFalsa(input_tokens=3420))
+    corpo = _corpo()
+
+    resultado = contar_exato(cliente, corpo)
+
+    assert resultado == 3420
+    assert "max_tokens" not in cliente.chamado_com
+
+
+def test_contar_exato_cliente_que_levanta_devolve_zero():
+    cliente = _ClienteDeContagem(RuntimeError("indisponível"))
+    resultado = contar_exato(cliente, _corpo())
+    assert resultado == 0
