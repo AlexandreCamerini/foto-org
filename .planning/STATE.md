@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-06 concluído (7/9)
-stopped_at: "06-06 (repositório/job/rotas /api/exif/*) concluído — próximo: 06-07 (frontend base)"
-last_updated: "2026-08-18T13:52:17.632Z"
-last_activity: "2026-08-18 — 06-06 executado (ExifWriteRepository, JobManager.iniciar_escrita_exif e grupo de rotas /api/exif/* espelhando /api/operacoes*; 9 testes HTTP cobrindo plano→dry-run→seleção→executar→auditoria)"
+status: Fase 6 em execução — plano 06-07 concluído (8/9)
+stopped_at: "06-07 (frontend base: tipos, cliente, aba Localização, linhas tipo A) concluído — próximo: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo)"
+last_updated: "2026-08-18T14:06:36.130Z"
+last_activity: "2026-08-18 — 06-07 executado (StatusCampoExif/CampoExif/ItemPlanoExif/PlanoExif/PlanoExifDetalhe/RelatorioDryRunExif + cliente /api/exif em api.ts, executarEscritaExif no useJob, EscritaExif.tsx esqueleto plano→dry-run→gravar com linha tipo A e três chips de campo, aba Localização registrada em App.tsx)"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 06 de 9 concluído (+ correção 06-04b) — próximo: 06-07 (frontend base: tipos, cliente, aba Localização e linhas tipo A)
-Status: Fase 6 em execução — plano 06-06 concluído (7/9)
-Last activity: 2026-08-18 — 06-06 executado (ExifWriteRepository, JobManager.iniciar_escrita_exif e grupo de rotas /api/exif/* espelhando /api/operacoes*; 9 testes HTTP cobrindo plano→dry-run→seleção→executar→auditoria)
+Plan: 07 de 9 concluído (+ correção 06-04b) — próximo: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo)
+Status: Fase 6 em execução — plano 06-07 concluído (8/9)
+Last activity: 2026-08-18 — 06-07 executado (StatusCampoExif/CampoExif/ItemPlanoExif/PlanoExif/PlanoExifDetalhe/RelatorioDryRunExif + cliente /api/exif em api.ts, executarEscritaExif no useJob, EscritaExif.tsx esqueleto plano→dry-run→gravar com linha tipo A e três chips de campo, aba Localização registrada em App.tsx)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -38,7 +38,7 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
 **Velocity:**
 
-- Total plans completed: 16
+- Total plans completed: 17
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -58,10 +58,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P04b (correção D-077) | ~90min | 5 tasks | 6 files |
 | 06 P05 | ~35min | 3 tasks | 3 files |
 | 06 P06 | ~25min | 3 tasks | 5 files |
+| 06 P07 | ~20min | 2 tasks | 4 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-03 (14min), 06-04 (55min), 06-04b (~90min, correção), 06-05 (~35min), 06-06 (~25min)
+- Last 5 plans: 06-04 (55min), 06-04b (~90min, correção), 06-05 (~35min), 06-06 (~25min), 06-07 (~20min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -146,6 +147,7 @@ Recent decisions affecting current work:
 - [Phase 06-04b]: D-077: dono escolheu allowlist byte a byte (AskUserQuestion) sobre o achado em aberto de D-076 — jpg/cr2 remedidos e aprovados (20/20, 12/12), dng/tif continuam reprovados por motivos distintos (dng: parsing de offset multi-tile; tif: causa não relacionada a offset, inalterada). verificacao.py ganha esperadas_condicionais/reclassificar_deslocamentos_de_offset, categoria distinta de TAGS_ESTRUTURAIS_ESPERADAS, fail-safe em toda borda.
 - [Phase 06-05]: `ExifWriteExecutor.dry_run()`/`executar()` fecham o loop plano→dry-run→execução→auditoria: disco relido ao vivo em lote, reconferência TOCTOU antes de cada escrita, veredito sempre pelo diff completo de tags (nunca returncode), falha parcial registrada campo a campo, backup `_original` preservado até diff+avisos aprovarem tudo. `_executar_item` chama `reclassificar_deslocamentos_de_offset()` (D-077) depois de `diferenca()` — sem isso toda escrita real em `.jpg`/`.cr2` reprovaria de novo, regressão nomeada por 06-04b. Achado durante a integração: `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` precisou ganhar `File:FileType`/`FileTypeExtension`/`MIMEType` (andaime de criação de sidecar `.xmp` novo, nunca exercitado pela suíte de 06-02). Nenhum requisito EXIF-01..05 foi marcado como completo — falta a UI de aprovação (06-06+).
 - [Phase 06]: 06-06: seis endpoints /api/exif/* espelhando /api/operacoes*, ExifWriteRepository lendo veredito e auditoria via detalhe['exif_plan_id'], JobManager.iniciar_escrita_exif rodando ExifWriteExecutor em background. Nenhum requisito EXIF-01/02/03/05 marcado completo — aprovação do dono via UI (06-07+) ainda falta.
+- [Phase 06]: 06-07: EscritaExif.tsx (esqueleto) no molde de Operations.tsx, sem campo de destino (escrita in-place, D-075) — sidebar de planos, veredito com verbo "gravar", CTA "Gravar N arquivos" desabilitada sem dry-run aprovado (já dispara job.executarEscritaExif(id, null) — plano inteiro, sem seleção), estado vazio "Nada para gravar" e linha por item com os três chips de campo (GPS/Cidade/País: pronto/pulado/sem_valor). Checkbox por linha, linhas B/C (sidecar/pasta sincronizada) e detalhamento pós-execução ficam para 06-08 por delimitação explícita do próprio plano. Aba "Localização" global (fora de ABAS_COM_FONTE). Nenhum requisito EXIF-01/02 marcado completo — comportamento pós-execução (parte de EXIF-03) só fecha com 06-08.
 
 ### Pending Todos
 
@@ -206,9 +208,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T13:52:17.625Z
-Stopped at: 06-06 (repositório/job/rotas /api/exif/*) concluído — próximo: 06-07 (frontend base)
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-07-PLAN.md
+Last session: 2026-08-18T14:06:36.130Z
+Stopped at: 06-07 (frontend base: tipos, cliente, aba Localização, linhas tipo A) concluído — próximo: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo)
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-08-PLAN.md
 
 ## Operator Next Steps
 
