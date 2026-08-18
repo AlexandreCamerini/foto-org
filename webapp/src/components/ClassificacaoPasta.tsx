@@ -320,7 +320,7 @@ function PassoRodando({ segundos }: { segundos: number }) {
   const relogio = `${minutos}:${String(segs).padStart(2, "0")}`;
 
   return (
-    <div className="flex flex-col items-center gap-3 py-10 text-center">
+    <div className="flex flex-col items-center gap-3 py-6 text-center">
       <span className="font-titulo">
         Consultando Claude Sonnet 5… ({relogio})
       </span>
@@ -484,7 +484,7 @@ export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
         )}
 
         {passo === null && (
-          <div className="py-10 text-center text-texto-2">Carregando…</div>
+          <div className="py-6 text-center text-texto-2">Carregando…</div>
         )}
 
         {passo === "gate" && config && (
@@ -534,7 +534,7 @@ export function ClassificacaoPasta({ onFechar }: { onFechar: () => void }) {
         {(passo === "revisao" || passo === "concluido") && (
           // Passos 4 e 5 chegam no plano 07-07 — marcador mínimo para não
           // quebrar a máquina de estados enquanto isso.
-          <div className="py-10 text-center text-texto-2">
+          <div className="py-6 text-center text-texto-2">
             {rodada
               ? `${rodada.propostas.length} propostas recebidas — a revisão chega no próximo plano.`
               : "Concluído."}
