@@ -514,4 +514,36 @@ describe("Adicionar pasta — um modal, quatro pontos de entrada (CONS-05/D-07)"
       screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
     ).toBeInTheDocument();
   });
+
+  it("regressão UAT 2026-08-17 (LANC-03): o backdrop do modal usa opacidade que ocluí o conteúdo de trás, não bg-black/60", async () => {
+    // vitest/jsdom não renderiza pixel real — não teria pego o defeito
+    // original (texto do estado vazio vazando por trás do modal e se
+    // sobrepondo ao título/input, visto no teste de usuário sem instrução).
+    // Este teste trava a classe do fix (mesma opacidade que Loupe.tsx já
+    // usa para backdrop que precisa ocluir por completo) para não deixar
+    // alguém reintroduzir bg-black/60 por engano.
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/panorama": {
+        total: 0,
+        lacunas: [],
+        por_ano: [],
+        por_camera: [],
+        por_extensao: [],
+        cruzamento_ano_fonte: [],
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Adicionar pasta…" }),
+    );
+    const titulo = await screen.findByText("Caminho da pasta de fotos");
+    const backdrop = titulo.closest("div.fixed.inset-0") as HTMLElement | null;
+
+    expect(backdrop).not.toBeNull();
+    expect(backdrop!.className).not.toMatch(/bg-black\/60\b/);
+    expect(backdrop!.className).toMatch(/bg-black\/95\b/);
+  });
 });
