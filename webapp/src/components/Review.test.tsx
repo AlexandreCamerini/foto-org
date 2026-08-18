@@ -6,6 +6,19 @@ import Review from "./Review";
 import type { Job } from "../hooks/useJob";
 import { ROTAS_BASE, erro, montar, servirApi } from "../test/servidor";
 
+// Dublê trivial: isola este arquivo do assistente GenAI inteiro (07-06/07-07
+// já têm a suíte própria). Os testes da pastilha no PorQue, mais abaixo,
+// NÃO usam este dublê — exercitam o PorQue real, que é o que este plano
+// (07-08) alterou.
+vi.mock("./ClassificacaoPasta", () => ({
+  ClassificacaoPasta: ({ onFechar }: { onFechar: () => void }) => (
+    <div>
+      <span>Assistente de classificação por IA (mock)</span>
+      <button onClick={onFechar}>Fechar mock</button>
+    </div>
+  ),
+}));
+
 function jobParado(): Job {
   return {
     estado: { status: "nenhum" },
@@ -553,5 +566,114 @@ describe("foto fora de alcance", () => {
       await screen.findByText("volume ou pasta fora de alcance"),
     ).toBeInTheDocument();
     expect(screen.queryByAltText("1W0B3275.dng")).not.toBeInTheDocument();
+  });
+});
+
+describe("botão de classificação de pasta por IA (07-08)", () => {
+  it("botão de classificação abre o modal", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await usuario.click(
+      await screen.findByText("Classificar pastas por IA…"),
+    );
+
+    // Texto que só existe dentro do dublê do modal — prova que ele montou.
+    expect(
+      await screen.findByText("Assistente de classificação por IA (mock)"),
+    ).toBeInTheDocument();
+  });
+
+  it("modal fecha e a Revisão continua", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await usuario.click(
+      await screen.findByText("Classificar pastas por IA…"),
+    );
+    await screen.findByText("Assistente de classificação por IA (mock)");
+
+    await usuario.click(screen.getByText("Fechar mock"));
+
+    expect(
+      screen.queryByText("Assistente de classificação por IA (mock)"),
+    ).not.toBeInTheDocument();
+    // A Revisão por baixo continua intacta — fechar o modal não desmontou a
+    // tela nem perdeu o estado de grupos.
+    expect(
+      await screen.findByText("Viagens/2024 - França"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("pastilha de origem llm_pasta no PorQue (07-08)", () => {
+  // Reusa a mesma sugestão (media_id 12) das fixtures de PorQue acima —
+  // só o corpo de /api/midia/12 muda entre os dois testes.
+  const DETALHE_LLM_PASTA = {
+    id: 12,
+    nome: "DSC_0100.jpg",
+    sugestao: {
+      id: 2, destino: "Viagens/2024 - França", nivel: "media", status: "pendente",
+      evidencias: [
+        {
+          campo: "cidade", origem: "llm_pasta", valor: "Lisboa",
+          nivel: "media", score: 0.55,
+          justificativa: "Nome da pasta sugere Lisboa, Portugal",
+        },
+      ],
+    },
+  };
+  const DETALHE_GPS = {
+    id: 12,
+    nome: "DSC_0100.jpg",
+    sugestao: {
+      id: 2, destino: "Viagens/2024 - França", nivel: "media", status: "pendente",
+      evidencias: [
+        {
+          campo: "cidade", origem: "gps", valor: "Paris",
+          nivel: "alta", score: 0.9,
+          justificativa: "Coordenada GPS do próprio arquivo",
+        },
+      ],
+    },
+  };
+
+  it("evidência llm_pasta ganha a pastilha", async () => {
+    servirApi({
+      "/api/sugestoes": SUGESTOES,
+      "/api/sugestoes/grupos": GRUPOS,
+      "/api/midia/12": DETALHE_LLM_PASTA,
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupo(usuario, "Viagens/2024 - França");
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(
+      screen.getByTitle("Por que este destino para DSC_0100.jpg?"),
+    );
+
+    expect(await screen.findByText("IA · pasta")).toBeInTheDocument();
+  });
+
+  it("evidência de outra origem não ganha pastilha", async () => {
+    servirApi({
+      "/api/sugestoes": SUGESTOES,
+      "/api/sugestoes/grupos": GRUPOS,
+      "/api/midia/12": DETALHE_GPS,
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupo(usuario, "Viagens/2024 - França");
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(
+      screen.getByTitle("Por que este destino para DSC_0100.jpg?"),
+    );
+
+    await screen.findByText(/Coordenada GPS do próprio arquivo/);
+    expect(screen.queryByText("IA · pasta")).not.toBeInTheDocument();
   });
 });
