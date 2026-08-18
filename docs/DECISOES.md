@@ -2880,3 +2880,82 @@ inteiro passa a ser contado numa passada só
   contra qualquer catálogo; `fotoorganizer/exif_write/formatos.py`
   documenta a data e o resultado no próprio docstring do módulo.
 - Status: decidido por medição.
+
+## D-077 — Allowlist byte a byte estende D-076: jpg/cr2 passam a aprovar escrita EXIF direta
+
+- Fase: 6 — escrita EXIF de localização, correção de meio-de-fase sobre o
+  plano 06-04
+- Classe: B
+- Data: 2026-08-18
+- Contexto: D-076 deixou explicitamente em aberto, como "candidato a
+  decisão futura do dono, não decidida por este plano", estender
+  `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` para reconhecer deslocamento de
+  offset de bloco binário pré-existente como andaime — candidato
+  plausível pela evidência anexada a D-076 (byte a byte da miniatura
+  embutida de um `.jpg` real idêntico antes/depois do deslocamento de
+  `IFD1:ThumbnailOffset`). O dono foi consultado diretamente
+  (`AskUserQuestion`) e escolheu explicitamente **"Estender allowlist com
+  verificação byte a byte"**: aprovar jpg/cr2/dng se o conteúdo apontado
+  pelas tags de offset for idêntico (sha256) antes/depois, só o endereço
+  mudando — não estender a allowlist incondicional
+  `TAGS_ESTRUTURAIS_ESPERADAS` (que aprovaria pelo NOME da tag, sem checar
+  o conteúdo arquivo por arquivo, mascarando corrupção real igual a
+  qualquer outra tag daquela lista).
+- Decisão: `verificacao.py` ganha uma categoria nova e distinta de
+  `TAGS_ESTRUTURAIS_ESPERADAS` —
+  `reclassificar_deslocamentos_de_offset(diff, antes, depois,
+  arquivo_antes, arquivo_depois)` rebaixa de `inesperadas` para
+  `esperadas_condicionais` só a tag de offset/ponteiro (mapa fechado de
+  seis sufixos: `ThumbnailOffset`, `PreviewImageStart`, `StripOffsets`,
+  `TileOffsets`, `JpgFromRawStart`, `MPImageStart` — as mesmas que
+  apareceram como "inesperada" nos três formatos com amostra em D-076)
+  cujo par offset+tamanho aponta para um intervalo de bytes sha256-idêntico
+  entre o arquivo antes da escrita (o backup `<arquivo>_original` que o
+  writer já deixa, por nunca usar `-overwrite_original`) e o arquivo
+  depois. Toda borda que impede a prova — tag fora do mapa, tag de
+  tamanho irmã ausente, tamanho que mudou junto, contagem de valores que
+  não bate, valor não-numérico, leitura que falha — mantém a tag em
+  `inesperadas`, fail-safe, nunca promove por omissão.
+
+  `scripts/testar_escrita_exif.py` chama a reclassificação antes de
+  aplicar o critério de D-04 (as três condições continuam as mesmas: diff
+  sem inesperadas, delta de avisos vazio, releitura estrutural idêntica —
+  só o que conta como "inesperada" mudou). Remedição contra o
+  `catalog.db` de produção real (cópias descartáveis, nunca o original):
+
+  | extensão | amostras | veredito  | motivo medido |
+  |----------|---------:|-----------|----------------|
+  | .jpg     | 20/20    | **aprovado** | todo deslocamento medido (`IFD1:ThumbnailOffset`, `MPImage2:MPImageStart`) prova relocação byte a byte — sha256 idêntico |
+  | .cr2     | 12/12 (todas as alcançáveis) | **aprovado** | todo deslocamento medido (`IFD0:PreviewImageStart`, `IFD1:ThumbnailOffset`, `IFD2:StripOffsets`, `IFD3:StripOffsets`) prova relocação byte a byte |
+  | .dng     | 2/2      | reprovado (inalterado) | `SubIFD:TileOffsets`/`SubIFD3:TileOffsets` têm tiles demais — o exiftool devolve `"(Binary data N bytes, use -b option to extract)"` no dump em vez de lista de inteiros, a prova byte a byte não consegue parsear o offset, fica fail-safe |
+  | .tif     | 1/1      | reprovado (inalterado) | motivo de D-076 não é offset — tag `IPTC:EnvelopeRecordVersion` nova + 2 avisos novos do exiftool, fora do escopo desta correção |
+
+  `FORMATOS_APROVADOS` passa de `frozenset()` (D-076) para `{".jpg",
+  ".jpeg", ".cr2"}`. Todo arquivo `.dng`/`.tif`/`.cr3`/`.heic`/`.heif`
+  continua caindo no fallback de sidecar XMP (D-06/EXIF-05).
+- Por quê: verificação byte a byte é a única forma de aprovar relocação
+  sem abrir a mesma porta de mascaramento que `TAGS_ESTRUTURAIS_ESPERADAS`
+  fecha por desenho (EXIF-04) — aprovar pelo NOME da tag confiaria que
+  TODO deslocamento futuro daquela tag, em qualquer arquivo, é sempre
+  inofensivo; aprovar pelo CONTEÚDO confia só no que foi medido, arquivo
+  por arquivo, a cada escrita. O caso do `.dng` prova o valor da postura
+  fail-safe: em vez de estender a lógica para tentar extrair um offset de
+  dentro do texto `"(Binary data...)"` (o que seria ler o tamanho da
+  descrição, não o offset real — um bug esperando para acontecer), a
+  tag simplesmente fica `inesperada` e o formato continua reprovado. É
+  mais seguro reprovar um formato que provavelmente é inofensivo do que
+  arriscar aprovar um que não é.
+- Superseded/relacionado: **supera D-076 em parte** — a tabela de
+  veredito de jpg/cr2 muda de "reprovado" para "aprovado"; o achado de
+  D-076 sobre `.tif` (motivo distinto, não-offset) **permanece válido e
+  inalterado**, não superado por esta decisão. O achado de D-076 sobre o
+  byte a byte idêntico da miniatura do `.jpg` é a evidência empírica que
+  motivou esta decisão — generalizada aqui para produção, não mais só
+  uma observação anexa à medição.
+- Como reverter: `scripts/testar_escrita_exif.py --json` refaz a medição
+  contra qualquer catálogo, já usando a reclassificação; reverter para o
+  comportamento de D-076 exige remover a chamada a
+  `reclassificar_deslocamentos_de_offset` do script (a função em si pode
+  ficar sem uso, não precisa ser apagada) e restaurar
+  `FORMATOS_APROVADOS = frozenset()`.
+- Status: decidido pelo dono, medido.

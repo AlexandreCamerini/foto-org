@@ -103,7 +103,7 @@ TAGS_VOLATEIS: frozenset[str] = frozenset({
 # não escrito de forma independente pelo exiftool.
 PREFIXOS_VOLATEIS: tuple[str, ...] = ("System:", "Composite:")
 
-# -- deslocamento de offset como andaime condicional (D-0XX, generaliza o
+# -- deslocamento de offset como andaime condicional (D-077, generaliza o
 # achado byte a byte de D-076) ------------------------------------------
 
 # Sufixo de tag de offset/ponteiro (sem o prefixo de grupo — "IFD1:",
@@ -230,7 +230,7 @@ def reclassificar_deslocamentos_de_offset(
     o conteúdo binário que o par offset+tamanho aponta é byte a byte
     idêntico (sha256) antes e depois da escrita.
 
-    Decisão do dono (D-0XX), generalizando para o resto do pipeline o
+    Decisão do dono (D-077), generalizando para o resto do pipeline o
     achado empírico de D-076: a miniatura embutida de um `.jpg` real
     ficou byte a byte idêntica depois do exiftool deslocar
     `IFD1:ThumbnailOffset` ao inserir um bloco IPTC/XMP novo — o
@@ -402,7 +402,7 @@ class DiffTags:
     """Resultado de `diferenca()`: dicionários sem sobreposição.
 
     `esperadas_condicionais` é preenchido só por
-    `reclassificar_deslocamentos_de_offset()` (D-0XX), nunca por
+    `reclassificar_deslocamentos_de_offset()` (D-077), nunca por
     `diferenca()` diretamente — categoria distinta de `estruturais`
     (andaime incondicional, D-02): aqui a tag só entra depois de provar
     byte a byte que o conteúdo apontado não mudou, arquivo por arquivo,

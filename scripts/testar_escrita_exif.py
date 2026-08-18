@@ -154,7 +154,7 @@ def testar_amostra(origem: Path, writer: ExifToolWriter) -> ResultadoAmostra:
     TRÊS condições valem — diff sem tags inesperadas, delta de avisos
     vazio, e releitura estrutural idêntica.
 
-    Deviação (correção de meio-de-fase, D-0XX): antes de aplicar o
+    Deviação (correção de meio-de-fase, D-077): antes de aplicar o
     critério, toda tag "inesperada" que seja um deslocamento de
     offset/ponteiro comprovadamente byte a byte idêntico (mesmo padrão do
     achado de D-076) é reclassificada para `esperadas_condicionais` via

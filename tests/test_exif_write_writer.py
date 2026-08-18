@@ -279,7 +279,7 @@ def test_escrever_tag_gps_malformada_falha_sozinha(tmp_path):
     assert campo_gravado("cidade", diff) is True
 
 
-# -- Deviação (correção de meio-de-fase, D-0XX): reclassificar_deslocamentos
+# -- Deviação (correção de meio-de-fase, D-077): reclassificar_deslocamentos
 # _de_offset() — allowlist byte a byte para deslocamento de offset/ponteiro,
 # generalizando o achado de D-076 (miniatura embutida idêntica byte a byte
 # depois do exiftool deslocar IFD1:ThumbnailOffset). -----------------------
