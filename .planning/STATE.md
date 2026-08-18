@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
 status: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
-stopped_at: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
-last_updated: "2026-08-18T18:01:35.821Z"
-last_activity: "2026-08-18 — correção 06-08b: `IPTC:EnvelopeRecordVersion` reconhecida como andaime estrutural (D-078), achado real do checkpoint 06-09 contra JPEG de produção (Canon R6m2). `.jpg` remedido 20/20, sem mudança em `FORMATOS_APROVADOS`. Achado à parte registrado como blocker (aviso "IPTCDigest is not current" em JPEG com bloco IPTC pré-existente de outra ferramenta), fora do escopo desta correção."
+stopped_at: Phase 7 context gathered
+last_updated: "2026-08-18T18:23:08.788Z"
+last_activity: "2026-08-18 — 06-09 fechado: docs/ARQUITETURA.md documenta exif_write/, scripts/verificar.sh verde (939 testes), 2 checkpoints humanos respondidos com evidência real (escrita+verificação+limpeza de backup confirmadas em CR2 real, fallback sidecar confirmado em DNG, achado real do EnvelopeRecordVersion corrigido em JPEG real da câmera). EXIF-01..05 todos Complete em REQUIREMENTS.md."
 progress:
   total_phases: 6
   completed_phases: 1
@@ -213,9 +213,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T18:01:35.817Z
-Stopped at: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-09-SUMMARY.md
+Last session: 2026-08-18T18:23:08.753Z
+Stopped at: Phase 7 context gathered
+Resume file: .planning/phases/07-classifica-o-de-pasta-por-genai/07-CONTEXT.md
 
 ## Operator Next Steps
 
