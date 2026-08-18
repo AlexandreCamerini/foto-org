@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 7 em andamento (07-05 fechado — degrau llm_pasta na cascata do SuggestionEngine)
-stopped_at: "Phase 7 Plan 05 executed — próximo: 07-06-PLAN.md"
-last_updated: "2026-08-18T21:34:52.972Z"
-last_activity: "2026-08-18 — 07-05 fechado: SCORES_REFERENCIA['llm_pasta'] provisório (0.55, PROVISÓRIO até 07-09 medir), degrau 2c em _evidencias_geo (país/cidade) e 3b em _categoria (categoria), evento condicional em _evidencias_para — sempre fallback, atrás de todo determinístico e do advisor de cluster. SuggestionEngine(pastas_classificadas=...) lido em lote por gerar(); jobs.py repassa ClassificacaoPastaRepository.aprovadas() do cache local. 7 testes verdes (origem própria, durabilidade sem chamada externa, precedência determinística, não-regressão), 992 na suíte inteira. GENAI-03 continua Pending — falta 07-06/07-07 (frontend) para o comportamento ficar visível/acionável pelo dono."
+status: Fase 7 em andamento (07-06 fechado — passos 0-3 do assistente GenAI de pasta)
+stopped_at: "Phase 7 Plan 06 executed — próximo: 07-07-PLAN.md"
+last_updated: "2026-08-18T18:50:00.000Z"
+last_activity: "2026-08-18 — 07-06 fechado: api.ts ganhou 5 tipos + 7 funções de /api/genai-pasta/*; ClassificacaoPasta.tsx entrega os passos 0 (gate de dois consentimentos), 1 (candidatas opt-out), 2 (custo sempre 'até', nota de honestidade D-079) e 3 (chamada em voo não-cancelável, Esc/backdrop inertes) do assistente modal. Passos 4/5 (revisão/aprovação) ficam marcador mínimo até 07-07. Componente ainda não montado em nenhuma tela (07-08 conecta o botão em Review.tsx). 9 testes vitest presos ao Copywriting Contract, 172 na suíte inteira do webapp. GENAI-01 continua Pending — falta 07-07 (revisão/aprovação) e 07-08 (ponto de entrada) para o dono conseguir de fato usar o recurso."
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 19
-  completed_plans: 16
-  percent: 17
+  completed_plans: 17
+  percent: 18
 ---
 
 # Project State
@@ -24,17 +24,18 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 nenhuma operação física acontece sem revisão humana e dry-run.
 **Current focus:** v2.0 — Fase 7 em andamento (classificação de pasta por
 GenAI); 07-01 (persistência), 07-02 (cliente Claude), 07-03 (pré-filtro +
-custo), 07-04 (gate + endpoints) e 07-05 (integração na cascata) fechados,
-próximo é 07-06 (frontend de revisão).
+custo), 07-04 (gate + endpoints), 07-05 (integração na cascata) e 07-06
+(assistente frontend, passos 0-3) fechados, próximo é 07-07 (passos 4-5,
+revisão e aprovação).
 
 ## Current Position
 
 Phase: 7 — Classificação de pasta por GenAI (In Progress)
-Plan: 5/10 concluído — próximo: 07-06-PLAN.md (frontend de revisão)
-Status: Fase 7 em andamento (07-05 fechado — degrau llm_pasta na cascata do SuggestionEngine)
-Last activity: 2026-08-18 — 07-05 fechado: SCORES_REFERENCIA['llm_pasta'] provisório (0.55, PROVISÓRIO até 07-09 medir), degrau 2c em _evidencias_geo (país/cidade) e 3b em _categoria (categoria), evento condicional em _evidencias_para — sempre fallback, atrás de todo determinístico e do advisor de cluster. SuggestionEngine(pastas_classificadas=...) lido em lote por gerar(); jobs.py repassa ClassificacaoPastaRepository.aprovadas() do cache local. 7 testes verdes, 992 na suíte inteira. GENAI-03 continua Pending — falta 07-06/07-07 (frontend) para o comportamento ficar visível/acionável pelo dono.
+Plan: 6/10 concluído — próximo: 07-07-PLAN.md (revisão e aprovação, passos 4-5)
+Status: Fase 7 em andamento (07-06 fechado — passos 0-3 do assistente GenAI de pasta)
+Last activity: 2026-08-18 — 07-06 fechado: api.ts ganhou 5 tipos + 7 funções de /api/genai-pasta/*; ClassificacaoPasta.tsx entrega os passos 0 (gate de dois consentimentos), 1 (candidatas opt-out), 2 (custo sempre "até", nota de honestidade D-079) e 3 (chamada em voo não-cancelável, Esc/backdrop inertes). Passos 4/5 marcador mínimo até 07-07. Componente ainda não montado em nenhuma tela (07-08 conecta o botão em Review.tsx). 9 testes vitest presos ao Copywriting Contract, 172 na suíte inteira do webapp. GENAI-01 continua Pending — falta 07-07 e 07-08 para o dono conseguir de fato usar o recurso.
 
-Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 5/10 planos)
+Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 6/10 planos)
 
 ## Performance Metrics
 
@@ -70,11 +71,12 @@ Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento,
 
 **Recent Trend:**
 
-- Last 5 plans: 06-08b (~35min, correção), 07-01 (~20min), 07-02 (~25min), 07-03 (~15min), 07-04 (~20min)
+- Last 5 plans: 07-02 (~25min), 07-03 (~15min), 07-04 (~20min), 07-05 (~15min), 07-06 (~35min)
 - Trend: -
 
 *Updated after each plan completion*
 | Phase 07 P05 | ~15min | 3 tasks | 4 files |
+| Phase 07 P06 | ~35min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -164,6 +166,7 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-03: D-079 — dono decidiu (via AskUserQuestion, respondendo o checkpoint:decision da Task 1) a opção híbrida sobre a colisão count_tokens × critério 2 do ROADMAP: estimativa local conservadora antes de confirmar (nada sai da máquina), contagem exata só depois, mostrada no resumo pós-execução (passo 5). candidatas_de_pasta.py::candidatas() (D-01) e custo_genai.py::estimar()/contar_exato() (D-04/D-05) implementados conforme a decisão; 07-UI-SPEC.md atualizado no mesmo commit. GENAI-01 continua Pending — falta 07-04 conectar as duas peças a um endpoint/UI real.
 - [Phase 07-04]: SessaoDeClassificacaoDePasta liga o gate de dois consentimentos (D-080) aos endpoints /api/genai-pasta/*. GENAI-01/GENAI-02 continuam Pending até 07-06/07-07 (frontend) existirem.
 - [Phase 07-05]: llm_pasta é degrau PROVISÓRIO (score 0.55) e SEMPRE fallback na cascata — entra em _evidencias_geo depois da hierarquia de pasta falhar e em _categoria depois do advisor de cluster; medição fica para 07-09. `SuggestionEngine(pastas_classificadas=...)` lido em lote por `gerar()`, jobs.py repassa `ClassificacaoPastaRepository.aprovadas()`. GENAI-03 continua Pending — falta 07-06/07-07 (UI) para o comportamento ficar visível/acionável.
+- [Phase 07-06]: `api.ts` ganhou os tipos/funções de `/api/genai-pasta/*`; `ClassificacaoPasta.tsx` entrega os passos 0-3 do assistente (gate de dois consentimentos, candidatas opt-out D-01, custo sempre "até" com a nota de honestidade D-079, chamada em voo não-cancelável). `pastaCurta` foi reproduzida localmente em vez de importada de `Review.tsx` (não exportada lá, e Review.tsx importa este componente em 07-08 — importar de volta criaria ciclo de módulos). Passos 4/5 (revisão/aprovação) são marcador mínimo até 07-07. GENAI-01 continua Pending — falta 07-07 (revisão/aprovação) e 07-08 (ponto de entrada em Review.tsx) para o dono conseguir usar o recurso de ponta a ponta.
 
 ### Pending Todos
 
@@ -225,13 +228,15 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T21:34:52.964Z
-Stopped at: Phase 7 Plan 05 executed — próximo: 07-06-PLAN.md
+Last session: 2026-08-18T18:50:00.000Z
+Stopped at: Phase 7 Plan 06 executed — próximo: 07-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
 
-- Planejar a primeira fase com `/gsd:plan-phase 6`
+- Executar `07-07-PLAN.md` (passos 4-5 do assistente GenAI de pasta —
+  revisão antes/depois e aprovação), depois `07-08-PLAN.md` (ponto de
+  entrada em `Review.tsx`) para o recurso ficar acionável de ponta a ponta
 - Fases 6, 7, 8, 9 e 10 estão marcadas com `UI hint` no ROADMAP —
   considerar `/gsd:ui-phase` antes de planejar cada uma (a da Fase 7 é
   estreita: só a confirmação de custo)
