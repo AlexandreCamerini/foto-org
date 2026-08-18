@@ -157,9 +157,12 @@ na Fase 3, 2026-08-16. -->
   `MediaFile.pasta` (hoje `LIKE 'prefixo%'` sem índice força table scan a
   cada clique na árvore de pastas) [docs/PLANO_IA_E_PRODUTO.md §6
   pré-requisito 3; corroborado por .planning/codebase/CONCERNS.md]
-- [ ] **LANC-03**: Fluxo de onboarding do primeiro acervo existe (hoje não
-  existe) [docs/PLANO_IA_E_PRODUTO.md §6 pré-requisito 4]
-- [ ] **LANC-04**: Série de métricas de desempenho medida e registrada
+- [x] **LANC-03**: Fluxo de onboarding do primeiro acervo existe (hoje não
+  existe) [docs/PLANO_IA_E_PRODUTO.md §6 pré-requisito 4] — defeito de
+  UAT (backdrop translúcido) diagnosticado e corrigido em 05-05; reteste
+  comportamental com usuário real pós-fix ainda pendente, ver
+  05-HUMAN-UAT.md
+- [x] **LANC-04**: Série de métricas de desempenho medida e registrada
   como baseline formal (indexação, geração de sugestões, detecção de
   duplicatas) contra um catálogo representativo [docs/PLANO_IA_E_PRODUTO.md
   §6 pré-requisito 7]
@@ -246,8 +249,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONS-08 | Phase 4 | Complete |
 | LANC-01 | Phase 5 | Complete |
 | LANC-02 | Phase 5 | Complete |
-| LANC-03 | Phase 5 | Pending |
-| LANC-04 | Phase 5 | Pending |
+| LANC-03 | Phase 5 | Complete (reteste humano pós-fix pendente, ver 05-HUMAN-UAT.md) |
+| LANC-04 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 24 total
