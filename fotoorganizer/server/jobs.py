@@ -200,6 +200,9 @@ class JobManager:
             from fotoorganizer.geolocation import LocationResolver
             from fotoorganizer.geolocation.offline import OfflineGeocoder
             from fotoorganizer.repositories.lexico import LexicoRepository
+            from fotoorganizer.repositories.pasta_classificacao import (
+                ClassificacaoPastaRepository,
+            )
             from fotoorganizer.repositories.settings import SettingsRepository
 
             # Sem preferência salva, o comportamento é idêntico a antes desta
@@ -212,12 +215,20 @@ class JobManager:
             # (`scripts/classificar_nomes.py`). Léxico vazio = cascata
             # decide como sempre decidiu.
             lexico = LexicoRepository(self._factory).conhecidos()
+            # Propostas de GenAI de pasta JÁ APROVADAS, lidas do CACHE local
+            # — nada sai da máquina aqui. A chamada paga ao Claude já
+            # aconteceu na sessão interativa (07-02/07-04); `gerar()` só
+            # relê o que foi decidido (mesma nota que `lexico` acima).
+            pastas_classificadas = ClassificacaoPastaRepository(
+                self._factory
+            ).aprovadas()
             engine = SuggestionEngine(
                 self._factory,
                 LocationResolver(OfflineGeocoder()),
                 template=template,
                 advisor=self._advisor(),
                 lexico=lexico,
+                pastas_classificadas=pastas_classificadas,
             )
             resultado = engine.gerar()
             self._atualizar(

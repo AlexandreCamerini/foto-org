@@ -45,6 +45,7 @@ from fotoorganizer.geolocation.folder_names import _normalizar
 from fotoorganizer.geolocation.timezones import TZ_POR_PAIS
 from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.metadata.camera import nome_da_camera
+from fotoorganizer.repositories.pasta_classificacao import PropostaDePasta
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import (
     FotoRef,
@@ -250,6 +251,7 @@ class SuggestionEngine:
         advisor: ClassificationAdvisor | None = None,
         config: ConfigClassificacao = ConfigClassificacao(),
         lexico: dict[str, str] | None = None,
+        pastas_classificadas: dict[str, PropostaDePasta] | None = None,
     ) -> None:
         self._factory = session_factory
         self._resolver = resolver
@@ -260,6 +262,13 @@ class SuggestionEngine:
         # desligado (padrão) — e aí a cascata decide como sempre decidiu.
         self._tipos_de_nome: tuple[tuple[str, str], ...] = tuple(
             (lexico or {}).items()
+        )
+        # Propostas de GenAI de pasta JÁ APROVADAS (07-01/07-05), lidas em
+        # lote UMA vez por rodada — mesmo tratamento de `lexico` acima.
+        # Vazio quando nenhuma proposta foi aprovada, e aí a cascata decide
+        # como sempre decidiu (GENAI-03).
+        self._pastas_classificadas: dict[str, PropostaDePasta] = (
+            pastas_classificadas or {}
         )
 
     # -- API ----------------------------------------------------------------
@@ -320,6 +329,7 @@ class SuggestionEngine:
                 drafts = self._evidencias_para(
                     session, media, sessao_da_media.get(media.id),
                     herancas, por_id, curadoria.get(media.id, ()),
+                    proposta_de_pasta=self._pastas_classificadas.get(media.pasta),
                 )
                 self._persistir_sugestao(session, media, drafts)
                 geradas += 1
@@ -774,7 +784,9 @@ class SuggestionEngine:
                          sessao: _Sessao | None,
                          herancas: dict[int, Heranca],
                          por_id: dict[int, MediaFile],
-                         palavras_chave: tuple[str, ...] = ()) -> list[_Draft]:
+                         palavras_chave: tuple[str, ...] = (),
+                         proposta_de_pasta: PropostaDePasta | None = None,
+                         ) -> list[_Draft]:
         drafts: list[_Draft] = []
 
         # Foto de câmera ou imagem que só passou pelo disco? Decide antes de
@@ -848,7 +860,10 @@ class SuggestionEngine:
             drafts.append(_Draft("ano", "pasta", str(data_pasta.ano), just))
 
         drafts.extend(
-            self._evidencias_geo(session, media, sessao, herancas, por_id)
+            self._evidencias_geo(
+                session, media, sessao, herancas, por_id,
+                proposta_de_pasta=proposta_de_pasta,
+            )
         )
 
         if sessao is not None and sessao.tipo == "viagem":
@@ -863,8 +878,23 @@ class SuggestionEngine:
                 f"{sessao.draft.n_fotos} fotos em "
                 f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
             ))
+        # Evento vindo da proposta de GenAI de pasta: a sessão (viagem/
+        # evento) tem precedência — a proposta só preenche o silêncio,
+        # nunca disputa com um veredito que a cascata determinística já deu.
+        if (
+            proposta_de_pasta is not None
+            and proposta_de_pasta.evento
+            and not any(d.campo == "evento" for d in drafts)
+        ):
+            drafts.append(_Draft(
+                "evento", "llm_pasta", proposta_de_pasta.evento,
+                proposta_de_pasta.justificativa,
+            ))
 
-        categoria = self._categoria(media, sessao, drafts, palavras_chave)
+        categoria = self._categoria(
+            media, sessao, drafts, palavras_chave,
+            proposta_de_pasta=proposta_de_pasta,
+        )
         if categoria is not None:
             drafts.append(categoria)
         return drafts
@@ -872,7 +902,9 @@ class SuggestionEngine:
     def _evidencias_geo(self, session: Session, media: MediaFile,
                         sessao: _Sessao | None,
                         herancas: dict[int, Heranca],
-                        por_id: dict[int, MediaFile]) -> list[_Draft]:
+                        por_id: dict[int, MediaFile],
+                        proposta_de_pasta: PropostaDePasta | None = None,
+                        ) -> list[_Draft]:
         # 1) GPS + geocodificação offline.
         if media.gps_lat is not None and self._resolver is not None:
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
@@ -961,6 +993,27 @@ class SuggestionEngine:
                 if valor
             ]
 
+        # 2c) Proposta de GenAI de pasta (aprovada, 07-01/07-05). Só chega
+        # aqui quando a hierarquia determinística do passo 2 já falhou — as
+        # duas condições coincidem por construção, porque D-01 (07-03) só
+        # oferece à sessão de classificação a pasta cuja hierarquia
+        # determinística já veio vazia. Fica ACIMA da vizinhança (passo 3)
+        # porque a proposta é sobre ESTA pasta; vizinhança é inferência
+        # sobre o grupo inteiro da sessão.
+        if proposta_de_pasta is not None and (
+            proposta_de_pasta.cidade or proposta_de_pasta.pais
+        ):
+            drafts = [
+                _Draft(campo, "llm_pasta", valor, proposta_de_pasta.justificativa)
+                for campo, valor in [
+                    ("pais", proposta_de_pasta.pais),
+                    ("cidade", proposta_de_pasta.cidade),
+                ]
+                if valor
+            ]
+            if drafts:
+                return drafts
+
         # 3) Vizinhança: a sessão tem país dominante pelo GPS das outras.
         if sessao is not None and sessao.pais_dominante:
             return [_Draft(
@@ -973,7 +1026,9 @@ class SuggestionEngine:
 
     def _categoria(self, media: MediaFile, sessao: _Sessao | None,
                    drafts: list[_Draft],
-                   palavras_chave: tuple[str, ...] = ()) -> _Draft | None:
+                   palavras_chave: tuple[str, ...] = (),
+                   proposta_de_pasta: PropostaDePasta | None = None,
+                   ) -> _Draft | None:
         # 1) Pasta de categoria explícita no caminho da foto.
         for segmento in reversed(media.pasta.split("/")):
             canonico = _CATEGORIAS_PASTA.get(_normalizar(segmento))
@@ -1012,6 +1067,18 @@ class SuggestionEngine:
             return _Draft("categoria", "llm", sessao.categoria,
                           sessao.justificativa or
                           "sugerido por LLM a partir de metadados")
+        # 3b) Proposta de GenAI de pasta (aprovada, 07-01/07-05) — degrau
+        # IRMÃO do advisor de cluster (item 3), nunca fundido com ele: a
+        # origem chega diferente ao banco (`llm_pasta`, não `llm`) porque
+        # são afirmações de natureza distinta (nome da pasta vs. metadado
+        # da mídia) e a Revisão precisa distinguir as duas (ROADMAP/CONTEXT
+        # da fase 7). Só age quando o advisor não decidiu — fallback, nunca
+        # substituição.
+        if proposta_de_pasta is not None and proposta_de_pasta.categoria:
+            return _Draft(
+                "categoria", "llm_pasta", proposta_de_pasta.categoria,
+                proposta_de_pasta.justificativa,
+            )
         return None
 
     @staticmethod
