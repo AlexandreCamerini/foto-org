@@ -2959,3 +2959,91 @@ inteiro passa a ser contado numa passada só
   ficar sem uso, não precisa ser apagada) e restaurar
   `FORMATOS_APROVADOS = frozenset()`.
 - Status: decidido pelo dono, medido.
+
+## D-078 — `IPTC:EnvelopeRecordVersion` entra no andaime incondicional; achado à parte de digest IPTC desatualizado fica registrado, não corrigido
+
+- Fase: 6 — escrita EXIF de localização, correção de meio-de-fase sobre o
+  checkpoint humano do plano 06-09
+- Classe: B
+- Data: 2026-08-18
+- Contexto: no checkpoint 06-09, o dono rodou uma escrita real contra um
+  JPEG real de produção do Canon EOS R6m2 (cópia própria, não o original —
+  `~/Desktop/teste-exif/ACM_7122.JPG`, copiada de
+  `/Users/acamerini/Pictures/2026/Serena 15 Anos/ACM_7122.JPG`). A escrita
+  teve sucesso no nível do exiftool (City="Rio de Janeiro"/Country="Brasil"
+  gravados corretamente, confirmado por `exiftool -City -Country` no
+  arquivo pós-escrita), mas `verificacao.diferenca()` sinalizou
+  `IPTC:EnvelopeRecordVersion` como tag inesperada e reprovou a
+  verificação — fail-safe preservou o backup `_original`, item marcou
+  `falha`, nada corrompeu, mas a escrita ficou presa fora do fluxo normal.
+  A tag já tinha aparecido, sem catalogação, em D-076 (achado do `.tif`:
+  "tag inesperada `IPTC:EnvelopeRecordVersion` + avisos novos do
+  exiftool") — não perseguida na época porque `.tif` reprovava por um
+  segundo motivo independente também, e a remedição de D-077 (jpg/cr2
+  20/20 e 12/12) não incluiu nenhuma amostra que exercitasse esta tag
+  especificamente.
+- Decisão: `IPTC:EnvelopeRecordVersion` (marcador de versão do registro de
+  ENVELOPE IPTC, distinto de `IPTC:ApplicationRecordVersion` — marcador de
+  versão do registro de APLICAÇÃO, já allowlisted) entra em
+  `verificacao.TAGS_ESTRUTURAIS_ESPERADAS`, mesma justificativa das quatro
+  entradas originais (D-02) e das três de sidecar (plano 06-05): tag de
+  versão obrigatória, escrita sem condição ao criar um bloco IPTC novo,
+  não é dado de localização — sempre idêntica para todo arquivo que este
+  módulo escreve pela primeira vez. Não é extensão da allowlist byte a
+  byte de D-077 (essa cobre deslocamento de offset de bloco binário
+  pré-existente, categoria distinta) — é o mesmo tipo de andaime
+  incondicional que as outras oito entradas de `TAGS_ESTRUTURAIS_ESPERADAS`
+  já cobrem.
+
+  Regressão coberta por dois testes novos em
+  `tests/test_exif_write_writer.py`: classificação isolada da tag em
+  `estruturais`, e uma escrita completa (GPS+cidade+país) que produz todo
+  o andaime obrigatório junto — inclusive esta tag — confirmando
+  `diff.inesperadas` vazio e os três campos gravados.
+
+  Remedição de `.jpg` contra o `catalog.db` de produção real (mesmo
+  método de D-076/D-077 — cópias descartáveis via `shutil.copy2` em
+  `tempfile.mkdtemp()`, nunca o original): 20/20 amostras aprovadas,
+  `FORMATOS_APROVADOS` continua `{".jpg", ".jpeg", ".cr2"}` (D-077),
+  nenhuma mudança — esta correção fecha uma lacuna de reconhecimento de
+  tag, não abre nem fecha suporte de formato novo.
+- **Achado à parte, registrado e explicitamente NÃO corrigido aqui:**
+  testar a mesma extensão da escrita diretamente contra o arquivo original
+  de produção citado no achado
+  (`/Users/acamerini/Pictures/2026/Serena 15 Anos/ACM_7122.JPG`, via cópia
+  descartável, nunca o original nem a cópia de teste do dono no Desktop)
+  confirma que a tag `EnvelopeRecordVersion` deixa de reprovar a
+  verificação — mas revela uma SEGUNDA falha, estruturalmente diferente e
+  não coberta por esta correção: o arquivo já chega com um bloco IPTC
+  pré-existente (gravado por outra ferramenta antes deste app, ex.
+  Lightroom — `IPTC:ApplicationRecordVersion`/`Keywords`/`By-line` já
+  presentes antes da escrita), e a escrita do exiftool nesse caso produz o
+  aviso NOVO `"IPTCDigest is not current. XMP may be out of sync"` — o
+  mesmo aviso que já aparecia, também não perseguido, no achado do `.tif`
+  em D-076. Nenhuma das 20 amostras genéricas usadas na remedição acima
+  tinha bloco IPTC pré-existente (confirmado por inspeção individual),
+  então D-076/D-077 nunca mediram este caminho. Não existe hoje mecanismo
+  equivalente a `TAGS_ESTRUTURAIS_ESPERADAS` para avisos — reconhecer este
+  aviso como andaime inofensivo exigiria um allowlist de avisos novo,
+  mudança de política de segurança (mesma classe de decisão que D-076
+  deixou em aberto para offsets, resolvida só depois por D-077 com
+  aprovação explícita do dono). Fica fora do escopo desta correção
+  (`TAGS_ESTRUTURAIS_ESPERADAS` é só para tags, não avisos) — registrado
+  como blocker em `STATE.md`, não decidido aqui.
+- Por quê: mesmo raciocínio de D-02/D-077 — reconhecer o NOME de uma tag
+  de andaime incondicional (sempre idêntica, nunca dado) é seguro; inventar
+  um mecanismo de allowlist para avisos, sem medição própria contra o
+  acervo real e sem aprovação do dono, seria abrir a mesma porta de
+  mascaramento que EXIF-04 fecha por desenho — por isso o achado do
+  digest fica registrado, não resolvido, nesta correção.
+- Superseded/relacionado: estende D-076 (cataloga a tag que D-076 já tinha
+  visto, sem perseguir) e D-077 (usa a mesma allowlist incondicional,
+  categoria distinta da allowlist byte a byte). Não supera nem contradiz
+  nenhuma das duas — a tabela de D-077 sobre `.tif` continua válida:
+  `.tif` ainda reprova, agora só pela causa do aviso (que já estava lá,
+  documentada, e não muda com esta correção).
+- Como reverter: remover `IPTC:EnvelopeRecordVersion` de
+  `TAGS_ESTRUTURAIS_ESPERADAS`; os dois testes de regressão passam a
+  falhar, sinalizando a reversão.
+- Status: decidido — achado da tag corrigido e medido; achado do digest
+  registrado como blocker pendente, aguardando decisão futura do dono.
