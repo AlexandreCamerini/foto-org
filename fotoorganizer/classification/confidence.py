@@ -69,10 +69,17 @@ SCORES_REFERENCIA: dict[str, float] = {
     # por sessão) — docs/CONFIANCA.md proíbe fundir origens distintas, e o
     # ROADMAP exige degrau próprio na cascata para manter a Revisão
     # distinguindo as duas.
-    # PROVISÓRIO — valor NÃO medido. A convenção deste projeto (D-074,
-    # D-059/D-060) é medir contra o acervo real antes de travar um score.
-    # Medição e decisão ficam no plano 07-09; até lá este número não deve
-    # ser citado como calibrado.
+    # MEDIDO (D-081, 07-09) — 4 pastas de amostra contra verdade
+    # determinística do catálogo (categoria: 2 itens, cidade/país: 2 itens
+    # cada, mesmo payload/schema de produção). Zero erros observados nos
+    # dois campos: categoria acertou 2/2 (100%); cidade/país recusou 2/2
+    # (100%, `null` — comportamento seguro de D-06, não falha). Dono
+    # decidiu manter em 0.55, igualando ao advisor de cluster (`llm`),
+    # porque o sinal que mais importa (taxa de erro/alucinação, o que
+    # D-049 mediu) ficou em zero. Amostra pequena e preliminar — base de
+    # medição da Fase 7 tem só ~1.400 arquivos e 2 fontes cadastradas
+    # (`.planning/STATE.md` § Blockers/Concerns); revisitar se/quando
+    # ARCH-01 reconectar os volumes maiores do acervo.
     "llm_pasta": 0.55,
 }
 

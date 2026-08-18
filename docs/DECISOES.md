@@ -3158,3 +3158,89 @@ inteiro passa a ser contado numa passada só
 - Status: decidido pelo executor durante a Task 1 do plano 07-04, conforme
   a instrução explícita do `<action>` do plano (registrar a justificativa
   já dada pelo planejador, não uma decisão nova em aberto).
+
+## D-081 — Score de `llm_pasta` medido contra o acervo real: 0.55, preliminar
+
+- Fase: 7 — classificação de pasta por GenAI, Task 2/3 do plano 07-09.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: `SCORES_REFERENCIA["llm_pasta"]` nasceu em 07-05 com o valor
+  `0.55` marcado `PROVISÓRIO` — escolhido por analogia ao advisor de
+  cluster (`llm`), sem medição própria. A convenção deste projeto (D-074,
+  D-059/D-060) é medir contra o acervo real antes de travar um score; um
+  número por analogia aqui viraria verdade de base para o índice de saúde
+  da Fase 10 sem nunca ter sido checado — a mesma classe de bug que já
+  vazou em D-071. Este plano não podia escolher por analogia porque
+  `llm_pasta` mede uma pergunta diferente da do advisor de cluster (lê o
+  NOME da pasta, uma vez por sessão, não metadado de mídia individual) —
+  são origens distintas por design (comentário já existente em
+  `confidence.py`), então a taxa de acerto de uma não informa a da outra.
+- Método: `scripts/medir_score_llm_pasta.py` (07-09 Task 1) monta a
+  amostra a partir das pastas onde a cascata DETERMINÍSTICA já resolveu
+  categoria e/ou cidade/país (origem `pasta`, `gps`, `geocoding_offline`
+  ou `exif`) — a verdade de referência é o próprio catálogo, exigindo
+  unanimidade entre origens determinísticas antes de aceitar um valor
+  como verdade (duas pastas com evidência conflitante, ver
+  `deferred-items.md` item 1, foram corretamente excluídas). O modelo
+  recebe o MESMO `PastaPayload` e o mesmo schema que a produção usaria
+  (`location_advisor.py`), com o campo em medição ausente — nunca vê a
+  resposta. Cada item cai em um de três baldes: acertou, recusou
+  (`null`, comportamento desejado de D-06 quando não dá para saber) ou
+  errou (afirmou valor diferente da verdade). O dono rodou o script no
+  próprio terminal, com a própria chave (`ANTHROPIC_API_KEY`) — esta
+  sessão de desenvolvimento nunca manuseou a credencial, mesmo protocolo
+  de D-048/D-049/D-059.
+- Resultado numérico (`--limite 60`, 4 pastas na amostra):
+  ```
+  CATEGORIA
+    categoria: 2 itens — acertou 2 (100.0%)  recusou 0 (0.0%)  errou 0 (0.0%)
+
+  CIDADE/PAÍS
+    cidade: 2 itens — acertou 0 (0.0%)  recusou 2 (100.0%)  errou 0 (0.0%)
+    país:   2 itens — acertou 0 (0.0%)  recusou 2 (100.0%)  errou 0 (0.0%)
+  ```
+  Zero erros observados nos dois campos — é o sinal que mais importa: o
+  padrão "afirma sem base" que D-049 mediu e que motivou trocar de
+  modelo (Haiku → Sonnet) não apareceu. `categoria` acertou 2/2.
+  `cidade`/`país` recusaram 2/2 (retornaram `null` as duas vezes) — é o
+  comportamento seguro de D-06 (nunca inventar quando incerto), não
+  evidência de falha, mas também não é sinal positivo de acerto: o
+  modelo nunca se comprometeu com um valor nesse campo na amostra.
+- Alternativas consideradas: (a) manter `0.55` por analogia ao advisor
+  de cluster, sem medir — descartado porque é exatamente o que este
+  plano existe para evitar (T-07-09-01); (b) subir para `0.60`
+  (igualando a `pasta`, parse determinístico) — descartado porque
+  `pasta` é fato lido de um segmento de caminho, `llm_pasta` é
+  julgamento sobre string ambígua; igualar os dois esconderia que um é
+  determinístico e o outro é inferência, mesmo com zero erros
+  observados; (c) descer para abaixo de `0.50` (nasce BAIXA na
+  cascata) — descartado porque a taxa de erro (o sinal que mais importa
+  aqui) ficou em zero; um número que penaliza mais que `vizinhanca`/
+  `curadoria`/`album_externo` (0.55, todos com vínculo mais fraco de
+  contemporaneidade) não teria medição que o sustente.
+- Escolhida: manter `0.55` — mesmo valor do antigo `PROVISÓRIO`, mas
+  agora com medição por trás em vez de analogia. Iguala ao advisor de
+  cluster (`llm`) apesar da entrada mais esparsa (uma vez por sessão de
+  pasta, não por mídia individual) porque o que a medição prova é
+  ausência de alucinação nos dois campos, que é a mesma barra que
+  justificou o 0.55 do advisor.
+- Limitação de escala: a base de medição da Fase 7 tem só ~1.400
+  arquivos e 2 fontes cadastradas em `catalog.db` de produção
+  (`~/Pictures/2026` e `/Volumes/Externo/Fotos/Do Peru ao Chile`) — as
+  duas fontes que formam o grosso do acervo real (Apple Fotos só-iCloud,
+  ~44.661 registros; Lightroom em volume desmontado, ~45.397 registros)
+  não estão cadastradas (ARCH-01, deferido, `.planning/STATE.md` §
+  Blockers/Concerns). A amostra desta medição — 4 pastas, 2 itens por
+  campo — é preliminar mesmo para o padrão já pequeno da fase; não tem o
+  porte de D-059/D-060 (104 clusters) nem de D-074 (40.678 fotos). O
+  valor é revisitável, e deve ser revisto, quando ARCH-01 reconectar os
+  volumes maiores.
+- Como reverter: `SCORES_REFERENCIA["llm_pasta"]` em
+  `fotoorganizer/classification/confidence.py` é uma linha; o comentário
+  ao lado documenta a medição para quem for revisar. Reexecutar
+  `scripts/medir_score_llm_pasta.py --limite N` (N maior, quando ARCH-01
+  ampliar a base) refaz a medição sem tocar em código de produção — o
+  script é só leitura sobre o catálogo.
+- Status: decidido pelo dono, via `AskUserQuestion` apresentado pelo
+  orquestrador com o relatório real da medição e a tabela de scores já
+  travados como baliza.

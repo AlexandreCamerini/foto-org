@@ -18,6 +18,7 @@ foi descartado por isso).
 | Nome de álbum de catálogo externo que cobre o período (Apple Fotos, Lightroom) | Média | 0.55 |
 | Local inferido de fotos vizinhas no tempo    | Média  | 0.55 |
 | Categoria/evento sugerido por LLM (metadados, opt-in) | Média | 0.55 |
+| Cidade/país/categoria de pasta sugeridos por LLM a partir do NOME da pasta (opt-in, GenAI de pasta, origem `llm_pasta`) | Média | 0.55 |
 | Data do filesystem (sem EXIF)                | Baixa  | 0.40 |
 | Cena/local sugerido só por análise visual    | Baixa  | 0.30 |
 | Pessoa reconhecida automaticamente           | — sempre exige confirmação humana, nível derivado da similaridade |
@@ -30,6 +31,20 @@ no tempo* com o álbum — 100% das nomeações deste acervo vivem em registros 
 arquivo local (D-030/D-034), então o vínculo é de contemporaneidade, da mesma
 natureza da vizinhança temporal. Quem decide o desempate é
 `docs/AGRUPAMENTO.md`, seção 2c.
+
+`llm_pasta` (Cidade/país/categoria de pasta por LLM, opt-in) é o Claude
+inferindo cidade/país/categoria a partir do NOME da pasta e do metadado já
+catalogado, uma vez por sessão de pasta — nunca abre imagem, nunca sai da
+máquina sem o consentimento próprio do recurso
+(`classification/pasta_classificacao`, GENAI-03). NÃO é o advisor de cluster
+(`llm`, 0.55 também, mas chave separada — lê metadado de mídia individual,
+não nome de pasta) e NÃO é parse determinístico (`pasta`, 0.60 — segmento de
+caminho já nomeia o lugar; aqui o modelo julga uma string ambígua como
+"Praia 2019"). Score medido (D-081, 07-09) contra verdade determinística do
+próprio catálogo: amostra pequena (4 pastas), zero erros observados nos dois
+campos — categoria acertou 2/2, cidade/país recusou 2/2 (`null`,
+comportamento seguro de D-06, não falha). Preliminar: revisitar quando a
+base de medição crescer (ARCH-01, `.planning/STATE.md` § Blockers/Concerns).
 
 ## Regra de agregação (elo mais fraco)
 
