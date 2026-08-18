@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-07 concluído (8/9)
-stopped_at: "06-07 (frontend base: tipos, cliente, aba Localização, linhas tipo A) concluído — próximo: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo)"
-last_updated: "2026-08-18T14:06:36.130Z"
-last_activity: "2026-08-18 — 06-07 executado (StatusCampoExif/CampoExif/ItemPlanoExif/PlanoExif/PlanoExifDetalhe/RelatorioDryRunExif + cliente /api/exif em api.ts, executarEscritaExif no useJob, EscritaExif.tsx esqueleto plano→dry-run→gravar com linha tipo A e três chips de campo, aba Localização registrada em App.tsx)"
+status: Fase 6 em execução — plano 06-08 concluído (8/9)
+stopped_at: "06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo) concluído — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)"
+last_updated: "2026-08-18T14:25:13.180Z"
+last_activity: 2026-08-18 — 06-08 executado (checkbox por linha semeado do servidor D-01/D-02, badges de linha tipo B/formato não suportado e tipo C/pasta sincronizada, CORES_CAMPO e detalhamento pós-execução de 3 segmentos nomeando o campo em falha EXIF-03, 12 testes vitest; EXIF-01/EXIF-03/EXIF-05 marcados completos)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 07 de 9 concluído (+ correção 06-04b) — próximo: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo)
-Status: Fase 6 em execução — plano 06-07 concluído (8/9)
-Last activity: 2026-08-18 — 06-07 executado (StatusCampoExif/CampoExif/ItemPlanoExif/PlanoExif/PlanoExifDetalhe/RelatorioDryRunExif + cliente /api/exif em api.ts, executarEscritaExif no useJob, EscritaExif.tsx esqueleto plano→dry-run→gravar com linha tipo A e três chips de campo, aba Localização registrada em App.tsx)
+Plan: 08 de 9 concluído (+ correção 06-04b) — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)
+Status: Fase 6 em execução — plano 06-08 concluído (8/9)
+Last activity: 2026-08-18 — 06-08 executado (checkbox por linha semeado do servidor D-01/D-02, badges de linha tipo B/formato não suportado e tipo C/pasta sincronizada, CORES_CAMPO e detalhamento pós-execução de 3 segmentos nomeando o campo em falha EXIF-03, 12 testes vitest; EXIF-01/EXIF-03/EXIF-05 marcados completos em REQUIREMENTS.md)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -38,7 +38,7 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
 **Velocity:**
 
-- Total plans completed: 17
+- Total plans completed: 18
 - Average duration: - min
 - Total execution time: 0 hours
 
@@ -59,10 +59,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P05 | ~35min | 3 tasks | 3 files |
 | 06 P06 | ~25min | 3 tasks | 5 files |
 | 06 P07 | ~20min | 2 tasks | 4 files |
+| 06 P08 | ~25min | 3 tasks | 2 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-04 (55min), 06-04b (~90min, correção), 06-05 (~35min), 06-06 (~25min), 06-07 (~20min)
+- Last 5 plans: 06-04b (~90min, correção), 06-05 (~35min), 06-06 (~25min), 06-07 (~20min), 06-08 (~25min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -148,6 +149,7 @@ Recent decisions affecting current work:
 - [Phase 06-05]: `ExifWriteExecutor.dry_run()`/`executar()` fecham o loop plano→dry-run→execução→auditoria: disco relido ao vivo em lote, reconferência TOCTOU antes de cada escrita, veredito sempre pelo diff completo de tags (nunca returncode), falha parcial registrada campo a campo, backup `_original` preservado até diff+avisos aprovarem tudo. `_executar_item` chama `reclassificar_deslocamentos_de_offset()` (D-077) depois de `diferenca()` — sem isso toda escrita real em `.jpg`/`.cr2` reprovaria de novo, regressão nomeada por 06-04b. Achado durante a integração: `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` precisou ganhar `File:FileType`/`FileTypeExtension`/`MIMEType` (andaime de criação de sidecar `.xmp` novo, nunca exercitado pela suíte de 06-02). Nenhum requisito EXIF-01..05 foi marcado como completo — falta a UI de aprovação (06-06+).
 - [Phase 06]: 06-06: seis endpoints /api/exif/* espelhando /api/operacoes*, ExifWriteRepository lendo veredito e auditoria via detalhe['exif_plan_id'], JobManager.iniciar_escrita_exif rodando ExifWriteExecutor em background. Nenhum requisito EXIF-01/02/03/05 marcado completo — aprovação do dono via UI (06-07+) ainda falta.
 - [Phase 06]: 06-07: EscritaExif.tsx (esqueleto) no molde de Operations.tsx, sem campo de destino (escrita in-place, D-075) — sidebar de planos, veredito com verbo "gravar", CTA "Gravar N arquivos" desabilitada sem dry-run aprovado (já dispara job.executarEscritaExif(id, null) — plano inteiro, sem seleção), estado vazio "Nada para gravar" e linha por item com os três chips de campo (GPS/Cidade/País: pronto/pulado/sem_valor). Checkbox por linha, linhas B/C (sidecar/pasta sincronizada) e detalhamento pós-execução ficam para 06-08 por delimitação explícita do próprio plano. Aba "Localização" global (fora de ABAS_COM_FONTE). Nenhum requisito EXIF-01/02 marcado completo — comportamento pós-execução (parte de EXIF-03) só fecha com 06-08.
+- [Phase 06]: 06-08: EscritaExif.tsx completo — checkbox por linha (`Set<number> marcados`) semeado do servidor a cada troca de plano, nunca de "todos marcados" (D-01/D-02); CTA envia `Array.from(marcados)`, nunca `null`. Linha tipo B (formato não suportado): fundo `bg-atencao/5`, motivo sempre visível como texto (D-05), badge redundante de sidecar `.xmp` (D-06), checkbox nasce desmarcado, chips com sufixo `→ .xmp`. Linha tipo C (pasta sincronizada): badge aditivo, linha continua marcada (D-07). Linha B+C mostra os dois badges. `CORES_CAMPO` declarado no próprio arquivo (não estende `Operations.tsx::CORES_STATUS` — sem categoria para "pulado deliberado"). Detalhamento pós-execução de 3 segmentos (✓/✗/—) com linha `falha — {Campo}: {motivo}` por campo em falha (EXIF-03), `item.erro`/`backup_original` surfaceados quando existem. 12 testes vitest presos ao Copywriting Contract da UI-SPEC. **EXIF-01, EXIF-03 e EXIF-05 marcados completos em REQUIREMENTS.md** — fecham o comportamento visível ao dono para os três; EXIF-02/EXIF-04 continuam Pending (garantias de backend, fora do `requirements` frontmatter deste plano). Achado de execução: `roadmap.update-plan-progress` conta arquivos `*-PLAN.md` vs `*-SUMMARY.md` na pasta da fase e os dois batem em 9 mesmo com 06-09 (gate/verificação) ainda não executado, porque `06-04b-SUMMARY.md` (correção sem PLAN.md numerado próprio) infla a contagem de summaries — a ferramenta marcou a Fase 6 como Complete por engano; corrigido manualmente para 8/9 In Progress. Falta 06-09 (documentação de arquitetura, gate completo, verificação humana) antes de fechar a fase de verdade.
 
 ### Pending Todos
 
@@ -208,9 +210,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T14:06:36.130Z
-Stopped at: 06-07 (frontend base: tipos, cliente, aba Localização, linhas tipo A) concluído — próximo: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo)
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-08-PLAN.md
+Last session: 2026-08-18T14:25:13.172Z
+Stopped at: 06-08 (checkbox por linha, badges de formato/sync, detalhamento por campo) concluído — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-09-PLAN.md
 
 ## Operator Next Steps
 

@@ -11,19 +11,19 @@ forma do GenAI, formato do índice de saúde) confirmadas via
 
 ### EXIF — Escrita de localização no arquivo original
 
-- [ ] **EXIF-01**: Dono pode aprovar um plano dry-run que lista, por
+- [x] **EXIF-01**: Dono pode aprovar um plano dry-run que lista, por
   arquivo, quais campos de localização (GPS lat/long, cidade, país) estão
   vazios e seriam preenchidos, antes de qualquer escrita acontecer.
 - [ ] **EXIF-02**: Sistema escreve GPS lat/long, cidade e país no EXIF do
   arquivo original somente quando o campo está vazio — nunca sobrescreve
   valor já preenchido, mesmo que a sugestão discorde dele.
-- [ ] **EXIF-03**: Cada escrita é verificada por diff completo de tags
+- [x] **EXIF-03**: Cada escrita é verificada por diff completo de tags
   antes/depois (não hash de arquivo inteiro — a escrita é mutação
   intencional) e registrada em audit log, incluindo falha parcial.
 - [ ] **EXIF-04**: Sistema nunca escreve campos EXIF fora de localização
   (data, câmera, autor etc.) — fora de escopo, mesmo com evidência
   disponível.
-- [ ] **EXIF-05**: Arquivo cujo formato reprova no teste empírico de
+- [x] **EXIF-05**: Arquivo cujo formato reprova no teste empírico de
   escrita (ou já sabidamente sem suporte) aparece no plano dry-run como
   "formato não suportado" com motivo visível, e ganha oferta de sidecar
   XMP como alternativa no mesmo plano — nunca desaparece silenciosamente
@@ -120,9 +120,9 @@ em `.planning/ROADMAP.md` § Phase Details.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXIF-01 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-01 | Phase 6 — Escrita EXIF de localização | Complete |
 | EXIF-02 | Phase 6 — Escrita EXIF de localização | Pending |
-| EXIF-03 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-03 | Phase 6 — Escrita EXIF de localização | Complete |
 | EXIF-04 | Phase 6 — Escrita EXIF de localização | Pending |
 | GENAI-01 | Phase 7 — Classificação de pasta por GenAI | Pending |
 | GENAI-02 | Phase 7 — Classificação de pasta por GenAI | Pending |
@@ -136,7 +136,7 @@ em `.planning/ROADMAP.md` § Phase Details.
 | CORR-01 | Phase 11 — Motor de corroboração generalizado | Pending |
 | CORR-02 | Phase 11 — Motor de corroboração generalizado | Pending |
 | CORR-03 | Phase 11 — Motor de corroboração generalizado | Pending |
-| EXIF-05 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-05 | Phase 6 — Escrita EXIF de localização | Complete |
 | LEARN-01 | — (v3+) | Deferred — depende de CONF e CORR existirem |
 | ARCH-01 | — (v3+) | Deferred — pendente de forma e aprovação do dono |
 
