@@ -69,6 +69,16 @@ plano dry-run → aprovação → execução → verificação, num módulo pró
   standalone vs. parte do plano da fase) fica a critério do
   planejamento.
 
+### D-03 — refinamento pós-pesquisa de fase (2026-08-18)
+- **D-09:** `catalog.db` real de hoje não tem CR3 nem HEIC (só JPEG,
+  CR2, DNG, TIF — ver `06-RESEARCH.md`). O teste empírico de D-03 cobre
+  **só os formatos presentes no acervo real atual**. CR3/HEIC entram
+  como "não suportado" por falta de teste (não por reprovação) e vão
+  pro fallback de sidecar XMP (D-06/EXIF-05) — não bloqueiam a fase.
+  Reavaliar quando esses formatos aparecerem num acervo testável (ex.
+  se/quando ARCH-01 entrar). Dono optou por não baixar amostra externa
+  pra testar agora.
+
 </decisions>
 
 <canonical_refs>
