@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
-stopped_at: Phase 7 context gathered
-last_updated: "2026-08-18T18:23:08.788Z"
-last_activity: "2026-08-18 — 06-09 fechado: docs/ARQUITETURA.md documenta exif_write/, scripts/verificar.sh verde (939 testes), 2 checkpoints humanos respondidos com evidência real (escrita+verificação+limpeza de backup confirmadas em CR2 real, fallback sidecar confirmado em DNG, achado real do EnvelopeRecordVersion corrigido em JPEG real da câmera). EXIF-01..05 todos Complete em REQUIREMENTS.md."
+status: Fase 7 em andamento (07-01 fechado — persistência do GenAI de pasta)
+stopped_at: "Phase 7 Plan 01 executed — próximo: 07-02-PLAN.md"
+last_updated: "2026-08-18T20:30:18.036Z"
+last_activity: "2026-08-18 — 07-01 fechado: modelo PastaClassificada (tabela pasta_classificacoes_genai), migração 0020 encadeada em 0019, ClassificacaoPastaRepository com D-02 por campo (mais estrito que LexicoRepository), 6 testes verdes sem mock. Nenhuma linha é apagada (invariante 8). GENAI-03 continua Pending — este plano só entrega a fundação de persistência."
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 9
-  completed_plans: 11
+  total_plans: 19
+  completed_plans: 12
   percent: 17
 ---
 
@@ -22,17 +22,17 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Toda sugestão é auditável até a evidência que a gerou;
 nenhuma operação física acontece sem revisão humana e dry-run.
-**Current focus:** v2.0 — Fase 6 completa; próximo passo é planejar a
-Fase 7 (classificação de pasta por GenAI).
+**Current focus:** v2.0 — Fase 7 em andamento (classificação de pasta por
+GenAI); 07-01 (persistência) fechado, próximo é 07-02 (cliente Claude).
 
 ## Current Position
 
-Phase: 6 — Escrita EXIF de localização (Complete)
-Plan: 9/9 concluído (+ correções 06-04b e 06-08b) — próximo: `/gsd:discuss-phase 7`
-Status: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
-Last activity: 2026-08-18 — 06-09 fechado: docs/ARQUITETURA.md documenta exif_write/, scripts/verificar.sh verde (939 testes), 2 checkpoints humanos respondidos com evidência real (escrita+verificação+limpeza de backup confirmadas em CR2 real, fallback sidecar confirmado em DNG, achado real do EnvelopeRecordVersion corrigido em JPEG real da câmera). EXIF-01..05 todos Complete em REQUIREMENTS.md.
+Phase: 7 — Classificação de pasta por GenAI (In Progress)
+Plan: 1/10 concluído — próximo: 07-02-PLAN.md (cliente Claude Sonnet 5)
+Status: Fase 7 em andamento (07-01 fechado — persistência do GenAI de pasta)
+Last activity: 2026-08-18 — 07-01 fechado: modelo PastaClassificada (tabela pasta_classificacoes_genai), migração 0020 encadeada em 0019, ClassificacaoPastaRepository com D-02 por campo (mais estrito que LexicoRepository), 6 testes verdes sem mock. Nenhuma linha é apagada (invariante 8). GENAI-03 continua Pending — este plano só entrega a fundação de persistência.
 
-Progresso v2.0: [██░░░░░░░░] 1/6 fases
+Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 1/10 planos)
 
 ## Performance Metrics
 
@@ -61,10 +61,11 @@ Progresso v2.0: [██░░░░░░░░] 1/6 fases
 | 06 P07 | ~20min | 2 tasks | 4 files |
 | 06 P08 | ~25min | 3 tasks | 2 files |
 | 06 P08b (correção D-078) | ~35min | 4 tasks | 4 files |
+| 07 P01 | ~20min | 3 tasks | 5 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-05 (~35min), 06-06 (~25min), 06-07 (~20min), 06-08 (~25min), 06-08b (~35min, correção)
+- Last 5 plans: 06-06 (~25min), 06-07 (~20min), 06-08 (~25min), 06-08b (~35min, correção), 07-01 (~20min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -152,6 +153,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-07: EscritaExif.tsx (esqueleto) no molde de Operations.tsx, sem campo de destino (escrita in-place, D-075) — sidebar de planos, veredito com verbo "gravar", CTA "Gravar N arquivos" desabilitada sem dry-run aprovado (já dispara job.executarEscritaExif(id, null) — plano inteiro, sem seleção), estado vazio "Nada para gravar" e linha por item com os três chips de campo (GPS/Cidade/País: pronto/pulado/sem_valor). Checkbox por linha, linhas B/C (sidecar/pasta sincronizada) e detalhamento pós-execução ficam para 06-08 por delimitação explícita do próprio plano. Aba "Localização" global (fora de ABAS_COM_FONTE). Nenhum requisito EXIF-01/02 marcado completo — comportamento pós-execução (parte de EXIF-03) só fecha com 06-08.
 - [Phase 06]: 06-08: EscritaExif.tsx completo — checkbox por linha (`Set<number> marcados`) semeado do servidor a cada troca de plano, nunca de "todos marcados" (D-01/D-02); CTA envia `Array.from(marcados)`, nunca `null`. Linha tipo B (formato não suportado): fundo `bg-atencao/5`, motivo sempre visível como texto (D-05), badge redundante de sidecar `.xmp` (D-06), checkbox nasce desmarcado, chips com sufixo `→ .xmp`. Linha tipo C (pasta sincronizada): badge aditivo, linha continua marcada (D-07). Linha B+C mostra os dois badges. `CORES_CAMPO` declarado no próprio arquivo (não estende `Operations.tsx::CORES_STATUS` — sem categoria para "pulado deliberado"). Detalhamento pós-execução de 3 segmentos (✓/✗/—) com linha `falha — {Campo}: {motivo}` por campo em falha (EXIF-03), `item.erro`/`backup_original` surfaceados quando existem. 12 testes vitest presos ao Copywriting Contract da UI-SPEC. **EXIF-01, EXIF-03 e EXIF-05 marcados completos em REQUIREMENTS.md** — fecham o comportamento visível ao dono para os três; EXIF-02/EXIF-04 continuam Pending (garantias de backend, fora do `requirements` frontmatter deste plano). Achado de execução: `roadmap.update-plan-progress` conta arquivos `*-PLAN.md` vs `*-SUMMARY.md` na pasta da fase e os dois batem em 9 mesmo com 06-09 (gate/verificação) ainda não executado, porque `06-04b-SUMMARY.md` (correção sem PLAN.md numerado próprio) infla a contagem de summaries — a ferramenta marcou a Fase 6 como Complete por engano; corrigido manualmente para 8/9 In Progress. Falta 06-09 (documentação de arquitetura, gate completo, verificação humana) antes de fechar a fase de verdade.
 - [Phase 06]: D-078: IPTC:EnvelopeRecordVersion entra no andaime incondicional (achado real do checkpoint 06-09, JPEG Canon R6m2) — .jpg remedido 20/20, sem mudança em FORMATOS_APROVADOS. Achado à parte, registrado como blocker: JPEG com bloco IPTC pré-existente (Lightroom) produz aviso novo do exiftool ao escrever, sem allowlist de avisos hoje — fora do escopo desta correção.
+- [Phase 07]: 07-01: D-02 aplicada por CAMPO em ClassificacaoPastaRepository.salvar_propostas (mais estrita que a guarda por linha de LexicoRepository) — cidade/pais/categoria/evento preenchidos nunca são sobrescritos; linha origem='manual' é inteiramente intocável.
 
 ### Pending Todos
 
@@ -213,9 +215,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T18:23:08.753Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-classifica-o-de-pasta-por-genai/07-CONTEXT.md
+Last session: 2026-08-18T20:30:18.023Z
+Stopped at: Phase 7 Plan 01 executed — próximo: 07-02-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
