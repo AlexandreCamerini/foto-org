@@ -134,7 +134,19 @@ campo fora de localização; exclusão de arquivo; sidecar XMP para
 qualquer campo fora de localização ou para arquivo cujo formato passou
 no teste de escrita EXIF (o sidecar é oferta específica de fallback
 para formato reprovado — EXIF-05 — não um caminho paralelo geral).
-**Plans**: TBD
+**Plans**: 9 plans em 7 waves
+
+Plans:
+- [ ] 06-01-PLAN.md — Modelos ExifWritePlan/ExifWriteItem (status por campo) + migração 0019
+- [ ] 06-02-PLAN.md — Writer exiftool, verificação por diff de tags, sync-detect e allowlist de formatos
+- [ ] 06-03-PLAN.md — ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar
+- [ ] 06-04-PLAN.md — Teste empírico de escrita por formato (D-03/D-04) e decisão medida em docs/DECISOES.md
+- [ ] 06-05-PLAN.md — ExifWriteExecutor: dry-run autoritativo, escrita verificada por campo, falha parcial e backup
+- [ ] 06-06-PLAN.md — Repositório, job em background e rotas /api/exif/*
+- [ ] 06-07-PLAN.md — Frontend base: tipos, cliente, aba Localização e linhas tipo A
+- [ ] 06-08-PLAN.md — Frontend: checkbox por linha, badges de formato/sync e detalhamento por campo
+- [ ] 06-09-PLAN.md — Documentação de arquitetura, gate completo e verificação humana do fluxo
+
 **UI hint**: yes — a aprovação do plano dry-run precisa de superfície na UI
 (padrão já existente em `Operations.tsx`: plano → dry-run → aprovar →
 executar), não é feature só de backend.
