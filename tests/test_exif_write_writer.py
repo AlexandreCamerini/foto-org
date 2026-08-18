@@ -319,7 +319,13 @@ def test_pasta_sincronizada_nunca_propaga_oserror(monkeypatch, tmp_path):
 
 
 def test_suportado_case_insensitive_e_recusa_cr3():
-    assert suportado(".JPG") is True
+    """Medição real (plano 06-04, D-076, 2026-08-18): nenhum formato
+    aprovou — `suportado()` devolve `False` para todos hoje, `.jpg`
+    incluído (reprovou por deslocar offset de bloco binário existente).
+    Este teste cobre case-insensitividade (mesmo resultado maiúsculo ou
+    minúsculo) e a recusa de CR3 (D-09, sem amostra testável no acervo)."""
+    assert suportado(".jpg") is False
+    assert suportado(".JPG") is suportado(".jpg")
     assert suportado(".cr3") is False
 
 

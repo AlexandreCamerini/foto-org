@@ -2787,3 +2787,96 @@ inteiro passa a ser contado numa passada só
   implementação.
 - Status: decidido pelo dono, aguardando fase de implementação (roadmap
   v2.0).
+
+## D-076 — Allowlist de formatos com suporte de escrita EXIF, medida contra o acervo real: nenhum formato aprovou
+
+- Fase: 6 — escrita EXIF de localização, plano 06-04
+- Classe: B
+- Data: 2026-08-18
+- Contexto: D-03/D-04 exigiam medição real, não suposição, de quais
+  formatos aceitam a escrita de localização (GPS lat/long, cidade, país —
+  D-075) sem sujar nenhuma tag fora de escopo e sem passar a emitir aviso
+  novo do exiftool. `fotoorganizer/exif_write/formatos.py` (plano 06-02)
+  tinha allowlist provisória (`{jpg, cr2, dng, tif}`, os formatos
+  presentes no catálogo, "sem histórico de corrupção documentado" — uma
+  suposição razoável, não uma medição). `scripts/testar_escrita_exif.py`
+  (plano 06-04) roda o teste, contra cópias descartáveis (`shutil.copy2`
+  em `tempfile.mkdtemp()`, nunca no original) de arquivos reais do
+  `catalog.db` de produção (1.399 registros de acervo: 1.384 `.jpg`, 12
+  `.cr2`, 2 `.dng`, 1 `.tif` — zero `.cr3`/`.heic`/`.heif`, confirma D-09).
+  Usa o MESMO caminho de código de produção (`ExifToolWriter.escrever`,
+  `verificacao.diferenca`/`campo_gravado`/`avisos`), nunca reimplementa a
+  montagem de argumentos.
+- Decisão: **nenhum formato aprovou.** `FORMATOS_APROVADOS` passa de
+  `{jpg, jpeg, cr2, dng, tif, tiff}` (suposição) para `frozenset()`
+  (medido). Tabela completa (amostras = todas as alcançáveis em disco por
+  extensão; `.jpeg`/`.tiff` não amostrados separadamente — mesmo
+  formato/codec de `.jpg`/`.tif`, mesmo resultado por construção):
+
+  | extensão | amostras | veredito  | motivo medido |
+  |----------|---------:|-----------|----------------|
+  | .jpg     | 3        | reprovado | tags inesperadas: `IFD1:ThumbnailOffset`, `MPImage2:MPImageStart` |
+  | .cr2     | 3        | reprovado | tags inesperadas: `IFD0:PreviewImageStart`, `IFD1:ThumbnailOffset`, `IFD2:StripOffsets`, `IFD3:StripOffsets` |
+  | .dng     | 2        | reprovado | tags inesperadas: `IFD0:StripOffsets`, `SubIFD2:JpgFromRawStart`, `SubIFD3/4/5:TileOffsets`, `SubIFD:TileOffsets` |
+  | .tif     | 1        | reprovado | tag inesperada `IPTC:EnvelopeRecordVersion` + avisos novos do exiftool (`IPTCDigest is not current`, `Missing required TIFF GPS tag 0x001b GPSProcessingMethod`) |
+  | .cr3/.heic/.heif | 0 | sem_amostra | zero arquivos no acervo real hoje (D-09) — não testado, não reprovado |
+
+  O critério aplicado é o de D-04 na íntegra, as três condições juntas:
+  (a) `diferenca(antes, depois).inesperadas` vazio; (b) delta de avisos do
+  exiftool vazio (`avisos_depois - avisos_antes`, não "zero depois"); (c)
+  releitura estrutural (`largura`/`altura`/`data_capturada`/`model` via
+  `PurePythonExtractor`) idêntica antes/depois. Uma amostra reprovada
+  reprova a extensão inteira (conservador de propósito). Os quatro formatos
+  reprovaram todos pela condição (a): a escrita insere um bloco IPTC/XMP
+  novo num arquivo que já tinha outros blocos binários (miniatura
+  embutida, segunda imagem MPF, dados RAW/tiles), e a inserção desloca os
+  ponteiros de offset desses blocos existentes — efeito colateral
+  estrutural do próprio exiftool ao reescrever o container, não perda ou
+  troca do conteúdo apontado (verificado à parte: o byte a byte da
+  miniatura embutida de um `.jpg` real é idêntico antes/depois do
+  deslocamento de `IFD1:ThumbnailOffset` — `sha256` batendo). Mas esse
+  deslocamento cai fora do escopo hoje reconhecido por
+  `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` (plano 06-02), que só cobre o
+  caso "arquivo nunca teve bloco IPTC/XMP/GPS nenhum" — não o caso "já
+  tinha bloco binário X, e X só mudou de endereço". `.tif` reprova por um
+  segundo motivo, independente do deslocamento de offset: uma tag IPTC de
+  andaime ainda não catalogada (`EnvelopeRecordVersion`, distinta da já
+  aprovada `ApplicationRecordVersion`) e dois avisos genuinamente novos do
+  exiftool.
+
+  Achado à parte, corrigido antes desta medição: `verificacao.avisos()`
+  (plano 06-02) usava a saída `-j` do exiftool para coletar avisos, que
+  **colapsa** tags `Warning`/`Error` repetidas em uma só (medido: um
+  `.tif` real com 6 warnings devolvia 1 via `-j`, as 6 via texto plano) e
+  incluía o resumo agregado `Validate` no conjunto — um `.jpg` cujos 3
+  warnings sumiram após a escrita (o exiftool renormaliza o IFD ao
+  reescrever) registrava `"Validate: OK"` como aviso NOVO, quando é
+  melhora, não regressão. Corrigido para parsing de texto plano, com
+  `Validate` fora do conjunto (não é warning nem error, é uma contagem
+  derivada). 2 testes de regressão cobrem os dois casos.
+- Por quê: os três critérios juntos, não um só — diff de tags sozinho não
+  pega corrupção fora das tags (aviso novo do exiftool pode sinalizar
+  problema estrutural que o diff não captura, como o caso do `.tif`);
+  aviso sozinho não pega escrita fora de escopo silenciosa (verificado na
+  pesquisa: `-GPSLatitude=999` é aceito sem aviso nenhum); releitura
+  estrutural prova que o arquivo continua abrindo e lendo igual, não só
+  que as tags batem. Reprovar por padrão quando qualquer um dos três falha
+  é a postura conservadora que D-04 pede — o risco de aprovar cedo demais
+  (mascarar corrupção real) é maior que o custo de reprovar cedo demais
+  (usuário some tempo sem escrita direta, sidecar continua disponível).
+- **Consequência de escopo, não decidida aqui:** com `FORMATOS_APROVADOS`
+  vazio, todo arquivo de todo formato cai hoje no fallback de sidecar XMP
+  (D-06/EXIF-05) — não há formato com escrita direta em EXIF disponível
+  neste milestone. Os arquivos daquele formato aparecem no plano como
+  "formato não suportado" com motivo visível e oferta de sidecar, nunca
+  omitidos (D-05). Estender `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` para
+  reconhecer deslocamento de offset de bloco binário pré-existente como
+  andaime estrutural (o que, pela evidência do byte a byte idêntico da
+  miniatura, é candidato plausível a reverter esse resultado para pelo
+  menos `.jpg`/`.cr2`/`.dng`) é uma mudança na política de segurança de
+  `verificacao.py` — não uma correção de bug — e fica como candidato a
+  decisão futura do dono, não decidida por este plano.
+- Como reverter: `scripts/testar_escrita_exif.py --json` refaz a medição
+  contra qualquer catálogo; `fotoorganizer/exif_write/formatos.py`
+  documenta a data e o resultado no próprio docstring do módulo.
+- Status: decidido por medição.

@@ -1,32 +1,76 @@
 """Allowlist de formatos com suporte de escrita — decisão medida, não suposição.
 
-O valor inicial vem de D-09 (`06-CONTEXT.md`): o `catalog.db` real de hoje
-só tem `.jpg`, `.cr2`, `.dng` e `.tif` — CR3/HEIC não têm amostra testável
-neste acervo, então entram como "não suportado" por falta de teste, não por
-reprovação, e vão para o fallback de sidecar XMP (D-06/EXIF-05).
+**Medido em 2026-08-18** por `scripts/testar_escrita_exif.py` (plano 06-04)
+contra o `catalog.db` de produção real (1.399 arquivos de acervo: 1.384
+`.jpg`, 12 `.cr2`, 2 `.dng`, 1 `.tif`) — ver `docs/DECISOES.md` D-076 para a
+tabela completa e os três critérios de D-04.
 
-`scripts/testar_escrita_exif.py` (plano 06-04) roda o teste empírico de
-D-03/D-04 e atualiza este arquivo com o resultado medido.
+**Resultado: nenhum formato aprovou.** Os quatro formatos com amostra no
+acervo real (`.jpg`, `.cr2`, `.dng`, `.tif`) reprovaram por deslocarem
+offsets de blocos binários já existentes no arquivo (miniatura embutida,
+segunda imagem MPF, dados RAW/tiles) — efeito colateral estrutural
+inevitável de inserir um bloco IPTC/XMP novo num arquivo que já tinha
+esses blocos, mas fora do escopo hoje reconhecido por
+`verificacao.TAGS_ESTRUTURAIS_ESPERADAS`, que só cobre o caso "arquivo
+nunca teve bloco nenhum". `.tif` reprova por um segundo motivo
+independente: tag `IPTC:EnvelopeRecordVersion` nova + 2 avisos novos do
+exiftool. `.cr3`/`.heic`/`.heif` continuam sem amostra no acervo (D-09),
+"não testado" — categoria diferente de "reprovado".
+
+Todo arquivo, de todo formato, cai hoje no fallback de sidecar XMP
+(D-06/EXIF-05) até uma decisão futura do dono sobre estender
+`TAGS_ESTRUTURAIS_ESPERADAS` para cobrir deslocamento de offset (D-076).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-# `None` = provisório, ainda não medido contra o acervo real por
-# scripts/testar_escrita_exif.py. O plano 06-04 preenche com a data da
-# medição.
-MEDIDO_EM: str | None = None
+MEDIDO_EM: str | None = "2026-08-18"
 
-# Provisório até a medição de D-03 — formatos presentes no catalog.db real
-# hoje (D-09), sem histórico de corrupção documentado em escrita.
-FORMATOS_APROVADOS: frozenset[str] = frozenset({
-    ".jpg", ".jpeg", ".cr2", ".dng", ".tif", ".tiff",
-})
+# Medido: zero formatos passaram no critério de D-04 (diff sem tags
+# inesperadas E delta de avisos vazio E releitura estrutural idêntica).
+# Ver docstring do módulo e docs/DECISOES.md D-076.
+FORMATOS_APROVADOS: frozenset[str] = frozenset()
 
 # Motivo específico por extensão — D-05 exige motivo visível em toda linha
-# não suportada, nunca desaparecimento silencioso.
+# não suportada, nunca desaparecimento silencioso. Distingue "reprovado no
+# teste" (D-04) de "sem amostra para testar" (D-09) — são coisas
+# diferentes e o texto é literal na UI.
 MOTIVOS_NAO_SUPORTADO: dict[str, str] = {
+    ".jpg": (
+        "JPG — reprovado em 3/3 amostras medidas (2026-08-18): escrita "
+        "desloca offsets de blocos binários já existentes (miniatura "
+        "IFD1:ThumbnailOffset, segunda imagem MPImage2:MPImageStart) fora "
+        "do escopo hoje reconhecido como andaime estrutural"
+    ),
+    ".jpeg": (
+        "JPEG — mesmo formato de .jpg, mesmo resultado por construção "
+        "(não amostrado separadamente; 3/3 amostras .jpg reprovadas em "
+        "2026-08-18)"
+    ),
+    ".cr2": (
+        "CR2 — reprovado em 3/3 amostras medidas (2026-08-18): escrita "
+        "desloca offsets de blocos binários já existentes (preview, "
+        "miniatura, strips) fora do escopo hoje reconhecido como andaime "
+        "estrutural"
+    ),
+    ".dng": (
+        "DNG — reprovado em 2/2 amostras medidas (2026-08-18): escrita "
+        "desloca offsets de blocos binários já existentes (dados RAW, "
+        "tiles) fora do escopo hoje reconhecido como andaime estrutural"
+    ),
+    ".tif": (
+        "TIF — reprovado em 1/1 amostra medida (2026-08-18): tag "
+        "IPTC:EnvelopeRecordVersion nova fora do escopo reconhecido + 2 "
+        "avisos novos do exiftool (IPTCDigest desatualizado, "
+        "GPSProcessingMethod ausente)"
+    ),
+    ".tiff": (
+        "TIFF — mesmo formato de .tif, mesmo resultado por construção "
+        "(não amostrado separadamente; 1/1 amostra .tif reprovada em "
+        "2026-08-18)"
+    ),
     ".cr3": "CR3 — sem teste de escrita neste acervo (zero arquivos .cr3 no catálogo hoje, D-09)",
     ".heic": "HEIC — sem teste de escrita neste acervo (zero arquivos .heic no catálogo hoje, D-09)",
     ".heif": "HEIF — sem teste de escrita neste acervo (zero arquivos .heif no catálogo hoje, D-09)",

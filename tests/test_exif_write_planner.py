@@ -221,8 +221,14 @@ def test_formato_nao_suportado_vira_linha_com_motivo_e_sidecar(ambiente):
 def test_pasta_sincronizada_marcada(ambiente, monkeypatch):
     """Foto cujo caminho cai numa raiz sincronizada simulada vira item com
     pasta_sincronizada não-nulo e incluido is True — aviso, não bloqueio
-    (D-07)."""
+    (D-07). `formatos.suportado` é forçado a True: a medição real de
+    06-04 (D-076) zerou `FORMATOS_APROVADOS`, e este teste prova o
+    comportamento de D-07 isolado de D-03/D-04 — qual formato passa no
+    teste empírico é outra decisão, medida à parte."""
     factory, planner, origem_dir, fonte_id = ambiente
+    monkeypatch.setattr(
+        "fotoorganizer.exif_write.formatos.suportado", lambda ext: True
+    )
     raiz_sync = origem_dir / "SyncRoot"
     raiz_sync.mkdir()
     monkeypatch.setattr(
