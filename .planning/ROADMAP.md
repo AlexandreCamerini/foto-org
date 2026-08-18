@@ -35,7 +35,7 @@ real escrito no original, GenAI de nome de pasta) e a UI que expõe isso ao
 dono (picker nativo, sidebar navegável, confiança como eixo, corroboração
 generalizada além de GPS).
 
-- [ ] **Phase 6: Escrita EXIF de localização** - Localização inferida vira EXIF real no arquivo original, só em campo vazio, via plano dry-run aprovado
+- [x] **Phase 6: Escrita EXIF de localização** - Localização inferida vira EXIF real no arquivo original, só em campo vazio, via plano dry-run aprovado (completed 2026-08-18)
 - [ ] **Phase 7: Classificação de pasta por GenAI** - Nome de pasta vira evidência de cidade/evento por sessão opt-in com custo confirmado antes
 - [ ] **Phase 8: Picker nativo + progresso de importação** - Diálogo nativo do macOS substitui o caminho digitado; barra linear ganha taxa/ETA/contagem
 - [ ] **Phase 9: Sidebar navegável** - Busca incremental e navegação por teclado na árvore de pastas
@@ -80,18 +80,23 @@ re-derivar no planejamento):
   equivalente para mutação in-place. Modelo de plano/item estruturalmente
   paralelo a `operations/`, sem herdar dele; reusa `AuditLog` e os helpers
   de `security/` (validação de caminho, hash).
+
 - Verificação é **diff completo de tags antes/depois**, não hash do arquivo
   inteiro. Refinamento consciente de D-075 (que dizia "hash antes/depois"):
   a escrita é mutação intencional, então o hash do arquivo *tem* que mudar —
   ele serve como fato de auditoria, nunca como critério de aprovação. O
   critério é: as tags de localização esperadas foram gravadas e **nenhuma
   outra tag mudou**.
+
 - Escrita só acontece depois de **plano dry-run aprovado explicitamente**.
   Sem aprovação, zero bytes tocados.
+
 - Audit log precisa registrar **falha parcial** (quais tags entraram antes
   do erro), não só sucesso/erro binário.
+
 - Pré-condição "campo vazio" é também o mecanismo de recuperação de crash:
   reexecutar o plano é idempotente.
+
 - **Decisões de `/gsd:discuss-phase 6` (2026-08-18, ver `06-CONTEXT.md`
   para o detalhe completo):** aprovação do plano é em lote com checkbox
   por linha para desmarcar item pontual (não arquivo por arquivo); teste
@@ -137,6 +142,7 @@ para formato reprovado — EXIF-05 — não um caminho paralelo geral).
 **Plans**: 9 plans em 7 waves
 
 Plans:
+
 - [x] 06-01-PLAN.md — Modelos ExifWritePlan/ExifWriteItem (status por campo) + migração 0019
 - [x] 06-02-PLAN.md — Writer exiftool, verificação por diff de tags, sync-detect e allowlist de formatos
 - [x] 06-03-PLAN.md — ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar
@@ -145,7 +151,7 @@ Plans:
 - [x] 06-06-PLAN.md — Repositório, job em background e rotas /api/exif/*
 - [x] 06-07-PLAN.md — Frontend base: tipos, cliente, aba Localização e linhas tipo A
 - [x] 06-08-PLAN.md — Frontend: checkbox por linha, badges de formato/sync e detalhamento por campo
-- [ ] 06-09-PLAN.md — Documentação de arquitetura, gate completo e verificação humana do fluxo
+- [x] 06-09-PLAN.md — Documentação de arquitetura, gate completo e verificação humana do fluxo
 
 **UI hint**: yes — a aprovação do plano dry-run precisa de superfície na UI
 (padrão já existente em `Operations.tsx`: plano → dry-run → aprovar →
@@ -169,17 +175,21 @@ de retrofitar uma faceta depois.
   existente. Isso fecha a pergunta aberta da pesquisa (Batch API vs.
   síncrono): **síncrono**, porque a UX é interativa e o custo precisa ser
   visível por sessão, não numa fatura única depois.
+
 - **Sonnet 5, nunca Haiku.** Precedente D-059/D-060: modelo barato já
   alucinou num input *mais rico* que nome-de-pasta-sozinho. Entrada esparsa
   aumenta o risco, não diminui — a conclusão de D-059/D-060 vale a fortiori
   aqui, e não se reabre sem medição nova.
+
 - **Tipo de resultado irmão e novo** em `classification/` (ex.:
   `LocationAdvisorResult`), **nunca** sobrecarregar o `AdvisorResult` do
   Advisor de cluster. Degrau próprio na cascata do `SuggestionEngine`, com
   entrada própria em `SCORES_REFERENCIA` (ex.: `llm_pasta`, distinta de
   `llm`).
+
 - Flag de opt-in **própria**, não carona no consentimento já dado ao
   Advisor de cluster.
+
 - Falha de API nunca derruba o pipeline (mesmo contrato never-crash do
   Advisor atual).
 
@@ -222,8 +232,10 @@ arquivo.
 - **`tauri-plugin-dialog`** (dependência nova, ainda não instalada) substitui
   o `<input>` de texto livre do `ModalCaminho.tsx`. Manter o campo de texto
   como fallback no caminho não-Tauri (dev server).
+
 - Caminho escolhido continua passando pela validação de `security/`
   (travessia, symlink) — o diálogo nativo não é passe livre.
+
 - Barra de progresso **permanece linear**, estendendo o padrão do
   `StatusBar.tsx` existente. O que muda é granularidade: processados/total,
   taxa, ETA. **Sem gauge radial** — decisão explícita do dono, fecha a
@@ -265,8 +277,10 @@ expandir nível a nível com o mouse.
   decidida em `docs/NAVEGACAO.md` (sidebar = lugar, topo = recorte com
   chips) — esta fase preenche uma forma documentada, **não** reabre decisão
   de IA.
+
 - Padrão de teclado é o já estabelecido em `Review.tsx` (REV-01), não um
   novo.
+
 - **Não** construir a árvore ciente de volume (fonte→volume→pasta): tem
   gatilho documentado ("lista de fontes passar de uma tela") que ainda não
   disparou.
@@ -307,14 +321,17 @@ de pasta desde o primeiro dia). Sem dependência dura de esquema.
   `_condicao_lacuna`. Sem esquema novo — a única exceção prevista é um
   índice faltante em `Suggestion.nivel` (sinalizado pela pesquisa), porque
   filtro de navegação roda a cada clique, não uma vez por carga de painel.
+
 - Índice de saúde é **obrigatoriamente distribuição por dimensão**: % de
   alta confiança em localização, % em data, % em categoria, mais um bucket
   explícito "sem evidência". **Nunca** um score único combinado — média,
   média ponderada ou elo-mais-fraco agregado violam D-017/`docs/CONFIANCA.md`
   (é a mesma soma arbitrária, um nível de abstração acima) e essa classe de
   bug já vazou uma vez (D-071, item sem evidência renderizado como "Alta").
+
 - Formato do payload com facetas nomeadas (não aridade fixa), para a Fase 11
   poder acrescentar sinal de corroboração sem quebrar contrato de endpoint.
+
 - Isto é rollup sobre sugestão já finalizada — **não** mexe na regra do elo
   mais fraco nem cria fórmula de pontuação nova.
 
@@ -359,11 +376,13 @@ toca comportamento de GPS já calibrado e medido por D-074.
   `_confrontar_com_outro_lado` existente. Extrair abstração compartilhada
   (ex.: para `classification/confidence.py`) **só se e quando** um segundo
   consumidor fora de `grouping/` precisar — não especulativamente.
+
 - Campo categórico (cidade/país) usa **correspondência exata como portão de
   corroboração** (com normalização de acento/caixa, D-066/D-067), **nunca**
   limiar de distância/similaridade fuzzy — isso reintroduziria a constante
   não medida que D-074 explicitamente evitou ("nenhum fator novo foi
   adicionado").
+
 - **Zero bônus de confiança para qualquer tipo de evidência generalizado sem
   medição dedicada contra o acervo real primeiro** — mesma barra empírica
   que o próprio D-074 cumpriu (40.678 fotos, cobertura 91,1%, chão de 50,9%
@@ -371,6 +390,7 @@ toca comportamento de GPS já calibrado e medido por D-074.
   de "país" acontece por acaso a taxa de fundo alta num acervo enviesado.
   Cada tipo precisa do seu passo de medição no molde de
   `scripts/calibrar_raio_incerteza.py` e da sua decisão registrada.
+
 - Comportamento de GPS de D-074 tem que sair idêntico do outro lado.
 
 **Success Criteria** (what must be TRUE):
@@ -411,7 +431,7 @@ Fases executam em ordem numérica: 6 → 7 → 8 → 9 → 10 → 11
 | 3. Revisão acessível e consistente | v1.0 | 2/2 | Complete | 2026-08-16 |
 | 4. Consistência visual secundária | v1.0 | 7/7 | Complete | 2026-08-17 |
 | 5. Preparação para lançamento | v1.0 | 5/5 | Complete | 2026-08-18 |
-| 6. Escrita EXIF de localização | v2.0 | 8/9 | In Progress | - |
+| 6. Escrita EXIF de localização | v2.0 | 11/9 | Complete   | 2026-08-18 |
 | 7. Classificação de pasta por GenAI | v2.0 | 0/TBD | Not started | - |
 | 8. Picker nativo + progresso de importação | v2.0 | 0/TBD | Not started | - |
 | 9. Sidebar navegável | v2.0 | 0/TBD | Not started | - |

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-08 concluído (8/9), correção 06-08b (D-078) concluída
-stopped_at: "Correção 06-08b (D-078) concluída: IPTC:EnvelopeRecordVersion na allowlist estrutural, JPEG do Canon R6m2 do checkpoint 06-09 — próximo: retomar 06-09 (documentação de arquitetura, gate completo, verificação humana)"
-last_updated: "2026-08-18T17:47:59.117Z"
-last_activity: 2026-08-18 — correção 06-08b: IPTC:EnvelopeRecordVersion reconhecida como andaime estrutural (D-078), achado real do checkpoint 06-09 contra JPEG de produção (Canon R6m2). .jpg remedido 20/20, sem mudança em FORMATOS_APROVADOS. Achado à parte registrado como blocker (aviso "IPTCDigest is not current" em JPEG com bloco IPTC pré-existente de outra ferramenta), fora do escopo desta correção.
+status: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
+stopped_at: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
+last_updated: "2026-08-18T18:01:35.821Z"
+last_activity: "2026-08-18 — correção 06-08b: `IPTC:EnvelopeRecordVersion` reconhecida como andaime estrutural (D-078), achado real do checkpoint 06-09 contra JPEG de produção (Canon R6m2). `.jpg` remedido 20/20, sem mudança em `FORMATOS_APROVADOS`. Achado à parte registrado como blocker (aviso "IPTCDigest is not current" em JPEG com bloco IPTC pré-existente de outra ferramenta), fora do escopo desta correção."
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 9
-  completed_plans: 8
-  percent: 0
+  completed_plans: 11
+  percent: 17
 ---
 
 # Project State
@@ -22,17 +22,17 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** Toda sugestão é auditável até a evidência que a gerou;
 nenhuma operação física acontece sem revisão humana e dry-run.
-**Current focus:** v2.0 — Fases 6-11 mapeadas; próximo passo é planejar a
-Fase 6 (escrita EXIF de localização).
+**Current focus:** v2.0 — Fase 6 completa; próximo passo é planejar a
+Fase 7 (classificação de pasta por GenAI).
 
 ## Current Position
 
-Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 08 de 9 concluído (+ correções 06-04b e 06-08b) — próximo: 06-09 (documentação de arquitetura, gate completo e verificação humana do fluxo)
-Status: Fase 6 em execução — plano 06-08 concluído (8/9), correção 06-08b (D-078) concluída
-Last activity: 2026-08-18 — correção 06-08b: `IPTC:EnvelopeRecordVersion` reconhecida como andaime estrutural (D-078), achado real do checkpoint 06-09 contra JPEG de produção (Canon R6m2). `.jpg` remedido 20/20, sem mudança em `FORMATOS_APROVADOS`. Achado à parte registrado como blocker (aviso "IPTCDigest is not current" em JPEG com bloco IPTC pré-existente de outra ferramenta), fora do escopo desta correção.
+Phase: 6 — Escrita EXIF de localização (Complete)
+Plan: 9/9 concluído (+ correções 06-04b e 06-08b) — próximo: `/gsd:discuss-phase 7`
+Status: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
+Last activity: 2026-08-18 — 06-09 fechado: docs/ARQUITETURA.md documenta exif_write/, scripts/verificar.sh verde (939 testes), 2 checkpoints humanos respondidos com evidência real (escrita+verificação+limpeza de backup confirmadas em CR2 real, fallback sidecar confirmado em DNG, achado real do EnvelopeRecordVersion corrigido em JPEG real da câmera). EXIF-01..05 todos Complete em REQUIREMENTS.md.
 
-Progresso v2.0: [░░░░░░░░░░] 0/6 fases
+Progresso v2.0: [██░░░░░░░░] 1/6 fases
 
 ## Performance Metrics
 
@@ -213,9 +213,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T17:47:46.652Z
-Stopped at: Correção D-078 concluída (IPTC:EnvelopeRecordVersion na allowlist estrutural, JPEG do Canon R6m2 do checkpoint 06-09) — próximo: retomar 06-09 (documentação de arquitetura, gate completo, verificação humana)
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-09-PLAN.md
+Last session: 2026-08-18T18:01:35.817Z
+Stopped at: Fase 6 completa (06-09 fechado, checkpoints humanos com evidência real)
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-09-SUMMARY.md
 
 ## Operator Next Steps
 

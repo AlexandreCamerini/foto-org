@@ -14,13 +14,13 @@ forma do GenAI, formato do índice de saúde) confirmadas via
 - [x] **EXIF-01**: Dono pode aprovar um plano dry-run que lista, por
   arquivo, quais campos de localização (GPS lat/long, cidade, país) estão
   vazios e seriam preenchidos, antes de qualquer escrita acontecer.
-- [ ] **EXIF-02**: Sistema escreve GPS lat/long, cidade e país no EXIF do
+- [x] **EXIF-02**: Sistema escreve GPS lat/long, cidade e país no EXIF do
   arquivo original somente quando o campo está vazio — nunca sobrescreve
   valor já preenchido, mesmo que a sugestão discorde dele.
 - [x] **EXIF-03**: Cada escrita é verificada por diff completo de tags
   antes/depois (não hash de arquivo inteiro — a escrita é mutação
   intencional) e registrada em audit log, incluindo falha parcial.
-- [ ] **EXIF-04**: Sistema nunca escreve campos EXIF fora de localização
+- [x] **EXIF-04**: Sistema nunca escreve campos EXIF fora de localização
   (data, câmera, autor etc.) — fora de escopo, mesmo com evidência
   disponível.
 - [x] **EXIF-05**: Arquivo cujo formato reprova no teste empírico de
@@ -121,9 +121,9 @@ em `.planning/ROADMAP.md` § Phase Details.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | EXIF-01 | Phase 6 — Escrita EXIF de localização | Complete |
-| EXIF-02 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-02 | Phase 6 — Escrita EXIF de localização | Complete |
 | EXIF-03 | Phase 6 — Escrita EXIF de localização | Complete |
-| EXIF-04 | Phase 6 — Escrita EXIF de localização | Pending |
+| EXIF-04 | Phase 6 — Escrita EXIF de localização | Complete |
 | GENAI-01 | Phase 7 — Classificação de pasta por GenAI | Pending |
 | GENAI-02 | Phase 7 — Classificação de pasta por GenAI | Pending |
 | GENAI-03 | Phase 7 — Classificação de pasta por GenAI | Pending |
