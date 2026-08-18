@@ -124,11 +124,18 @@ None yet.
   (40.678 fotos, cobertura 91,1%). Critério 5 da fase exige provar
   que o GPS sai idêntico.
 
-- **Fases 7, 10 e 11 dependem de catálogo populado para medir.**
-  `catalog.db` de produção foi zerado em 2026-08-17 e hoje só tem
-  `~/Pictures/2026` (1.382 arquivos). Medição de custo do GenAI,
-  baseline de performance do filtro de confiança e calibração dos
-  comparadores de corroboração precisam de uma varredura completa antes.
+- **Fases 7, 10 e 11 medem contra uma base pequena, por decisão explícita
+  do dono (2026-08-18).** `catalog.db` de produção só tem 2 fontes
+  cadastradas hoje — `~/Users/acamerini/Pictures/2026` e
+  `/Volumes/Externo/Fotos/Do Peru ao Chile` (~1.400 arquivos). As duas
+  fontes que formam o grosso do acervo real (Apple Fotos só-iCloud,
+  ~44.661 registros; Lightroom em volume desmontado, ~45.397 registros)
+  não estão cadastradas — reconectá-las é ARCH-01, deferido pra v3+
+  (ver REQUIREMENTS.md), fora de escopo desta milestone. Medição de
+  custo do GenAI, baseline de confiança e calibração dos comparadores de
+  corroboração são preliminares contra ~1.400 arquivos; podem precisar
+  de reajuste se/quando ARCH-01 entrar. Dono optou por seguir assim em
+  vez de abrir ARCH-01 agora.
 
 - **Lacunas de pesquisa a fechar antes/durante a Fase 6** (flagadas em
   `research/SUMMARY.md`, confiança MÉDIA e de fonte externa): confiabilidade
