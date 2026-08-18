@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-03 concluído (3/9)
-stopped_at: Plano 06-03 (ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar) concluído
-last_updated: "2026-08-18T11:59:20.310Z"
-last_activity: 2026-08-18 — 06-03-PLAN.md executado (ExifWritePlanner.criar_plano_exif)
+status: Fase 6 em execução — plano 06-04 concluído (4/9)
+stopped_at: Plano 06-04 (teste empírico de escrita EXIF por formato, D-03/D-04) concluído — allowlist medida vazia, D-076 registrada
+last_updated: "2026-08-18T12:33:08.262Z"
+last_activity: 2026-08-18 — 06-04-PLAN.md executado (scripts/testar_escrita_exif.py, allowlist medida, D-076)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 03 de 9 concluído — próximo: 06-04 (teste empírico de escrita por formato — D-03/D-04)
-Status: Fase 6 em execução — plano 06-03 concluído (3/9)
-Last activity: 2026-08-18 — 06-03-PLAN.md executado (ExifWritePlanner.criar_plano_exif)
+Plan: 04 de 9 concluído — próximo: 06-05 (ExifWriteExecutor: dry-run autoritativo, escrita verificada, falha parcial e backup)
+Status: Fase 6 em execução — plano 06-04 concluído (4/9)
+Last activity: 2026-08-18 — 06-04-PLAN.md executado (scripts/testar_escrita_exif.py, allowlist medida, D-076)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -54,10 +54,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P01 | 24min | 3 tasks | 4 files |
 | 06 P02 | 9min | 3 tasks | 6 files |
 | 06 P03 | 14min | 2 tasks | 2 files |
+| 06 P04 | 55min | 2 tasks | 6 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-01 (24min), 06-02 (9min), 06-03 (14min)
+- Last 5 plans: 06-01 (24min), 06-02 (9min), 06-03 (14min), 06-04 (55min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -138,6 +139,8 @@ Recent decisions affecting current work:
   EXIF-01/02/05 foi marcado como completo — este plano entrega o lado do
   plano, não o comportamento fim-a-fim (mesma disciplina de 06-01/06-02).
 
+- [Phase 06-04]: D-076: allowlist medida contra o acervo real — nenhum formato aprovou (jpg/cr2/dng/tif reprovam por deslocar offset de bloco binário pré-existente ao inserir metadado; tif também por avisos novos). FORMATOS_APROVADOS vira frozenset() vazio, sidecar XMP é o único caminho de escrita hoje. Estender TAGS_ESTRUTURAIS_ESPERADAS fica como decisão futura do dono, não decidida aqui. — Byte a byte da miniatura embutida idêntico antes/depois confirma que o deslocamento é relocação, não corrupção — mas mudar a allowlist anti-mascaramento (EXIF-04) é política de segurança fora do escopo de arquivo deste plano.
+
 ### Pending Todos
 
 None yet.
@@ -179,6 +182,8 @@ None yet.
   reconciliação de boot para `OperationPlan.EXECUTANDO` travado. Ver
   `.planning/codebase/CONCERNS.md`.
 
+- Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido — D-076 (06-04): jpg/cr2/dng/tif reprovam por deslocarem offset de bloco binário pré-existente (miniatura/MPF/RAW) ao inserir metadado novo; verificado byte a byte que é relocação, não corrupção. Estender verificacao.TAGS_ESTRUTURAIS_ESPERADAS para reconhecer isso como andaime é candidato plausível, mas é mudança de política de segurança anti-mascaramento (EXIF-04) — decisão do dono, não tomada pelo executor. Até lá, todo arquivo cai no fallback de sidecar XMP (já funcional).
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -193,9 +198,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T11:59:20.310Z
-Stopped at: Plano 06-03 (ExifWritePlanner: candidatos, valores por campo, linha não suportada e oferta de sidecar) concluído
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-04-PLAN.md
+Last session: 2026-08-18T12:33:08.251Z
+Stopped at: Plano 06-04 (teste empírico de escrita EXIF por formato, D-03/D-04) concluído — allowlist medida vazia, D-076 registrada
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-05-PLAN.md
 
 ## Operator Next Steps
 
