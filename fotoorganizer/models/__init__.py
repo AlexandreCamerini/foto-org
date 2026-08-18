@@ -17,6 +17,12 @@ from fotoorganizer.models.duplicates import (
     DuplicateMember,
     DuplicateRole,
 )
+from fotoorganizer.models.exif_write import (
+    CampoStatus,
+    ExifWriteItem,
+    ExifWritePlan,
+    ExifWriteStatus,
+)
 from fotoorganizer.models.geo import Event, Location, Trip
 from fotoorganizer.models.inference import (
     ConfidenceLevel,
@@ -53,6 +59,7 @@ __all__ = [
     "suggestion_evidence",
     "DuplicateGroup", "DuplicateMember", "DuplicateLevel", "DuplicateRole",
     "OperationPlan", "OperationItem", "OperationStatus", "AuditLog",
+    "ExifWritePlan", "ExifWriteItem", "ExifWriteStatus", "CampoStatus",
     "ApplicationSetting",
     "NomeClassificado",
 ]
