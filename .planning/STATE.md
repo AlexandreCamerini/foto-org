@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: Awaiting next milestone
-stopped_at: Phase 5 context gathered
-last_updated: "2026-08-18T01:55:24.207Z"
-last_activity: 2026-08-18 — Milestone v1.0 completed and archived
+milestone: v2.0
+milestone_name: Localizacao real e evidencia expandida
+status: planning
+last_updated: "2026-08-18T03:18:30.570Z"
+last_activity: 2026-08-18
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -26,10 +25,10 @@ nenhuma operação física acontece sem revisão humana e dry-run.
 
 ## Current Position
 
-Phase: Milestone v1.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-18 — Milestone v1.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-18 — Milestone v2.0 started
 
 ## Performance Metrics
 

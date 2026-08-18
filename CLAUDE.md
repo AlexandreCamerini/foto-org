@@ -26,8 +26,14 @@ somente por último executar operações físicas.**
    padrão.
 6. Reconhecimento facial: desativado por padrão, processamento local,
    embeddings criptografados, resultados sempre como sugestão a confirmar.
-7. MVP não implementa exclusão de fotos nem escrita de EXIF (futuro: sidecar
-   XMP apenas).
+7. Exclusão de fotos nunca é implementada. Escrita de EXIF em arquivo
+   original é permitida somente para campos de localização (GPS lat/long,
+   cidade, país) e somente quando o campo estiver vazio no arquivo
+   original — nunca sobrescreve valor EXIF já preenchido. Mesmo rigor de
+   `operations/`: plano dry-run revisado antes de aprovação, hash
+   antes/depois de cada escrita, audit log completo. Qualquer outro campo
+   EXIF (data, câmera, autor etc.) segue fora de escopo. Ver D-075 em
+   `docs/DECISOES.md`.
 8. Nada que possa ser a referência real de uma foto é apagado — nem do disco,
    nem do catálogo. Registro que não serve como acervo pode ser **rebaixado a
    fonte de sinal** (sai da grade, da revisão e do plano, continua doando data,

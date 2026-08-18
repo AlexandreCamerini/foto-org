@@ -140,14 +140,27 @@ acontece sem revisão humana e dry-run. Se isso quebrar, o produto perdeu a
 
 ### Active
 
-<!-- Current scope for this roadmap. Mined from docs/ROADMAP.md v2+ backlog,
-docs/PLANO_IA_E_PRODUTO.md launch prerequisites, and docs/AVALIACAO_UX.md
-prioritized fixes — see REQUIREMENTS.md for the full checklist and
-ROADMAP.md for phase mapping. -->
+<!-- Current scope for this roadmap. Ver REQUIREMENTS.md para o checklist
+completo e ROADMAP.md para o mapeamento de fases. -->
 
-- Nenhum item ativo — Fase 5 fecha o roadmap v1 do milestone atual.
-  Próximo incremento depende de nova sessão de discussão/priorização
-  (ver Requirements v2 e o item de reconexão de volumes em Context).
+## Current Milestone: v2.0 Localização real e evidência expandida
+
+**Goal:** Expandir a cobertura de evidência de localização (EXIF real,
+GenAI de pasta) e a UI que expõe isso ao dono (navegação, confiança como
+eixo, corroboração generalizada).
+
+**Target features (ordem de prioridade do dono):**
+1. Escrita EXIF de localização (lat/long, cidade, país) em campo vazio —
+   D-075
+2. GenAI de pasta → cidade/evento, no modelo do Advisor (opt-in, só
+   metadado, custo visível por sessão)
+3. Sidebar navegável
+4. Picker de pasta + gauge de importação
+5. Confiança como eixo de navegação + índice de saúde do acervo
+6. Motor de corroboração generalizado (extensão do padrão D-074 para além
+   de GPS)
+7. Modo ativo de aprendizado — deferido até 5 e 6 existirem, por desenho
+   (depende do eixo de confiança e do motor de corroboração)
 
 ### Out of Scope
 
@@ -157,9 +170,11 @@ ROADMAP.md for phase mapping. -->
   explícita de "fechar a porta" em `docs/PLANO_IA_E_PRODUTO.md` §8 decisão 2;
   conflita com o invariante 4 (nada sai da máquina por padrão) sem ganho que
   justifique o risco. Visão e rostos, quando entrarem, entram locais.
-- Exclusão de fotos e escrita direta de EXIF — invariante 7 do CLAUDE.md;
-  MVP não implementa; futuro é sidecar XMP apenas, e mesmo esse depende de
-  acesso físico ao volume (ver v2 backlog).
+- Exclusão de fotos — invariante 7 do CLAUDE.md, nunca implementada.
+- Escrita EXIF fora de localização (data, câmera, autor etc.) e
+  sobrescrita de campo EXIF já preenchido — invariante 7 revisado por
+  D-075; escrita de lat/long, cidade e país em campo vazio passou a ser
+  escopo v2.0 (ver Active).
 - Reescrita de UI em PySide6 ou qualquer stack que não seja o webapp — já
   decidido e revertido (webapp é a única UI, commit `2e0ef1a`); não reabrir
   sem evidência nova.
@@ -262,6 +277,24 @@ roadmap v2+. Log completo (73 entradas) em docs/DECISOES.md. -->
 | Visão local em vez de remota, sem opção de API externa — PLANO_IA_E_PRODUTO §8 decisão 2 | Mantém invariante 4 sem asterisco; qualidade menor é aceita pelo dono | ✓ Good |
 | Reconectar volumes desmontados/iCloud ainda não é decisão | Maior alavancagem medida do backlog, mas exige forma própria e aprovação do dono | — Pending |
 | Herança de GPS confronta doadora antes E depois, não só a mais próxima — D-074 | Duas âncoras concordantes corroboram sem inventar bônus de confiança; medido contra 40.678 fotos reais, subconjunto discordante tinha cobertura de só 91,1% (chão de 50,9% numa banda) | ✓ Good |
+| EXIF direto de localização (lat/long, cidade, país) autorizado em campo vazio, revoga parte do invariante 7 — D-075 | Sidecar XMP não é lido pelo fluxo real do dono; escopo estreito (só localização, só campo vazio) + rigor de operations/ evita abrir precedente maior | — Pending implementação |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-08-18 — Milestone v1.0 shipped (Phases 1-5)*
+*Last updated: 2026-08-18 — Milestone v2.0 started*

@@ -2737,3 +2737,46 @@ inteiro passa a ser contado numa passada só
   `scripts/calibrar_raio_incerteza.py --concordancia` refaz a medição
   contra qualquer catálogo.
 - Status: decidido por medição.
+
+## D-075 — Escrita EXIF de localização (lat/long, cidade, país) autorizada em campo vazio, revoga parte do invariante 7
+
+- Fase: discussão do milestone v2.0 (`/gsd:new-milestone`), antes do
+  roadmap.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: o invariante 7 original ("MVP não implementa exclusão de fotos
+  nem escrita de EXIF — futuro: sidecar XMP apenas") tratava sidecar XMP
+  como o único caminho futuro para gravar localização corrigida/herdada.
+  O dono pediu explicitamente, em conversa, escrita EXIF direta no
+  arquivo original para as 3 evidências de localização que o motor de
+  sugestões já produz (GPS lat/long herdado por D-074, cidade e país
+  inferidos) — perguntado e confirmado via `AskUserQuestion`, não
+  assumido.
+- Decisão: EXIF direto é autorizado, mas com escopo estreito e o mesmo
+  rigor de `operations/`, não uma porta aberta para qualquer campo:
+  - Campos: só localização (GPS lat/long, cidade, país). Data, câmera,
+    autor e qualquer outro campo EXIF seguem fora de escopo — precisam de
+    nova decisão se algum dia entrarem.
+  - Só escreve quando o campo já está vazio no original. Nunca sobrescreve
+    valor EXIF existente, mesmo que a sugestão discorde dele — mesma
+    postura não-destrutiva do invariante 3 (nunca sobrescrever no
+    destino), agora aplicada à escrita em metadado do original.
+  - Precisa do mesmo pipeline de `operations/`: plano dry-run revisado
+    antes de aprovação explícita, hash antes/depois de cada escrita,
+    audit log completo. Não é uma escrita direta sem revisão.
+  - Sidecar XMP deixa de ser o único caminho, mas continua disponível como
+    alternativa não-destrutiva quando o dono preferir não tocar o
+    original.
+- Por quê: sidecar XMP exige que o software consumidor (Lightroom,
+  Finder, iCloud, etc.) saiba ler XMP — parte do fluxo real do dono não
+  lê. Gravar no EXIF do original torna o dado utilizável em qualquer
+  ferramenta, ao custo de ser a primeira escrita em arquivo original do
+  produto. O escopo estreito (só localização, só campo vazio) e o rigor
+  de `operations/` existem justamente para não abrir precedente maior do
+  que o pedido.
+- Como reverter: remover a permissão do invariante 7, voltar ao texto
+  anterior ("MVP não implementa... futuro: sidecar XMP apenas"); nenhum
+  código de escrita EXIF ainda existe neste commit — a decisão precede a
+  implementação.
+- Status: decidido pelo dono, aguardando fase de implementação (roadmap
+  v2.0).
