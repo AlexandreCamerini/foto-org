@@ -282,3 +282,271 @@ class ExifWriteExecutor:
             select(ExifWriteItem).where(ExifWriteItem.plan_id == plan_id)
             .order_by(ExifWriteItem.id)
         ))
+
+    # -- execução ---------------------------------------------------------
+    def executar(
+        self,
+        plan_id: int,
+        progress: Callable[[int, int, str], None] | None = None,
+        control: ExecutionControl | None = None,
+    ) -> dict:
+        control = control or ExecutionControl()
+        with self._factory() as session:
+            plano = session.get(ExifWritePlan, plan_id)
+            if plano.dry_run_em is None:
+                raise DryRunObrigatorioExif("execute o dry-run antes de qualquer escrita")
+            # Ter rodado o dry-run não basta: ele precisa ter aprovado algo
+            # (caso real que motivou o mesmo gate no analog de cópia física
+            # — origens todas num volume desmontado "executavam" sem
+            # escrever nada).
+            prontos = self._prontos_no_ultimo_dry_run(session, plan_id)
+            if prontos == 0:
+                raise DryRunObrigatorioExif(
+                    "o último dry-run não encontrou nada a gravar — verifique as "
+                    "origens e rode o dry-run de novo"
+                )
+
+            plano.status = ExifWriteStatus.EXECUTANDO
+            session.add(AuditLog(plan_id=None, acao="execucao_exif_iniciada", detalhe={
+                "exif_plan_id": plan_id,
+            }, resultado="ok"))
+            session.commit()
+
+            itens = self._itens(session, plan_id)
+            pendentes = [
+                item for item in itens
+                if item.incluido and CampoStatus.PRONTO in (
+                    item.status_gps, item.status_cidade, item.status_pais,
+                )
+            ]
+            # Item não incluído (D-02) entra direto em "pulados" — nenhuma
+            # chamada de escrita acontece para ele, é isso que prova o
+            # opt-out.
+            stats = {
+                "gravados": 0, "sidecars": 0,
+                "pulados": len(itens) - len(pendentes),
+                "falhas_parciais": 0, "erros": 0, "cancelado": False,
+            }
+
+            for n, item in enumerate(pendentes, start=1):
+                if control.cancelado:
+                    stats["cancelado"] = True
+                    break
+                if progress:
+                    progress(n, len(pendentes), item.origem)
+                self._executar_item(session, item, stats)
+                session.commit()  # por item — retomada segura
+
+            if stats["cancelado"]:
+                plano.status = ExifWriteStatus.CANCELADA
+            elif stats["erros"]:
+                plano.status = ExifWriteStatus.ERRO
+            else:
+                # falhas_parciais NÃO derruba o plano para ERRO — parcial é
+                # resultado esperado e já está registrado campo a campo.
+                plano.status = ExifWriteStatus.CONCLUIDA
+            session.add(AuditLog(plan_id=None, acao="execucao_exif_finalizada", detalhe={
+                "exif_plan_id": plan_id, **stats,
+            }, resultado=plano.status.value))
+            session.commit()
+            return stats
+
+    def _executar_item(self, session: Session, item: ExifWriteItem, stats: dict) -> None:
+        origem = Path(item.origem)
+        if not origem.is_file():
+            item.erro = "origem indisponível (volume desconectado?)"
+            stats["erros"] += 1
+            self._audit_item(session, item, "escrita_exif", "erro")
+            return  # nenhum campo muda de status — rerodar depois retoma
+
+        sidecar = not item.formato_suportado
+        alvo = Path(item.sidecar_destino) if sidecar else origem
+        if sidecar and alvo.exists():
+            item.erro = _MOTIVO_SIDECAR_EXISTE
+            stats["erros"] += 1
+            self._audit_item(session, item, "escrita_exif", "erro")
+            return
+
+        try:
+            antes_alvo = verificacao.dump(alvo) if alvo.exists() else {}
+            avisos_antes = verificacao.avisos(alvo) if alvo.exists() else set()
+
+            # Reconferência AO VIVO (TOCTOU, T-06-22): só entra na lista de
+            # campos a gravar quem continua PRONTO no dry-run E cujas tags
+            # continuam ausentes agora — campo que passou a estar
+            # preenchido entre o dry-run e agora vira PULADO sem tocar em
+            # nada. É isto que torna rerodar idempotente (EXIF-02), sem
+            # depender do dry-run estar fresco.
+            campos: dict[str, object] = {}
+            for campo in ("gps", "cidade", "pais"):
+                if getattr(item, f"status_{campo}") != CampoStatus.PRONTO:
+                    continue
+                ja_preenchido, valor_existente = _campo_ja_preenchido(campo, antes_alvo, sidecar)
+                if ja_preenchido:
+                    setattr(item, f"status_{campo}", CampoStatus.PULADO)
+                    setattr(
+                        item, f"motivo_{campo}",
+                        f"já preenchido: {valor_existente} — não sobrescrito",
+                    )
+                    continue
+                campos[campo] = _valor_a_gravar(item, campo)
+
+            if not campos:
+                # Nenhum subprocesso é chamado — é isso que garante que
+                # rerodar não mexe em nada.
+                stats["pulados"] += 1
+                self._audit_item(session, item, "escrita_exif", "pulado")
+                return
+
+            try:
+                validar_campos(campos)
+            except ValorInvalido as exc:
+                for campo in campos:
+                    setattr(item, f"status_{campo}", CampoStatus.FALHA)
+                    setattr(item, f"motivo_{campo}", str(exc))
+                item.erro = str(exc)
+                stats["erros"] += 1
+                self._audit_item(session, item, "escrita_exif", "erro")
+                return
+
+            item.hash_pre = sha256_full(origem)
+            # `resultado.stderr` só compõe motivo de falha — o veredito
+            # NUNCA vem do processo em si (T-06-23): ele sai 0 mesmo tendo
+            # aceitado GPS fora de faixa em silêncio.
+            resultado = ExifToolWriter().escrever(
+                origem, campos, destino=alvo if alvo != origem else None,
+            )
+            log.debug(
+                "exiftool escreveu %s (stderr=%r)", alvo, resultado.stderr.strip()
+            )
+
+            depois = verificacao.dump(alvo)
+            avisos_depois = verificacao.avisos(alvo)
+            diff = verificacao.diferenca(antes_alvo, depois)
+
+            # Allowlist condicional D-077 (06-04b): sem isto, toda escrita
+            # real em .jpg/.cr2 reprova de novo por deslocamento de offset
+            # de bloco binário pré-existente (miniatura, MPF) — regressão
+            # silenciosa do que a remedição acabou de aprovar. O backup
+            # `_original` é byte a byte o "antes" da reclassificação, sem
+            # precisar de snapshot extra (mesmo padrão de
+            # scripts/testar_escrita_exif.py::testar_amostra).
+            backup = ExifToolWriter.caminho_backup(alvo)
+            if diff.inesperadas and backup.exists():
+                diff = verificacao.reclassificar_deslocamentos_de_offset(
+                    diff, antes_alvo, depois, backup, alvo
+                )
+            novos_avisos = avisos_depois - avisos_antes
+
+            # Veredito por campo (T-06-23): campo_gravado exige TODAS as
+            # tags do campo em diff.esperadas — meio campo gravado é falha.
+            for campo in campos:
+                if verificacao.campo_gravado(campo, diff, sidecar=sidecar):
+                    setattr(item, f"status_{campo}", CampoStatus.GRAVADO)
+                    setattr(item, f"motivo_{campo}", None)
+                else:
+                    setattr(item, f"status_{campo}", CampoStatus.FALHA)
+                    setattr(
+                        item, f"motivo_{campo}",
+                        f"{_ROTULOS_CAMPO[campo]}: valor rejeitado pelo exiftool "
+                        "(ver auditoria)",
+                    )
+
+            item.hash_pos = sha256_full(origem)
+
+            if diff.inesperadas or novos_avisos:
+                # Corrupção (T-06-24): tag fora de escopo mudou, ou o
+                # exiftool passou a avisar algo novo — reprova TUDO que foi
+                # tentado, preserva o backup (quem decide restaurar é o
+                # dono, invariante 8).
+                for campo in campos:
+                    setattr(item, f"status_{campo}", CampoStatus.FALHA)
+                item.erro = (
+                    f"tags fora de localização mudaram: {sorted(diff.inesperadas)}"
+                    if diff.inesperadas
+                    else f"exiftool passou a avisar: {sorted(novos_avisos)}"
+                )
+                if backup.exists():
+                    item.backup_original = str(backup)
+                stats["erros"] += 1
+                self._audit_item(
+                    session, item, "escrita_exif", "falha_verificacao",
+                    extra={"tags_gravadas": sorted(diff.esperadas)},
+                )
+                return  # backup NUNCA é apagado numa falha de verificação
+
+            todos_gravados = all(
+                getattr(item, f"status_{campo}") == CampoStatus.GRAVADO for campo in campos
+            )
+            if todos_gravados:
+                # Limpeza do backup (Pitfall 7): só depois do diff e do
+                # delta de avisos aprovarem TUDO — o backup é cópia
+                # idêntica do original antes da mutação já verificada;
+                # mantê-lo para sempre polui a árvore que o scanner trata
+                # como observada-somente-leitura e confunde cliente de
+                # sync.
+                if backup.exists():
+                    try:
+                        backup.unlink()
+                    except OSError as exc:
+                        # Nunca pode derrubar uma escrita já verificada —
+                        # a limpeza é auxiliar, a escrita real já está
+                        # correta e confirmada pelo diff.
+                        log.warning("falha ao apagar backup %s: %s", backup, exc)
+                    else:
+                        session.add(AuditLog(
+                            plan_id=None, acao="limpeza_backup_exiftool", detalhe={
+                                "exif_plan_id": item.plan_id, "item_id": item.id,
+                                "backup": str(backup),
+                            }, resultado="ok",
+                        ))
+                item.erro = None
+                item.backup_original = None
+                if sidecar:
+                    stats["sidecars"] += 1
+                else:
+                    stats["gravados"] += 1
+                self._audit_item(
+                    session, item, "escrita_exif_verificada", "ok",
+                    extra={"tags_gravadas": sorted(diff.esperadas)},
+                )
+            else:
+                # Falha parcial (EXIF-03): algum campo gravou, algum não,
+                # sem tag inesperada — resultado real e esperado, mantém o
+                # backup.
+                stats["falhas_parciais"] += 1
+                if backup.exists():
+                    item.backup_original = str(backup)
+                self._audit_item(
+                    session, item, "escrita_exif", "falha_parcial",
+                    extra={"tags_gravadas": sorted(diff.esperadas)},
+                )
+        except OSError as exc:
+            # I/O inesperado (ex.: origem some entre o `is_file()` acima e
+            # `sha256_full`, ou o subprocesso não sobe) — item por item,
+            # nunca derruba o plano inteiro (T-06-30), no molde do analog.
+            item.erro = str(exc)
+            stats["erros"] += 1
+            self._audit_item(session, item, "escrita_exif", "erro")
+
+    def _audit_item(
+        self, session: Session, item: ExifWriteItem, acao: str, resultado: str,
+        extra: dict | None = None,
+    ) -> None:
+        """`campos` + `tags_gravadas` juntos são exatamente o que EXIF-03
+        pede: quais tags entraram antes do erro, numa linha só."""
+        detalhe = {
+            "exif_plan_id": item.plan_id, "item_id": item.id,
+            "origem": item.origem,
+            "alvo": item.sidecar_destino if not item.formato_suportado else item.origem,
+            "hash_pre": item.hash_pre, "hash_pos": item.hash_pos,
+            "campos": {
+                "gps": item.status_gps.value,
+                "cidade": item.status_cidade.value,
+                "pais": item.status_pais.value,
+            },
+            "tags_gravadas": [],
+        }
+        if extra:
+            detalhe.update(extra)
+        session.add(AuditLog(plan_id=None, acao=acao, detalhe=detalhe, resultado=resultado))
