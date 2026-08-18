@@ -1,25 +1,36 @@
 """Allowlist de formatos com suporte de escrita — decisão medida, não suposição.
 
-**Medido em 2026-08-18** por `scripts/testar_escrita_exif.py` (plano 06-04)
+**Medido em 2026-08-18, remedido em 2026-08-18** (correção de meio-de-fase
+sobre D-076, decisão explícita do dono) por `scripts/testar_escrita_exif.py`
 contra o `catalog.db` de produção real (1.399 arquivos de acervo: 1.384
-`.jpg`, 12 `.cr2`, 2 `.dng`, 1 `.tif`) — ver `docs/DECISOES.md` D-076 para a
-tabela completa e os três critérios de D-04.
+`.jpg`, 12 `.cr2`, 2 `.dng`, 1 `.tif`) — ver `docs/DECISOES.md` D-076 (medição
+original) e D-077 (remedição com `verificacao.reclassificar_deslocamentos_
+de_offset`, allowlist byte a byte) para a tabela completa e os critérios de
+D-04.
 
-**Resultado: nenhum formato aprovou.** Os quatro formatos com amostra no
-acervo real (`.jpg`, `.cr2`, `.dng`, `.tif`) reprovaram por deslocarem
-offsets de blocos binários já existentes no arquivo (miniatura embutida,
-segunda imagem MPF, dados RAW/tiles) — efeito colateral estrutural
-inevitável de inserir um bloco IPTC/XMP novo num arquivo que já tinha
-esses blocos, mas fora do escopo hoje reconhecido por
-`verificacao.TAGS_ESTRUTURAIS_ESPERADAS`, que só cobre o caso "arquivo
-nunca teve bloco nenhum". `.tif` reprova por um segundo motivo
-independente: tag `IPTC:EnvelopeRecordVersion` nova + 2 avisos novos do
-exiftool. `.cr3`/`.heic`/`.heif` continuam sem amostra no acervo (D-09),
-"não testado" — categoria diferente de "reprovado".
+**Resultado da remedição: `.jpg` e `.cr2` aprovam. `.dng` e `.tif`
+continuam reprovados.** `verificacao.py` ganhou uma allowlist condicional
+(D-077): tag de offset/ponteiro (`ThumbnailOffset`, `PreviewImageStart`,
+`StripOffsets`, `TileOffsets`, `JpgFromRawStart`, `MPImageStart`) só deixa
+de contar como "inesperada" quando o conteúdo binário que ela aponta é
+sha256-idêntico antes/depois da escrita — prova de relocação pura, não
+suposição. `.jpg` (20/20 amostras) e `.cr2` (12/12, todas as alcançáveis)
+passam integralmente sob esse critério: todo deslocamento medido é
+relocação comprovada. `.dng` (2/2) continua reprovado: duas das suas tags
+de offset (`SubIFD:TileOffsets`, `SubIFD3:TileOffsets`) têm tiles demais
+para o exiftool expor como lista de inteiros no dump (`-j -G1 -a -n`
+devolve `"(Binary data N bytes, use -b option to extract)"`, não uma
+lista parseável) — a prova byte a byte exige o valor numérico do offset, e
+`reclassificar_deslocamentos_de_offset` fica corretamente fail-safe
+(mantém "inesperada") quando não consegue parsear. `.tif` reprova por um
+motivo sempre distinto de offset, inalterado por esta correção: tag
+`IPTC:EnvelopeRecordVersion` nova + 2 avisos novos do exiftool.
+`.cr3`/`.heic`/`.heif` continuam sem amostra no acervo (D-09), "não
+testado" — categoria diferente de "reprovado".
 
-Todo arquivo, de todo formato, cai hoje no fallback de sidecar XMP
-(D-06/EXIF-05) até uma decisão futura do dono sobre estender
-`TAGS_ESTRUTURAIS_ESPERADAS` para cobrir deslocamento de offset (D-076).
+`.dng` e `.tif` continuam caindo no fallback de sidecar XMP (D-06/EXIF-05).
+`.jpg`/`.cr2` (e `.jpeg` por construção) passam a ter escrita EXIF direta
+disponível a partir desta correção.
 """
 
 from __future__ import annotations
@@ -28,43 +39,33 @@ from pathlib import Path
 
 MEDIDO_EM: str | None = "2026-08-18"
 
-# Medido: zero formatos passaram no critério de D-04 (diff sem tags
-# inesperadas E delta de avisos vazio E releitura estrutural idêntica).
-# Ver docstring do módulo e docs/DECISOES.md D-076.
-FORMATOS_APROVADOS: frozenset[str] = frozenset()
+# Medido (remedição D-077, 2026-08-18): .jpg (20/20) e .cr2 (12/12, todas
+# as amostras alcançáveis) aprovam sob o critério estendido de
+# verificacao.reclassificar_deslocamentos_de_offset — todo deslocamento de
+# offset observado é relocação byte a byte comprovada, não perda de
+# conteúdo. .dng/.tif continuam reprovados (ver docstring do módulo e
+# docs/DECISOES.md D-077).
+FORMATOS_APROVADOS: frozenset[str] = frozenset({".jpg", ".jpeg", ".cr2"})
 
 # Motivo específico por extensão — D-05 exige motivo visível em toda linha
 # não suportada, nunca desaparecimento silencioso. Distingue "reprovado no
 # teste" (D-04) de "sem amostra para testar" (D-09) — são coisas
 # diferentes e o texto é literal na UI.
 MOTIVOS_NAO_SUPORTADO: dict[str, str] = {
-    ".jpg": (
-        "JPG — reprovado em 3/3 amostras medidas (2026-08-18): escrita "
-        "desloca offsets de blocos binários já existentes (miniatura "
-        "IFD1:ThumbnailOffset, segunda imagem MPImage2:MPImageStart) fora "
-        "do escopo hoje reconhecido como andaime estrutural"
-    ),
-    ".jpeg": (
-        "JPEG — mesmo formato de .jpg, mesmo resultado por construção "
-        "(não amostrado separadamente; 3/3 amostras .jpg reprovadas em "
-        "2026-08-18)"
-    ),
-    ".cr2": (
-        "CR2 — reprovado em 3/3 amostras medidas (2026-08-18): escrita "
-        "desloca offsets de blocos binários já existentes (preview, "
-        "miniatura, strips) fora do escopo hoje reconhecido como andaime "
-        "estrutural"
-    ),
     ".dng": (
-        "DNG — reprovado em 2/2 amostras medidas (2026-08-18): escrita "
-        "desloca offsets de blocos binários já existentes (dados RAW, "
-        "tiles) fora do escopo hoje reconhecido como andaime estrutural"
+        "DNG — reprovado em 2/2 amostras remedidas (2026-08-18, D-077): "
+        "SubIFD:TileOffsets e SubIFD3:TileOffsets têm tiles demais para o "
+        "exiftool expor como lista de inteiros no dump (vira \"(Binary "
+        "data N bytes...)\"), então a prova byte a byte de relocação não "
+        "consegue parsear o offset — fica fail-safe como inesperada, "
+        "mesmo sendo provável que também seja relocação pura"
     ),
     ".tif": (
         "TIF — reprovado em 1/1 amostra medida (2026-08-18): tag "
         "IPTC:EnvelopeRecordVersion nova fora do escopo reconhecido + 2 "
         "avisos novos do exiftool (IPTCDigest desatualizado, "
-        "GPSProcessingMethod ausente)"
+        "GPSProcessingMethod ausente) — motivo não relacionado a offset, "
+        "não afetado pela remedição D-077"
     ),
     ".tiff": (
         "TIFF — mesmo formato de .tif, mesmo resultado por construção "

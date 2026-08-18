@@ -153,6 +153,16 @@ def testar_amostra(origem: Path, writer: ExifToolWriter) -> ResultadoAmostra:
     original) e aplica o critério de D-04 na íntegra: aprovado só quando as
     TRÊS condições valem — diff sem tags inesperadas, delta de avisos
     vazio, e releitura estrutural idêntica.
+
+    Deviação (correção de meio-de-fase, D-0XX): antes de aplicar o
+    critério, toda tag "inesperada" que seja um deslocamento de
+    offset/ponteiro comprovadamente byte a byte idêntico (mesmo padrão do
+    achado de D-076) é reclassificada para `esperadas_condicionais` via
+    `verificacao.reclassificar_deslocamentos_de_offset`. O writer nunca
+    usa `-overwrite_original` (ver `writer.py`), então o backup
+    `<copia>_original` que o exiftool deixa é byte a byte o "antes" —
+    exatamente o par de arquivos que a prova byte a byte precisa, sem
+    nenhum snapshot extra deste script.
     """
     tmpdir = Path(tempfile.mkdtemp(prefix="testar_escrita_exif_"))
     try:
@@ -170,6 +180,11 @@ def testar_amostra(origem: Path, writer: ExifToolWriter) -> ResultadoAmostra:
         meta_depois = PurePythonExtractor().extract(copia)
 
         diff = verificacao.diferenca(antes, depois)
+        backup = ExifToolWriter.caminho_backup(copia)
+        if diff.inesperadas and backup.exists():
+            diff = verificacao.reclassificar_deslocamentos_de_offset(
+                diff, antes, depois, backup, copia
+            )
         avisos_novos = avisos_depois - avisos_antes
 
         campos_gravados = tuple(
