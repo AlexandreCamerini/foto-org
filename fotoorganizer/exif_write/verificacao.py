@@ -80,6 +80,17 @@ TAGS_ESTRUTURAIS_ESPERADAS: frozenset[str] = frozenset({
     # Identifica a ferramenta que escreveu o pacote XMP, sempre presente
     # num pacote XMP novo — metadado do pacote, não da foto.
     "XMP-x:XMPToolkit",
+    # Versão obrigatória do registro de ENVELOPE IPTC — distinta de
+    # `IPTC:ApplicationRecordVersion` acima (aquela é a versão do registro
+    # de APLICAÇÃO; esta é a versão do registro de ENVELOPE, outro
+    # bloco/registro dentro do mesmo container IPTC). Mesma classe de
+    # andaime: sempre escrita ao criar um bloco IPTC novo, não é dado de
+    # localização. Achado real (correção de meio-de-fase pós-06-09,
+    # 2026-08-18): um JPEG real de produção (Canon EOS R6m2) reprovou a
+    # verificação por causa desta tag — já tinha aparecido, sem
+    # catalogação, em D-076 (achado do `.tif`, na época não perseguido
+    # porque `.tif` reprovava por outro motivo também). D-078 documenta.
+    "IPTC:EnvelopeRecordVersion",
     # Descrição do CONTAINER, não do conteúdo: quando o alvo é um sidecar
     # `.xmp` que ainda não existia (D-06), `dump()` do "antes" devolve `{}`
     # — o arquivo não existia para ter tipo nenhum. As três tags abaixo
