@@ -38,7 +38,7 @@ XMP, reconexão de volumes desmontados) — ver REQUIREMENTS.md § v2.
 - [x] **Phase 4: Consistência visual secundária** - Selos, estados de erro/ (completed 2026-08-17)
   vazio e tokens de peso/hover consistentes entre telas
 
-- [ ] **Phase 5: Preparação para lançamento** - Empacotamento assinado,
+- [x] **Phase 5: Preparação para lançamento** - Empacotamento assinado, (completed 2026-08-18)
   índices ausentes, onboarding do primeiro acervo, baseline de performance
 
 ## Phase Details
@@ -239,7 +239,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 05-05-PLAN.md — teste de primeira execução sem instrução e registro dos achados (LANC-03)
+- [x] 05-05-PLAN.md — teste de primeira execução sem instrução e registro dos achados (LANC-03)
 
 **Nota de escopo**: o critério 1 acima fala em "assinado e notarizado"; esta fase
 entrega apenas o Marco 1 de `docs/EMPACOTAMENTO.md` (`.app` funcional sem
@@ -260,4 +260,4 @@ paralelo, sem dependência estrutural das demais)
 | 2. Correção de dados medidos | 1/1 | Complete   | 2026-08-16 |
 | 3. Revisão acessível e consistente | 2/2 | Complete   | 2026-08-16 |
 | 4. Consistência visual secundária | 7/7 | Complete   | 2026-08-17 |
-| 5. Preparação para lançamento | 4/5 | In Progress|  |
+| 5. Preparação para lançamento | 5/5 | Complete   | 2026-08-18 |
