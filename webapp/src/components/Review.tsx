@@ -8,6 +8,7 @@ import { naoClassificado } from "../sugestoes";
 import { rotuloDeFonte } from "../fontes";
 import type { Job } from "../hooks/useJob";
 import { Confianca } from "./Confianca";
+import { ClassificacaoPasta } from "./ClassificacaoPasta";
 import Botao from "../ui/Botao";
 
 const STATUS_ABAS = [
@@ -55,6 +56,7 @@ export default function Review({
   const [editando, setEditando] = useState<number | null>(null);
   const [valorEdicao, setValorEdicao] = useState("");
   const [erroEdicao, setErroEdicao] = useState<string | null>(null);
+  const [classificacaoAberta, setClassificacaoAberta] = useState(false);
   const queryClient = useQueryClient();
 
   // Os grupos vêm inteiros e contados no banco — são dez linhas. A fila de
@@ -153,6 +155,10 @@ export default function Review({
           {totalNaFila.toLocaleString("pt-BR")} em {lista.length}{" "}
           {lista.length === 1 ? "grupo" : "grupos"}
         </span>
+        <Botao variante="contorno" tamanho="md"
+          onClick={() => setClassificacaoAberta(true)}>
+          Classificar pastas por IA…
+        </Botao>
         <Botao
           onClick={() => job.gerarSugestoes()}
           disabled={job.rodando}>
@@ -376,6 +382,10 @@ export default function Review({
             );
           })}
         </div>
+      )}
+
+      {classificacaoAberta && (
+        <ClassificacaoPasta onFechar={() => setClassificacaoAberta(false)} />
       )}
     </div>
   );
