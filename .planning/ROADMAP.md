@@ -61,7 +61,15 @@ a mesma disciplina de plano → dry-run → aprovação → verificação que
 in-place não é cópia.
 **Depends on**: Nada (D-075 já decidida; independente das demais fases no
 nível de esquema)
-**Requirements**: EXIF-01, EXIF-02, EXIF-03, EXIF-04
+**Requirements**: EXIF-01, EXIF-02, EXIF-03, EXIF-04, EXIF-05
+
+**Escopo expandido em `/gsd:discuss-phase 6` (2026-08-18):** formato
+reprovado no teste empírico de escrita (D-03/D-04 em `06-CONTEXT.md`)
+ganha oferta de sidecar XMP como alternativa no mesmo plano — não fica
+só marcado "não suportado" sem caminho. Isso muda a linha "Explicitly
+out of scope" abaixo (sidecar XMP deixou de estar fora do escopo) e
+adiciona EXIF-05. Escrever um sidecar-writer mínimo (só os 3 campos de
+localização, mesmo escopo estreito de EXIF-01..04) faz parte da Fase 6.
 
 **Abordagem travada** (decidida em pesquisa + assinatura do dono — não
 re-derivar no planejamento):
@@ -84,6 +92,15 @@ re-derivar no planejamento):
   do erro), não só sucesso/erro binário.
 - Pré-condição "campo vazio" é também o mecanismo de recuperação de crash:
   reexecutar o plano é idempotente.
+- **Decisões de `/gsd:discuss-phase 6` (2026-08-18, ver `06-CONTEXT.md`
+  para o detalhe completo):** aprovação do plano é em lote com checkbox
+  por linha para desmarcar item pontual (não arquivo por arquivo); teste
+  empírico de escrita cobre todo formato RAW/proprietário do acervo real
+  (não só CR3/HEIC), critério de "passou limpo" é diff de tags + arquivo
+  abre normalmente depois; arquivo em pasta sincronizada (iCloud
+  Drive/Dropbox) é detectado e marcado no plano com aviso de risco, dono
+  decide incluir; os 3 campos (GPS, cidade, país) são sempre tentados
+  juntos por arquivo, sem seleção por sessão.
 
 **Success Criteria** (what must be TRUE):
 
@@ -107,9 +124,16 @@ re-derivar no planejamento):
      em nenhum caminho de código, provado por teste que compara o dump
      completo de tags antes/depois.
 
+  6. Arquivo cujo formato reprova o teste empírico de escrita (CR3, HEIC
+     ou qualquer RAW/proprietário do acervo real) aparece no plano como
+     "formato não suportado" com motivo visível, e o dono pode optar por
+     sidecar XMP para aquele arquivo específico no mesmo plano.
+
 **Explicitly out of scope**: sobrescrita de campo já preenchido; qualquer
-campo fora de localização; sidecar XMP (continua disponível como
-alternativa, não é entrega desta fase); exclusão de arquivo.
+campo fora de localização; exclusão de arquivo; sidecar XMP para
+qualquer campo fora de localização ou para arquivo cujo formato passou
+no teste de escrita EXIF (o sidecar é oferta específica de fallback
+para formato reprovado — EXIF-05 — não um caminho paralelo geral).
 **Plans**: TBD
 **UI hint**: yes — a aprovação do plano dry-run precisa de superfície na UI
 (padrão já existente em `Operations.tsx`: plano → dry-run → aprovar →

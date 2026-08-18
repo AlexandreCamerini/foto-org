@@ -23,6 +23,13 @@ forma do GenAI, formato do índice de saúde) confirmadas via
 - [ ] **EXIF-04**: Sistema nunca escreve campos EXIF fora de localização
   (data, câmera, autor etc.) — fora de escopo, mesmo com evidência
   disponível.
+- [ ] **EXIF-05**: Arquivo cujo formato reprova no teste empírico de
+  escrita (ou já sabidamente sem suporte) aparece no plano dry-run como
+  "formato não suportado" com motivo visível, e ganha oferta de sidecar
+  XMP como alternativa no mesmo plano — nunca desaparece silenciosamente
+  da lista nem fica sem nenhum caminho de escrita. Escopo confirmado
+  durante `/gsd:discuss-phase 6` (2026-08-18), expandindo o roadmap
+  original.
 
 ### GENAI — Classificação de pasta por IA
 
@@ -129,6 +136,7 @@ em `.planning/ROADMAP.md` § Phase Details.
 | CORR-01 | Phase 11 — Motor de corroboração generalizado | Pending |
 | CORR-02 | Phase 11 — Motor de corroboração generalizado | Pending |
 | CORR-03 | Phase 11 — Motor de corroboração generalizado | Pending |
+| EXIF-05 | Phase 6 — Escrita EXIF de localização | Pending |
 | LEARN-01 | — (v3+) | Deferred — depende de CONF e CORR existirem |
 | ARCH-01 | — (v3+) | Deferred — pendente de forma e aprovação do dono |
 
