@@ -54,11 +54,29 @@ cluster existente.
   Mesma disciplina de D-074/D-077 (nunca inventar confiança sem base).
   Não polui a Revisão com sugestão vazia ou de confiança inventada.
 
+### Persistência do resultado (pós-pesquisa de fase, 2026-08-18)
+- **D-07:** `SuggestionEngine.gerar()` apaga e reconstrói `Evidence` a
+  cada rodada para mídia ainda não decidida — gravar o resultado do
+  GenAI direto em `Evidence` faria ele sumir na próxima regeneração,
+  cobrando de novo pelo mesmo resultado. Dono confirmou (via
+  `AskUserQuestion`, não assumido): tabela nova de persistência, mesmo
+  padrão já usado por `NomeClassificado`/`LexicoRepository` — a resposta
+  do Claude sobrevive à regeneração, `Evidence` é reconstruída a partir
+  dela sem nova chamada à API.
+
 ### Claude's Discretion
 - Estrutura exata do prompt/schema da chamada em lote (uma pasta por
-  item da saída estruturada) fica a critério da pesquisa/planejamento.
-- Método exato de estimativa de tokens para a prévia de custo (contagem
-  aproximada vs. tokenizer real) fica a critério do planejamento.
+  item da saída estruturada) fica a critério da pesquisa/planejamento —
+  `LexicoClaude._lote()` (`fotoorganizer/classification/lexico.py`) já é
+  o padrão a seguir, confirmado pela pesquisa de fase.
+- Método exato de estimativa de tokens para a prévia de custo: pesquisa
+  de fase recomenda `client.messages.count_tokens` (exato, grátis, já
+  disponível no SDK pinado) para o lado de entrada; saída não é
+  pré-contável, UI deve deixar isso explícito.
+- Valor numérico exato de `SCORES_REFERENCIA["llm_pasta"]` fica pendente
+  de medição própria (mesmo método de D-059/D-060), não decidido por
+  analogia — planner deve encaixar isso como tarefa de medição, não
+  como constante inventada.
 - Layout exato da tela antes/depois (reuso de componente de Revisão vs.
   novo) fica a critério do UI-SPEC.
 
