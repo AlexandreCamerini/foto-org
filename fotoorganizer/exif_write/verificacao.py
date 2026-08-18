@@ -80,6 +80,15 @@ TAGS_ESTRUTURAIS_ESPERADAS: frozenset[str] = frozenset({
     # Identifica a ferramenta que escreveu o pacote XMP, sempre presente
     # num pacote XMP novo — metadado do pacote, não da foto.
     "XMP-x:XMPToolkit",
+    # Descrição do CONTAINER, não do conteúdo: quando o alvo é um sidecar
+    # `.xmp` que ainda não existia (D-06), `dump()` do "antes" devolve `{}`
+    # — o arquivo não existia para ter tipo nenhum. As três tags abaixo
+    # (achado real ao integrar o executor com um sidecar novo, plano 06-05)
+    # descrevem só "este arquivo é um .xmp", sempre idênticas para todo
+    # sidecar que este módulo cria, nunca dado de localização.
+    "File:FileType",
+    "File:FileTypeExtension",
+    "File:MIMEType",
 })
 
 # O que muda incondicionalmente sem significar nada, presente ou ausente de
