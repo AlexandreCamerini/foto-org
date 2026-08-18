@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Localização real e evidência expandida
-status: Fase 6 em execução — plano 06-05 concluído (5/9 planos numerados; 6/9 SUMMARY no diretório contando a correção 06-04b)
-stopped_at: "06-05 (ExifWriteExecutor) concluído — dry-run autoritativo, execução verificada, falha parcial e backup; próximo: 06-06"
-last_updated: "2026-08-18T13:29:07.000Z"
-last_activity: "2026-08-18 — 06-05 executado (ExifWriteExecutor: dry-run autoritativo relendo o disco ao vivo, execução verificada por diff completo de tags com reclassificação de offset D-077 corretamente encadeada, falha parcial registrada campo a campo, backup _original só apagado após aprovação)"
+status: Fase 6 em execução — plano 06-06 concluído (7/9)
+stopped_at: "06-06 (repositório/job/rotas /api/exif/*) concluído — próximo: 06-07 (frontend base)"
+last_updated: "2026-08-18T13:52:17.632Z"
+last_activity: "2026-08-18 — 06-06 executado (ExifWriteRepository, JobManager.iniciar_escrita_exif e grupo de rotas /api/exif/* espelhando /api/operacoes*; 9 testes HTTP cobrindo plano→dry-run→seleção→executar→auditoria)"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ Fase 6 (escrita EXIF de localização).
 ## Current Position
 
 Phase: 6 — Escrita EXIF de localização (em execução)
-Plan: 05 de 9 concluído (+ correção 06-04b) — próximo: 06-06 (UI de dry-run/execução)
-Status: Fase 6 em execução — plano 06-05 concluído (5/9)
-Last activity: 2026-08-18 — 06-05 executado (ExifWriteExecutor: dry-run autoritativo, execução verificada por diff completo de tags com reclassificação de offset D-077, falha parcial campo a campo, backup preservado até aprovação)
+Plan: 06 de 9 concluído (+ correção 06-04b) — próximo: 06-07 (frontend base: tipos, cliente, aba Localização e linhas tipo A)
+Status: Fase 6 em execução — plano 06-06 concluído (7/9)
+Last activity: 2026-08-18 — 06-06 executado (ExifWriteRepository, JobManager.iniciar_escrita_exif e grupo de rotas /api/exif/* espelhando /api/operacoes*; 9 testes HTTP cobrindo plano→dry-run→seleção→executar→auditoria)
 
 Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 
@@ -57,10 +57,11 @@ Progresso v2.0: [░░░░░░░░░░] 0/6 fases
 | 06 P04 | 55min | 2 tasks | 6 files |
 | 06 P04b (correção D-077) | ~90min | 5 tasks | 6 files |
 | 06 P05 | ~35min | 3 tasks | 3 files |
+| 06 P06 | ~25min | 3 tasks | 5 files |
 
 **Recent Trend:**
 
-- Last 5 plans: 06-02 (9min), 06-03 (14min), 06-04 (55min), 06-04b (~90min, correção), 06-05 (~35min)
+- Last 5 plans: 06-03 (14min), 06-04 (55min), 06-04b (~90min, correção), 06-05 (~35min), 06-06 (~25min)
 - Trend: -
 
 *Updated after each plan completion*
@@ -144,6 +145,7 @@ Recent decisions affecting current work:
 - [Phase 06-04]: D-076: allowlist medida contra o acervo real — nenhum formato aprovou (jpg/cr2/dng/tif reprovam por deslocar offset de bloco binário pré-existente ao inserir metadado; tif também por avisos novos). FORMATOS_APROVADOS vira frozenset() vazio, sidecar XMP é o único caminho de escrita hoje. Estender TAGS_ESTRUTURAIS_ESPERADAS fica como decisão futura do dono, não decidida aqui. — Byte a byte da miniatura embutida idêntico antes/depois confirma que o deslocamento é relocação, não corrupção — mas mudar a allowlist anti-mascaramento (EXIF-04) é política de segurança fora do escopo de arquivo deste plano.
 - [Phase 06-04b]: D-077: dono escolheu allowlist byte a byte (AskUserQuestion) sobre o achado em aberto de D-076 — jpg/cr2 remedidos e aprovados (20/20, 12/12), dng/tif continuam reprovados por motivos distintos (dng: parsing de offset multi-tile; tif: causa não relacionada a offset, inalterada). verificacao.py ganha esperadas_condicionais/reclassificar_deslocamentos_de_offset, categoria distinta de TAGS_ESTRUTURAIS_ESPERADAS, fail-safe em toda borda.
 - [Phase 06-05]: `ExifWriteExecutor.dry_run()`/`executar()` fecham o loop plano→dry-run→execução→auditoria: disco relido ao vivo em lote, reconferência TOCTOU antes de cada escrita, veredito sempre pelo diff completo de tags (nunca returncode), falha parcial registrada campo a campo, backup `_original` preservado até diff+avisos aprovarem tudo. `_executar_item` chama `reclassificar_deslocamentos_de_offset()` (D-077) depois de `diferenca()` — sem isso toda escrita real em `.jpg`/`.cr2` reprovaria de novo, regressão nomeada por 06-04b. Achado durante a integração: `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` precisou ganhar `File:FileType`/`FileTypeExtension`/`MIMEType` (andaime de criação de sidecar `.xmp` novo, nunca exercitado pela suíte de 06-02). Nenhum requisito EXIF-01..05 foi marcado como completo — falta a UI de aprovação (06-06+).
+- [Phase 06]: 06-06: seis endpoints /api/exif/* espelhando /api/operacoes*, ExifWriteRepository lendo veredito e auditoria via detalhe['exif_plan_id'], JobManager.iniciar_escrita_exif rodando ExifWriteExecutor em background. Nenhum requisito EXIF-01/02/03/05 marcado completo — aprovação do dono via UI (06-07+) ainda falta.
 
 ### Pending Todos
 
@@ -204,9 +206,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-18T13:29:07.000Z
-Stopped at: 06-05 (ExifWriteExecutor) concluído — dry-run autoritativo, execução verificada, falha parcial e backup; próximo: 06-06
-Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-06-PLAN.md
+Last session: 2026-08-18T13:52:17.625Z
+Stopped at: 06-06 (repositório/job/rotas /api/exif/*) concluído — próximo: 06-07 (frontend base)
+Resume file: .planning/phases/06-escrita-exif-de-localiza-o/06-07-PLAN.md
 
 ## Operator Next Steps
 
