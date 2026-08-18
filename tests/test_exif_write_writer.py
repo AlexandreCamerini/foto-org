@@ -16,7 +16,13 @@ import pytest
 
 from fotoorganizer.exif_write.formatos import caminho_sidecar, motivo, suportado
 from fotoorganizer.exif_write.sync_detect import pasta_sincronizada
-from fotoorganizer.exif_write.verificacao import DiffTags, avisos, campo_gravado, diferenca
+from fotoorganizer.exif_write.verificacao import (
+    DiffTags,
+    avisos,
+    campo_gravado,
+    diferenca,
+    reclassificar_deslocamentos_de_offset,
+)
 from fotoorganizer.exif_write.writer import ExifToolWriter, ValorInvalido, validar_campos
 from fotoorganizer.metadata.exiftool import ExifToolExtractor
 from fotoorganizer.security.hashing import sha256_full
@@ -271,6 +277,246 @@ def test_escrever_tag_gps_malformada_falha_sozinha(tmp_path):
     diff = diferenca(antes, depois)
     assert campo_gravado("gps", diff) is False
     assert campo_gravado("cidade", diff) is True
+
+
+# -- Deviação (correção de meio-de-fase, D-0XX): reclassificar_deslocamentos
+# _de_offset() — allowlist byte a byte para deslocamento de offset/ponteiro,
+# generalizando o achado de D-076 (miniatura embutida idêntica byte a byte
+# depois do exiftool deslocar IFD1:ThumbnailOffset). -----------------------
+
+
+@tem_exiftool
+def test_reclassificar_offset_real_byte_identico_vira_esperada_condicional(tmp_path):
+    """Caso real, produzido pelo mesmo caminho de código de produção: um
+    JPEG sintético com miniatura embutida (injetada via exiftool, mesmo
+    truque usado para reproduzir o achado de D-076 sem precisar de foto
+    real do acervo) tem IFD1:ThumbnailOffset deslocado ao escrever
+    GPS/cidade/país — o conteúdo apontado é byte a byte idêntico, e a tag
+    deve sair de `inesperadas` e entrar em `esperadas_condicionais`, sem
+    reprovar a verificação.
+    """
+    foto = make_jpeg(tmp_path / "com_thumb.jpg", gps=None)
+    binario = shutil.which("exiftool")
+    subprocess.run(
+        [binario, "-overwrite_original", f"-ThumbnailImage<={foto}", str(foto)],
+        capture_output=True, text=True, check=True,
+    )
+
+    from fotoorganizer.exif_write.verificacao import dump
+
+    antes = dump(foto)
+    assert "IFD1:ThumbnailOffset" in antes  # pré-condição: miniatura presente
+
+    writer = ExifToolWriter()
+    resultado = writer.escrever(
+        foto, {"gps": (-23.55052, -46.633308), "cidade": "São Paulo", "pais": "Brasil"}
+    )
+    assert resultado.returncode == 0, resultado.stderr
+    depois = dump(foto)
+
+    diff = diferenca(antes, depois)
+    assert "IFD1:ThumbnailOffset" in diff.inesperadas  # reproduz o achado de D-076
+
+    backup = ExifToolWriter.caminho_backup(foto)
+    assert backup.exists()
+
+    diff_reclassificado = reclassificar_deslocamentos_de_offset(
+        diff, antes, depois, backup, foto
+    )
+    assert "IFD1:ThumbnailOffset" not in diff_reclassificado.inesperadas
+    assert "IFD1:ThumbnailOffset" in diff_reclassificado.esperadas_condicionais
+    # As demais categorias não regridem: cidade/gps/país continuam gravados.
+    assert campo_gravado("gps", diff_reclassificado) is True
+    assert campo_gravado("cidade", diff_reclassificado) is True
+    assert campo_gravado("pais", diff_reclassificado) is True
+
+
+def test_reclassificar_conteudo_corrompido_continua_inesperada_e_reprova(tmp_path):
+    """Prova de segurança central desta mudança (a que não pode falhar):
+    dois arquivos onde o par offset+tamanho descreve um deslocamento
+    normal (mesmo padrão de ThumbnailOffset/ThumbnailLength), mas o
+    conteúdo apontado no arquivo "depois" foi alterado — simula corrupção
+    real, não relocação. A tag TEM que continuar em `inesperadas` e a
+    verificação (checada via `diff.inesperadas`, o sinal que
+    `scripts/testar_escrita_exif.py` usa para reprovar) TEM que continuar
+    falhando. Se este teste passar com a tag promovida, a allowlist deixou
+    de ser conservadora — não é aceitável relaxar por qualquer motivo.
+    """
+    conteudo_original = b"miniatura-fake-conteudo-binario-fixo-32b"
+    arquivo_antes = tmp_path / "antes.bin"
+    arquivo_depois = tmp_path / "depois.bin"
+    tamanho = len(conteudo_original)
+
+    arquivo_antes.write_bytes(b"\x00" * 10 + conteudo_original)
+    conteudo_corrompido = b"X" * tamanho  # deliberadamente diferente
+    arquivo_depois.write_bytes(b"\x00" * 20 + conteudo_corrompido)
+
+    antes = {
+        "IFD1:ThumbnailOffset": "10",
+        "IFD1:ThumbnailLength": str(tamanho),
+    }
+    depois = {
+        "IFD1:ThumbnailOffset": "20",
+        "IFD1:ThumbnailLength": str(tamanho),
+    }
+    diff = diferenca(antes, depois)
+    assert diff.inesperadas == {"IFD1:ThumbnailOffset": ("10", "20")}
+
+    diff_reclassificado = reclassificar_deslocamentos_de_offset(
+        diff, antes, depois, arquivo_antes, arquivo_depois
+    )
+    assert "IFD1:ThumbnailOffset" in diff_reclassificado.inesperadas
+    assert diff_reclassificado.esperadas_condicionais == {}
+
+
+def _diff_e_arquivos_offset_valido(tmp_path, tag_offset, tag_tamanho, grupo="IFD1"):
+    """Monta um cenário de relocação pura válida — mesmo conteúdo, endereço
+    diferente — reutilizado pelos testes de borda abaixo."""
+    conteudo = b"conteudo-binario-de-teste-identico-nos-dois-lados"
+    tamanho = len(conteudo)
+    arquivo_antes = tmp_path / "antes.bin"
+    arquivo_depois = tmp_path / "depois.bin"
+    arquivo_antes.write_bytes(b"\x00" * 5 + conteudo)
+    arquivo_depois.write_bytes(b"\x00" * 15 + conteudo)
+
+    antes = {f"{grupo}:{tag_offset}": "5", f"{grupo}:{tag_tamanho}": str(tamanho)}
+    depois = {f"{grupo}:{tag_offset}": "15", f"{grupo}:{tag_tamanho}": str(tamanho)}
+    return antes, depois, arquivo_antes, arquivo_depois
+
+
+def test_reclassificar_promove_todas_as_seis_tags_conhecidas(tmp_path):
+    """As seis tags do mapa fechado (achado real de D-076, os 3 formatos
+    com amostra) promovem quando o conteúdo bate — cobertura de todo o
+    mapa, não só do caso ThumbnailOffset já coberto no teste com exiftool."""
+    casos = [
+        ("ThumbnailOffset", "ThumbnailLength", "IFD1"),
+        ("PreviewImageStart", "PreviewImageLength", "IFD0"),
+        ("StripOffsets", "StripByteCounts", "IFD2"),
+        ("TileOffsets", "TileByteCounts", "SubIFD4"),
+        ("JpgFromRawStart", "JpgFromRawLength", "SubIFD2"),
+        ("MPImageStart", "MPImageLength", "MPImage2"),
+    ]
+    for tag_offset, tag_tamanho, grupo in casos:
+        sub = tmp_path / f"{grupo}_{tag_offset}"
+        sub.mkdir()
+        antes, depois, arquivo_antes, arquivo_depois = _diff_e_arquivos_offset_valido(
+            sub, tag_offset, tag_tamanho, grupo
+        )
+        diff = diferenca(antes, depois)
+        chave = f"{grupo}:{tag_offset}"
+        assert chave in diff.inesperadas, f"pré-condição falhou para {chave}"
+
+        resultado = reclassificar_deslocamentos_de_offset(
+            diff, antes, depois, arquivo_antes, arquivo_depois
+        )
+        assert chave not in resultado.inesperadas, f"{chave} devia ter sido promovida"
+        assert chave in resultado.esperadas_condicionais, f"{chave} ausente do resultado"
+
+
+def test_reclassificar_nao_promove_tag_fora_do_mapa_de_sufixos(tmp_path):
+    """Tag mudou de endereço mas o nome não está no mapa fechado (ex.:
+    uma tag hipotética `EXIF:AlgumOffset` não catalogada) — fica
+    inesperada, sem tentativa de adivinhar o par de tamanho."""
+    diff = diferenca({"EXIF:AlgumOffset": "10"}, {"EXIF:AlgumOffset": "20"})
+    resultado = reclassificar_deslocamentos_de_offset(
+        diff, {"EXIF:AlgumOffset": "10"}, {"EXIF:AlgumOffset": "20"},
+        tmp_path / "a", tmp_path / "b",
+    )
+    assert "EXIF:AlgumOffset" in resultado.inesperadas
+    assert resultado.esperadas_condicionais == {}
+
+
+def test_reclassificar_nao_promove_quando_falta_tag_de_tamanho_irma(tmp_path):
+    """Sem a tag de tamanho irmã no dump (nem antes, nem depois), não dá
+    para delimitar a leitura — fica inesperada, nunca adivinha um
+    comprimento."""
+    antes = {"IFD1:ThumbnailOffset": "10"}
+    depois = {"IFD1:ThumbnailOffset": "20"}
+    diff = diferenca(antes, depois)
+    resultado = reclassificar_deslocamentos_de_offset(
+        diff, antes, depois, tmp_path / "a", tmp_path / "b"
+    )
+    assert "IFD1:ThumbnailOffset" in resultado.inesperadas
+    assert resultado.esperadas_condicionais == {}
+
+
+def test_reclassificar_nao_promove_quando_tamanho_muda_junto(tmp_path):
+    """Tamanho apontado mudou também (não é só relocação de endereço) —
+    fica inesperada mesmo que o conteúdo no novo intervalo por acaso
+    exista e seja lido com sucesso."""
+    conteudo = b"x" * 20
+    arquivo_antes = tmp_path / "antes.bin"
+    arquivo_depois = tmp_path / "depois.bin"
+    arquivo_antes.write_bytes(b"\x00" * 5 + conteudo)
+    arquivo_depois.write_bytes(b"\x00" * 15 + conteudo)
+
+    antes = {"IFD1:ThumbnailOffset": "5", "IFD1:ThumbnailLength": "20"}
+    depois = {"IFD1:ThumbnailOffset": "15", "IFD1:ThumbnailLength": "21"}
+    diff = diferenca(antes, depois)
+    resultado = reclassificar_deslocamentos_de_offset(
+        diff, antes, depois, arquivo_antes, arquivo_depois
+    )
+    assert "IFD1:ThumbnailOffset" in resultado.inesperadas
+    assert resultado.esperadas_condicionais == {}
+
+
+def test_reclassificar_nao_promove_valor_nao_numerico_binario(tmp_path):
+    """Achado real contra o acervo (DNG, `SubIFD:TileOffsets` com muitos
+    tiles): o dump do exiftool devolve `"(Binary data N bytes, use -b
+    option to extract)"` em vez de lista de inteiros, quando há tiles
+    demais. Fica inesperada — nunca extrai um número de dentro do texto
+    (esse "N" é o tamanho da descrição, não um offset real)."""
+    antes = {
+        "SubIFD:TileOffsets": "(Binary data 2479 bytes, use -b option to extract)",
+        "SubIFD:TileByteCounts": "(Binary data 1763 bytes, use -b option to extract)",
+    }
+    depois = {
+        "SubIFD:TileOffsets": "(Binary data 2479 bytes, use -b option to extract, moved)",
+        "SubIFD:TileByteCounts": "(Binary data 1763 bytes, use -b option to extract)",
+    }
+    diff = diferenca(antes, depois)
+    assert "SubIFD:TileOffsets" in diff.inesperadas
+    resultado = reclassificar_deslocamentos_de_offset(
+        diff, antes, depois, tmp_path / "a", tmp_path / "b"
+    )
+    assert "SubIFD:TileOffsets" in resultado.inesperadas
+    assert resultado.esperadas_condicionais == {}
+
+
+def test_reclassificar_nao_promove_tag_que_sumiu(tmp_path):
+    """Tag de offset que sumiu (estava em antes, ausente em depois) não é
+    relocação — `diferenca()` já marca como `(valor, None)`; a
+    reclassificação tem que preservar essa marcação, nunca promovê-la."""
+    diff = diferenca({"IFD1:ThumbnailOffset": "10"}, {})
+    resultado = reclassificar_deslocamentos_de_offset(
+        diff, {"IFD1:ThumbnailOffset": "10"}, {}, tmp_path / "a", tmp_path / "b"
+    )
+    assert resultado.inesperadas == {"IFD1:ThumbnailOffset": ("10", None)}
+    assert resultado.esperadas_condicionais == {}
+
+
+def test_reclassificar_leitura_alem_do_fim_do_arquivo_fica_inesperada(tmp_path):
+    """Tamanho declarado excede o que o arquivo realmente tem — leitura
+    curta, `_ler_intervalo` devolve `None`, fail-safe mantém inesperada."""
+    arquivo_antes = tmp_path / "antes.bin"
+    arquivo_depois = tmp_path / "depois.bin"
+    arquivo_antes.write_bytes(b"\x00" * 5 + b"conteudo-curto")
+    arquivo_depois.write_bytes(b"\x00" * 5)  # arquivo "depois" bem menor
+
+    antes = {"IFD1:ThumbnailOffset": "5", "IFD1:ThumbnailLength": "500"}
+    depois = {"IFD1:ThumbnailOffset": "5", "IFD1:ThumbnailLength": "500"}
+    diff = diferenca(antes, depois)
+    # Mesmo offset não muda o valor da tag ("5"=="5") — força a mudança
+    # artificialmente para exercitar o caminho de leitura.
+    diff = DiffTags(
+        esperadas={}, estruturais={},
+        inesperadas={"IFD1:ThumbnailOffset": ("5", "5")},
+    )
+    resultado = reclassificar_deslocamentos_de_offset(
+        diff, antes, depois, arquivo_antes, arquivo_depois
+    )
+    assert "IFD1:ThumbnailOffset" in resultado.inesperadas
+    assert resultado.esperadas_condicionais == {}
 
 
 # -- Task 3: sync_detect.py e formatos.py ------------------------------------
