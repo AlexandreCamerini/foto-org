@@ -5,6 +5,7 @@ from fotoorganizer.geolocation import (
     GeoResult,
     LocationResolver,
     extrair_hierarquia_da_pasta,
+    identificar_marco,
     identificar_pais,
 )
 
@@ -31,6 +32,28 @@ def test_hierarquia_da_pasta():
 def test_sem_pais_nao_inventa():
     h = extrair_hierarquia_da_pasta("/fotos/Aniversários/2022")
     assert (h.pais, h.regiao, h.cidade) == (None, None, None)
+
+
+def test_identificar_marco_normaliza_acentos_e_caixa():
+    marco = identificar_marco("Cristo Redentor")
+    assert (marco.cidade, marco.regiao, marco.pais) == (
+        "Rio de Janeiro", "Rio de Janeiro", "Brasil",
+    )
+    assert identificar_marco("cristo redentor").nome == "Cristo Redentor"
+    assert identificar_marco("CRISTO REDENTOR").nome == "Cristo Redentor"
+
+
+def test_identificar_marco_nao_bate_por_substring():
+    """'Cristo Redentor 2019' não é 'Cristo Redentor' — bate o segmento
+    INTEIRO, senão um marco cujo nome aparece dentro de uma pasta maior
+    (sem ser o assunto dela) viraria falso positivo."""
+    assert identificar_marco("Cristo Redentor 2019") is None
+    assert identificar_marco("Rio - Cristo Redentor") is None
+
+
+def test_identificar_marco_desconhecido_nao_inventa():
+    assert identificar_marco("Gramado") is None
+    assert identificar_marco("Parque Industrial") is None
 
 
 @dataclass

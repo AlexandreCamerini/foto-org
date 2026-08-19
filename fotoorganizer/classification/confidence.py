@@ -16,6 +16,13 @@ SCORES_REFERENCIA: dict[str, float] = {
     "geocoding_offline": 0.85,
     "geocoding_externo": 0.75,
     "pasta": 0.60,         # país/cidade extraído do nome da pasta
+    # Marco conhecido reconhecido pelo NOME de um segmento inteiro do
+    # caminho (gazetteer local estático, D-082) — ex.: ".../Cristo
+    # Redentor". Mesmo score de `pasta` e mesmo motivo: é parse
+    # determinístico e literal de um segmento que já nomeia o lugar, só
+    # que contra uma lista curada de marcos em vez de países/hierarquia
+    # posicional.
+    "gazetteer": 0.60,
     # GPS herdado de foto de OUTRA fonte tirada a minutos de distância
     # (correlação temporal entre fontes). Mais forte que a vizinhança de
     # sessão: o vínculo é foto-a-foto e a janela é de minutos, não dias.

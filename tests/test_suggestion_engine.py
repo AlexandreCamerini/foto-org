@@ -1661,3 +1661,51 @@ def test_bracket_bilateral_nao_promove_cidades_diferentes(migrated_engine):
     _, evidencias = _sugestao_de(factory, "alvo.jpg")
     campos = {e.campo for e in evidencias if e.origem == "vizinhanca_temporal"}
     assert "cidade" not in campos
+
+
+def test_marco_no_nome_da_pasta_nomeia_sem_gps(migrated_engine):
+    """Gazetteer local estático (D-082): sem GPS nenhum, sem país
+    reconhecido na pasta — só o nome de um marco conhecido, que já basta
+    para cidade/região/país de uma vez."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "foto.jpg", "/fotos/Rio 2019/Cristo Redentor",
+            data=datetime(2019, 7, 10, 14, 0),
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "foto.jpg")
+    por_campo = {e.campo: e for e in evidencias if e.origem == "gazetteer"}
+    assert por_campo["cidade"].valor == "Rio de Janeiro"
+    assert por_campo["regiao"].valor == "Rio de Janeiro"
+    assert por_campo["pais"].valor == "Brasil"
+    assert "Cristo Redentor" in por_campo["cidade"].justificativa
+    assert por_campo["cidade"].score == 0.60
+
+
+def test_marco_nao_bate_por_substring_no_nome_da_pasta(migrated_engine):
+    """'Cristo Redentor 2019' como nome de pasta não é o marco 'Cristo
+    Redentor' — sem segmento inteiro batendo, o gazetteer não opina."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "foto.jpg", "/fotos/Cristo Redentor 2019",
+            data=datetime(2019, 7, 10, 14, 0),
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "foto.jpg")
+    assert not any(e.origem == "gazetteer" for e in evidencias)

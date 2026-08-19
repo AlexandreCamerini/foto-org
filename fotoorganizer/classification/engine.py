@@ -15,6 +15,7 @@ from bisect import bisect_left, bisect_right
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,7 +35,11 @@ from fotoorganizer.classification.templates import (
     TEMPLATE_PADRAO,
     render_destino,
 )
-from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
+from fotoorganizer.geolocation import (
+    LocationResolver,
+    extrair_hierarquia_da_pasta,
+    identificar_marco,
+)
 from fotoorganizer.geolocation.resolver import cache_key as _chave_de_coordenada
 from fotoorganizer.grouping.datas import (
     data_no_caminho,
@@ -77,7 +82,7 @@ from fotoorganizer.models import (
 
 log = logging.getLogger(__name__)
 
-VERSAO_LOGICA = "4.3"
+VERSAO_LOGICA = "4.4"
 
 
 def _delta_legivel(delta: timedelta) -> str:
@@ -1078,11 +1083,35 @@ class SuggestionEngine:
                 if valor
             ]
 
+        # 2b) Marco conhecido no nome da pasta — gazetteer local estático
+        # (D-082/Gazetteer). Só tentado quando o passo acima (país por
+        # nome, com hierarquia POSICIONAL dos irmãos) não achou nada: um
+        # marco não precisa de âncora nem de posição, o próprio nome já
+        # é cidade+região+país de uma vez ('.../Cristo Redentor' não
+        # precisa de mais nenhum segmento). Reconhecimento por NOME, não
+        # por coordenada — o geocoder offline já resolve qualquer
+        # coordenada pela cidade mais próxima, nunca "não conhece" um
+        # ponto; o gazetteer não ganharia nada entrando depois do GPS.
+        for segmento in Path(media.pasta).parts:
+            marco = identificar_marco(segmento)
+            if marco is not None:
+                just = f"marco '{marco.nome}' reconhecido no caminho da pasta"
+                return [
+                    _Draft(campo, "gazetteer", valor, just)
+                    for campo, valor in [
+                        ("pais", marco.pais), ("regiao", marco.regiao),
+                        ("cidade", marco.cidade),
+                    ]
+                    if valor
+                ]
+
         # 2c) Proposta de GenAI de pasta (aprovada, 07-01/07-05). Só chega
-        # aqui quando a hierarquia determinística do passo 2 já falhou — as
-        # duas condições coincidem por construção, porque D-01 (07-03) só
-        # oferece à sessão de classificação a pasta cuja hierarquia
-        # determinística já veio vazia. Fica ACIMA da vizinhança (passo 3)
+        # aqui quando os passos determinísticos 2/2b já falharam — as
+        # condições coincidem por construção, porque D-01 (07-03) só
+        # oferece à sessão de classificação a pasta cujas Evidence de
+        # cidade/país ainda estão vazias (o gazetteer, quando bate, já
+        # grava a sua própria Evidence e tira a pasta da lista de
+        # candidatas). Fica ACIMA da vizinhança (passo 3)
         # porque a proposta é sobre ESTA pasta; vizinhança é inferência
         # sobre o grupo inteiro da sessão.
         if proposta_de_pasta is not None and (
