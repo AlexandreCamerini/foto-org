@@ -3244,3 +3244,122 @@ inteiro passa a ser contado numa passada só
 - Status: decidido pelo dono, via `AskUserQuestion` apresentado pelo
   orquestrador com o relatório real da medição e a tabela de scores já
   travados como baliza.
+
+## D-082 — Três mecanismos que afirmam "cidade" além do que Δt/GPS puro alcança: cluster do mesmo lado, bracket bilateral por nome, gazetteer de marco na pasta
+
+- Fase: fatia independente (fora do roadmap de fase), a pedido do dono.
+- Classe: A
+- Data: 2026-08-19
+- Contexto: D-025 já limita "cidade" a Δt ≤ 10 min, e D-074 já evita
+  afirmar cidade quando as duas doadoras (lados opostos) discordam
+  geometricamente. Mesmo assim, três classes de caso reais continuam sem
+  cidade com um doador tecnicamente disponível:
+  1. Só existe doador de UM lado dentro da janela de cidade, mas há um
+     SEGUNDO doador no MESMO lado, um pouco mais longe no tempo — a
+     versão anterior simplesmente não olhava para ele (motivado por um
+     par real do acervo, media_id 7737/35035 — foto+vídeo de Live Photo
+     do Apple Fotos, mesma câmera vazia, um só um pouco fora da janela).
+  2. Há doador dos DOIS lados, mas geograficamente longe demais um do
+     outro para o teste de raio de D-074 — mesmo quando os dois, na
+     verdade, geocodificam para a MESMA cidade nomeada (coordenadas
+     diferentes dentro de uma cidade grande, por exemplo).
+  3. Não há GPS relevante em nenhum lado, mas o NOME da pasta já é o
+     lugar (".../Cristo Redentor") — caso que nenhum dos mecanismos
+     acima cobre, porque nenhum deles lê texto.
+- Escolhida — três mecanismos independentes, compostos (uma foto pode
+  ganhar mais de um ao mesmo tempo), cada um só entrando quando o Δt
+  direto já não basta:
+  1. **Mecanismo A — cluster do mesmo lado**
+     (`grouping/correlacao.py::_promover_por_cluster`,
+     `_proximo_do_mesmo_lado`). Um segundo doador do MESMO lado, de
+     outra origem que a foto (não do doador escolhido — ver o caso
+     7737/35035 no Contexto), cujo círculo de incerteza
+     (`raio_incerteza`, mesma constante de D-032/D-074) se sobrepõe ao
+     do escolhido, promove "cidade" com o piso de borda da própria
+     janela (`FATOR_BORDA_JANELA`) — nunca mais confiável que uma
+     leitura direta. Teto: `JANELA_PROMOCAO_CLUSTER` = 60 min no Δt do
+     escolhido (menor que a janela de região, 2h, de propósito: garante
+     que "região" já estava em `campos_base` antes da promoção — nunca
+     pula um grau). O candidato do cluster em si não tem teto de tempo
+     próprio: quem o restringe é a geometria (`raio_incerteza` cresce
+     com o Δt dele, então um candidato muito distante no tempo
+     dificilmente vai caber no raio combinado).
+  2. **Mecanismo B — bracket bilateral por identidade de cidade**
+     (`classification/engine.py`, dentro de `_evidencias_geo` — não em
+     `correlacao.py`, porque o teste depende do `LocationResolver`, que
+     `correlacao.py` deliberadamente não tem). Doador de CADA lado
+     (`Heranca.doador_outro_lado_id`/`delta_outro_lado`, campos que já
+     existiam mas não tinham consumidor) que geocodificam para a MESMA
+     cidade nomeada corroboram "cidade" categoricamente — sem teste de
+     raio, o nome já é a prova. Teto: `JANELA_BRACKET_BILATERAL` = 60
+     min, mas SIMÉTRICO nos dois lados (diferente do Mecanismo A) —
+     sem raio geométrico para se auto-limitar à medida que o Δt cresce,
+     um teto só do lado escolhido deixaria uma doadora a 11h de
+     distância "confirmar" uma cidade sem freio nenhum.
+  3. **Gazetteer de marco por nome** (`geolocation/gazetteer.py`,
+     consumido em `_evidencias_geo` como extensão do passo 2/pasta).
+     Reconhece o NOME de um marco (ex.: "Cristo Redentor") batendo o
+     SEGMENTO INTEIRO do caminho da pasta, normalizado — nunca por
+     substring, mesmo critério de `identificar_pais`. Zero relação com
+     GPS ou Δt: é puro texto contra uma lista curada e pequena de
+     propósito (`_MARCOS_RAW`), o equivalente offline e determinístico
+     do que `location_advisor.py` (GenAI, opt-in) faz por inferência.
+  As três não são medidas contra o acervo como D-025/D-032/D-074 foram
+  — os tetos de 60 min são decisão explícita do dono, documentada assim
+  no próprio código (`JANELA_PROMOCAO_CLUSTER`,
+  `JANELA_BRACKET_BILATERAL`), não uma calibração. `pais` continua fora
+  dos três, pelo mesmo motivo de D-074: `raio_incerteza` é calibrado
+  para deslocamento de pessoa (teto 50 km), não para o tamanho de um
+  país.
+- Por quê: os três cobrem gaps de NATUREZA diferente (geometria do
+  mesmo lado, identidade categórica entre lados opostos, texto sem
+  GPS nenhum) — resolver qualquer um deles com o mecanismo dos outros
+  dois não funcionaria (cluster não ajuda quando os dois doadores estão
+  em lados opostos; bracket não ajuda sem um segundo doador; nenhum dos
+  dois ajuda sem GPS). Compor os três, cada um com seu próprio teto e
+  sua própria frase de justificativa, é mais barato e mais honesto do
+  que um mecanismo único tentando cobrir os três casos com uma regra
+  genérica demais.
+- Pivô durante a sessão (Gazetteer): a primeira ideia — gazetteer por
+  COORDENADA, como fallback "quando o geocoder offline não resolve" —
+  foi descartada depois de ler `geolocation/offline.py`: o
+  `reverse_geocode` busca por vizinho mais próximo e SEMPRE acha
+  alguma cidade, por mais longe que esteja; `location is None` só
+  acontece em exceção real, nunca por "não conhecer" o lugar. Um
+  gazetteer de coordenada entraria morto, depois de um passo que já
+  teria retornado. Descoberto ao investigar o código antes de
+  implementar (não uma medição formal), e resolvido com o dono via
+  `AskUserQuestion` antes de qualquer linha escrita — a pergunta inicial
+  já tinha essa premissa errada embutida ("fallback quando GPS falha"),
+  corrigida na segunda rodada.
+- Justificativa ao usuário: as três frases (`_evidencias_geo`) deixam
+  explícito que a promoção MUDA O RÓTULO mostrado, não a incerteza real
+  do horário/geometria — nenhuma delas aumenta o score acima do piso de
+  borda da janela de cidade, mesmo padrão que D-074 já estabeleceu para
+  concordância (sem bônus de score, só a frase muda).
+- Como reverter: cada mecanismo é isolado e remoção não afeta os
+  outros dois.
+  - Mecanismo A: remover a chamada a `_promover_por_cluster` em
+    `herdar_gps` (`grouping/correlacao.py`) volta ao `campos_base` sem
+    promoção; `_proximo_do_mesmo_lado` fica órfã e pode ser removida
+    junto.
+  - Mecanismo B: remover o bloco `doador_bracket`/`promovido_por_bracket`
+    em `_evidencias_geo` (`classification/engine.py`) — os campos
+    `Heranca.doador_outro_lado_id`/`delta_outro_lado` continuam
+    populados (não fazem mal ficarem sem consumidor).
+  - Gazetteer: remover o passo "2b" em `_evidencias_geo` e o import de
+    `identificar_marco` — `geolocation/gazetteer.py` fica órfão e pode
+    ser apagado junto com a entrada `"gazetteer"` em
+    `SCORES_REFERENCIA` (`classification/confidence.py`).
+  Em qualquer um dos três casos, `VERSAO_LOGICA` precisa subir de novo
+  (a justificativa/presença de evidência muda) — mesma disciplina que
+  subiu 4.1→4.2→4.3→4.4 ao longo desta fatia.
+- Commits: `1b02879` (Mecanismo A), `f4ae49c` (Mecanismo B), `4b97379`
+  (Gazetteer) — todos com testes (unitários + integração via
+  `SuggestionEngine.gerar()`) e `scripts/verificar.sh` verde (pytest
+  1007, benchmark de agrupamento 19/19, vitest 186, build do webapp).
+- Status: decidido pelo dono — o encaixe do Mecanismo A/B na cascata
+  veio de comentário já existente no código (D-082 citado antes deste
+  registro formal existir); o do Gazetteer veio de duas rodadas de
+  `AskUserQuestion` nesta sessão, a segunda corrigindo a premissa da
+  primeira depois de eu investigar `geolocation/offline.py`.
