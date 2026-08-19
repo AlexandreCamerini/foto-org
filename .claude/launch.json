@@ -45,6 +45,15 @@
         "cd /Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/foto-organizer-fase-5-audit-3ece4b && .venv/bin/python -m fotoorganizer web --porta 8405"
       ],
       "port": 8405
+    },
+    {
+      "name": "foto-organizer-web-inspiring-goldstine",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/inspiring-goldstine-c8f615 && .venv/bin/python -m fotoorganizer web --porta 8406"
+      ],
+      "port": 8406
     }
   ]
 }
