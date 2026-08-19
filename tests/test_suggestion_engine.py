@@ -1482,3 +1482,50 @@ def test_heranca_concordante_diz_que_foi_confirmada(migrated_engine):
     assert heranca.score == round(0.75 * campos_confiaveis(
         timedelta(minutes=3)
     )[-1][1], 3)
+
+
+def test_cidade_promovida_por_cluster_diz_isso_na_justificativa(migrated_engine):
+    """Mecanismo A (D-082): duas doadoras do MESMO lado, próximas entre si,
+    promovem "cidade" mesmo com Δt (45 min) fora da janela normal (10 min).
+    A justificativa precisa deixar claro que o rótulo veio de corroboração,
+    não de uma leitura direta dentro da janela — senão o usuário lê "a 45
+    min de distância" e conclui, errado, que a cidade veio de graça."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "alvo.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "escolhido.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=45),
+            gps=(43.9500, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.add(_media(
+            telefone.id, "cluster.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=50),
+            gps=(43.9502, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "alvo.jpg")
+    heranca = next(
+        e for e in evidencias
+        if e.origem == "vizinhanca_temporal" and e.campo == "cidade"
+    )
+    assert "herdado de 'escolhido.jpg'" in heranca.justificativa
+    assert "não bastaria para a cidade" in heranca.justificativa
+    assert "cluster.jpg" in heranca.justificativa
+    # Muda o rótulo, não a incerteza real: mesmo piso de borda que qualquer
+    # doador único dentro da própria janela de cidade receberia.
+    assert heranca.score == round(
+        0.75 * campos_confiaveis(timedelta(minutes=10))[-1][1], 3
+    )

@@ -76,7 +76,7 @@ from fotoorganizer.models import (
 
 log = logging.getLogger(__name__)
 
-VERSAO_LOGICA = "4.1"
+VERSAO_LOGICA = "4.2"
 
 
 def _delta_legivel(delta: timedelta) -> str:
@@ -950,14 +950,16 @@ class SuggestionEngine:
                         "; a hora de uma delas é a do arquivo, não a da "
                         "captura — a proximidade pode ser coincidência"
                     )
-                # A justificativa geral (sem concordância) vale para todo
-                # campo; só o campo corroborado por uma segunda doadora
-                # (D-074) ganha a frase extra — dizer isso é parte do "por
-                # quê" que o usuário vê, não só um detalhe interno de score.
-                just_concordante = just + (
-                    "; confirmada por outra foto do lado oposto no tempo, "
-                    "na mesma área plausível"
-                )
+                # A justificativa geral (sem concordância/promoção) vale
+                # para todo campo; só o campo corroborado por uma segunda
+                # doadora (D-074, lado oposto) ou promovido por cluster
+                # (Mecanismo A/D-082, mesmo lado) ganha a frase extra —
+                # dizer isso é parte do "por quê" que o usuário vê, não só
+                # um detalhe interno de score. As duas frases não são
+                # mutuamente exclusivas: nada impede que o mesmo campo
+                # "cidade" tenha sido promovido pelo cluster do mesmo lado
+                # E, separadamente, confirmado pelo lado oposto.
+                doador_cluster = por_id.get(heranca.doador_cluster_id)
                 drafts = []
                 for campo, valor in [
                     ("pais", location.pais), ("regiao", location.regiao),
@@ -969,10 +971,24 @@ class SuggestionEngine:
                     score = round(
                         SCORES_REFERENCIA["vizinhanca_temporal"] * fator, 3
                     )
-                    texto = (
-                        just_concordante if campo in heranca.concordancia
-                        else just
-                    )
+                    texto = just
+                    if campo in heranca.concordancia:
+                        texto += (
+                            "; confirmada por outra foto do lado oposto no "
+                            "tempo, na mesma área plausível"
+                        )
+                    if campo in heranca.promovido_por_cluster:
+                        # Muda o RÓTULO mostrado, não a incerteza real do
+                        # horário (D-082): a frase precisa deixar isso
+                        # explícito, nunca só guardar a promoção no score.
+                        texto += (
+                            "; a distância sozinha não bastaria para a "
+                            f"cidade, mas outra foto do mesmo lado no "
+                            f"tempo, '{doador_cluster.nome if doador_cluster else '?'}'"
+                            f"{_camera_legivel(doador_cluster)}, aponta "
+                            "pro mesmo lugar — a cidade é mostrada mesmo "
+                            "assim, sem reduzir a incerteza real do horário"
+                        )
                     drafts.append(
                         _Draft(campo, "vizinhanca_temporal", valor, texto,
                                score_override=score)

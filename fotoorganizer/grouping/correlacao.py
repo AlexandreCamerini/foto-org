@@ -45,6 +45,16 @@ JANELA_HERANCA = max(janela for _, janela in JANELAS_POR_CAMPO)
 # Mesma coisa, como dict — usado pelo teste de concordância (D-074) uma vez
 # por foto candidata; construído aqui, não a cada chamada.
 _JANELA_DO_CAMPO = dict(JANELAS_POR_CAMPO)
+# Teto para a promoção de "cidade" por cluster do mesmo lado (D-082/Mecanismo
+# A) — decisão explícita do dono, NÃO medida contra o acervo como D-025/D-074
+# foram. Duas leituras do mesmo lado concordando entre si provam que a
+# LEITURA é precisa, não que o alvo ficou parado: `raio_incerteza(delta)` é
+# o mesmo com ou sem a segunda leitura (é literalmente o que D-074 testou e
+# descartou — "apertar o raio... testado e descartado" — só que ali para o
+# raio contínuo, aqui para o grau discreto). Menor que a janela de região
+# (2h) de propósito: garante que "cidade" só é promovida quando "região" já
+# estava presente no `campos_base` — nunca pula um grau.
+JANELA_PROMOCAO_CLUSTER = timedelta(minutes=60)
 # Δt até este limite: confiança cheia da origem; acima, decai até a borda.
 _JANELA_CURTA = timedelta(minutes=2)
 # Âncoras com desvios muito espalhados indicam pareamento ruim — descarta.
@@ -138,6 +148,25 @@ class Heranca:
     # Id da doadora do outro lado, só quando ela participou de ao menos uma
     # concordância acima. None no caso comum de âncora única.
     doador_concordante_id: int | None = None
+    # "cidade", quando ela só entrou em `campos` por concordância de cluster
+    # do MESMO lado (Mecanismo A, D-082) — o Δt sozinho não alcançava a
+    # janela de cidade. Vazio no caso comum. Ver `doador_cluster_id` e
+    # JANELA_PROMOCAO_CLUSTER: é uma decisão de rótulo do dono, não uma
+    # redução medida da incerteza real do alvo — a justificativa
+    # (`classification/engine.py`) precisa dizer isso.
+    promovido_por_cluster: tuple[str, ...] = ()
+    # Id do segundo doador do mesmo lado que corroborou a promoção acima.
+    # None quando não houve promoção.
+    doador_cluster_id: int | None = None
+    # Doadora do OUTRO lado (antes/depois, o que faltar), quando existe —
+    # SEMPRE preenchida quando há achado dos dois lados, mesmo sem
+    # concordância geométrica testada aqui. `classification/engine.py` usa
+    # isto para o Mecanismo B (D-082): duas âncoras que geocodificam para a
+    # MESMA cidade nomeada corroboram "cidade" para o alvo, um teste
+    # categórico que este módulo — deliberadamente sem geocoding — não pode
+    # fazer sozinho.
+    doador_outro_lado_id: int | None = None
+    delta_outro_lado: timedelta | None = None
 
     def fator_de(self, campo: str) -> float | None:
         """O fator do campo, ou None quando o Δt não permite afirmá-lo."""
@@ -282,8 +311,37 @@ def herdar_gps(
         os dois vizinhos imediatos e desistia quando ambos eram da mesma
         origem, sem nunca alcançar o terceiro: num acervo real isso barrou
         27.117 candidatos que tinham doador válido logo atrás deles.
+
+        Devolve também o índice e o passo — `_proximo_do_mesmo_lado` precisa
+        dos dois para continuar a busca de onde esta parou (Mecanismo A).
         """
         j = inicio
+        while 0 <= j < len(doadores):
+            delta = abs(tempos[j] - alvo)
+            if delta > janela:
+                return None
+            if foto.outra_origem(doadores[j]):
+                return delta, doadores[j], j, passo
+            j += passo
+        return None
+
+    def _proximo_do_mesmo_lado(
+        alvo: datetime, foto: FotoRef, a_partir_de: int, passo: int
+    ):
+        """Segundo doador do MESMO lado, de outra origem que `foto` (mesmo
+        critério de `procurar`), continuando a busca de onde o doador
+        escolhido parou.
+
+        Só o PRIMEIRO candidato de outra origem conta — não é uma varredura
+        à procura de alguém que concorde, o mesmo viés que D-074 já evita do
+        lado oposto. Independência exigida só de `foto` (a que está
+        herdando), não do doador já escolhido: no acervo real, doadores do
+        Apple Fotos importados como par foto+vídeo de uma Live Photo têm
+        `camera` idêntico (make/model vazios) entre si — exigir origem
+        diferente também do doador excluiria exatamente o par que motivou
+        este mecanismo (media_id 7737/35035).
+        """
+        j = a_partir_de + passo
         while 0 <= j < len(doadores):
             delta = abs(tempos[j] - alvo)
             if delta > janela:
@@ -308,7 +366,9 @@ def herdar_gps(
         ]
         if not achados:
             continue
-        delta, doador = min(achados, key=lambda c: c[0])
+        delta, doador, idx_doador, passo_doador = min(
+            achados, key=lambda c: c[0]
+        )
         # O outro lado, quando existe (diferente do escolhido acima) — quem
         # testemunha a favor ou contra a proximidade encontrada. Comparado
         # por media_id, não pela tupla inteira: os dois lados nunca podem
@@ -325,11 +385,25 @@ def herdar_gps(
         campos_base = campos_confiaveis(delta, incerta)
         if not campos_base:
             continue
+        # Mecanismo A (D-082): segundo doador do MESMO lado que corrobora o
+        # escolhido pode promover "cidade" mesmo com Δt>10min — dentro do
+        # teto de JANELA_PROMOCAO_CLUSTER, decisão do dono, não medida.
+        candidato_cluster = _proximo_do_mesmo_lado(
+            alvo, foto, idx_doador, passo_doador
+        )
+        campos_base, promoveu_cluster = _promover_por_cluster(
+            campos_base, delta, doador, candidato_cluster, incerta,
+        )
+        # `outro` carrega índice/passo (para `_proximo_do_mesmo_lado`, que
+        # não usa este `outro` — é só para achar `doador`); o teste de
+        # concordância só quer (delta, doador).
+        outro_par = (outro[0], outro[1]) if outro is not None else None
         campos, concordancia = _confrontar_com_outro_lado(
-            campos_base, delta, doador, outro, incerta,
+            campos_base, delta, doador, outro_par, incerta,
         )
         if not campos:
             continue
+        cidade_sobreviveu = any(c == "cidade" for c, _ in campos)
         herancas.append(Heranca(
             media_id=foto.media_id, doador_id=doador.media_id,
             lat=doador.lat, lon=doador.lon, delta=delta,
@@ -339,6 +413,18 @@ def herdar_gps(
                 outro[1].media_id if outro is not None and concordancia
                 else None
             ),
+            promovido_por_cluster=(
+                ("cidade",) if promoveu_cluster and cidade_sobreviveu else ()
+            ),
+            doador_cluster_id=(
+                candidato_cluster[1].media_id
+                if promoveu_cluster and cidade_sobreviveu
+                else None
+            ),
+            doador_outro_lado_id=(
+                outro[1].media_id if outro is not None else None
+            ),
+            delta_outro_lado=outro[0] if outro is not None else None,
         ))
     return herancas
 
@@ -393,6 +479,53 @@ def _confrontar_com_outro_lado(
     return tuple(resultado), tuple(concordancia)
 
 
+def _promover_por_cluster(
+    campos_base: tuple[tuple[str, float], ...],
+    delta: timedelta,
+    doador: FotoRef,
+    candidato: tuple[timedelta, FotoRef] | None,
+    incerta: bool,
+) -> tuple[tuple[tuple[str, float], ...], bool]:
+    """Mecanismo A (D-082): promove "cidade" quando um segundo doador do
+    MESMO lado, de outra origem que o alvo, concorda geograficamente com o
+    doador escolhido — mesmo que `delta` sozinho não alcance a janela de
+    cidade (D-025).
+
+    Decisão explícita do dono, NÃO calibrada como D-025/D-074: duas leituras
+    que concordam entre si provam que a LEITURA é precisa, não que o alvo
+    ficou parado — `raio_incerteza(delta)` é o mesmo com ou sem a segunda
+    leitura (D-074 testou e descartou apertar o raio contínuo pelo mesmo
+    motivo; aqui é o grau discreto, não o raio, mas o argumento é idêntico).
+    A justificativa em `classification/engine.py` precisa dizer isso —
+    muda o RÓTULO mostrado, não a incerteza real.
+
+    `JANELA_PROMOCAO_CLUSTER` (60 min) é menor que a janela de região (2h)
+    de propósito: quando este teto é respeitado, "região" já está em
+    `campos_base` por construção — a promoção nunca pula um grau.
+    """
+    if candidato is None or incerta:
+        return campos_base, False
+    if any(campo == "cidade" for campo, _ in campos_base):
+        return campos_base, False
+    if delta > JANELA_PROMOCAO_CLUSTER:
+        return campos_base, False
+    delta_candidato, doador_candidato = candidato
+    if doador_candidato.hora_do_arquivo:
+        return campos_base, False
+    distancia = _distancia_m(
+        (doador.lat, doador.lon), (doador_candidato.lat, doador_candidato.lon)
+    )
+    raio_combinado = raio_incerteza(delta) + raio_incerteza(delta_candidato)
+    if distancia > raio_combinado:
+        return campos_base, False
+    janela_cidade = _JANELA_DO_CAMPO["cidade"]
+    # Fator de borda da própria janela de cidade — o piso que
+    # `campos_confiaveis` já dá a um Δt no limite dela. Nunca mais confiável
+    # que um doador único genuinamente dentro da janela.
+    fator = _fator_por_delta(janela_cidade, janela_cidade)
+    return (*campos_base, ("cidade", fator)), True
+
+
 _RAIO_TERRA_M = 6_371_008.8
 
 
@@ -411,6 +544,32 @@ def _distancia_m(
     return 2 * _RAIO_TERRA_M * math.asin(min(1.0, math.sqrt(h)))
 
 
+def _fator_por_delta(delta: timedelta, janela: timedelta) -> float:
+    """1.0 até a janela curta, decaindo a 0.6 na borda de `janela`.
+
+    Extraída de `campos_confiaveis` para ser reusada por
+    `_promover_por_cluster` (D-082): chamada com `delta == janela` devolve
+    sempre o piso de borda (0.6) — não é uma constante nova, é a mesma
+    fórmula avaliada no seu próprio limite.
+    """
+    if delta <= _JANELA_CURTA:
+        return 1.0
+    resto = (delta - _JANELA_CURTA) / (janela - _JANELA_CURTA)
+    return 1.0 - 0.4 * resto
+
+
+# O piso que QUALQUER campo recebe no limite da própria janela — a fórmula
+# de `_fator_por_delta` dá o mesmo valor (0.6) para as três janelas quando
+# delta==janela, então basta calcular uma vez. `_promover_por_cluster` usa
+# isto para "cidade" (Mecanismo A); `classification/engine.py` importa o
+# mesmo valor para o Mecanismo B (D-082) — nenhuma das duas promoções por
+# corroboração é mais confiável que um doador único genuinamente dentro da
+# janela.
+FATOR_BORDA_JANELA = _fator_por_delta(
+    _JANELA_DO_CAMPO["cidade"], _JANELA_DO_CAMPO["cidade"]
+)
+
+
 def campos_confiaveis(
     delta: timedelta, hora_incerta: bool = False
 ) -> tuple[tuple[str, float], ...]:
@@ -425,11 +584,7 @@ def campos_confiaveis(
     for campo, janela in sorted(JANELAS_POR_CAMPO, key=lambda cj: -cj[1]):
         if delta > janela:
             continue
-        if delta <= _JANELA_CURTA:
-            fator = 1.0
-        else:
-            resto = (delta - _JANELA_CURTA) / (janela - _JANELA_CURTA)
-            fator = 1.0 - 0.4 * resto
+        fator = _fator_por_delta(delta, janela)
         if hora_incerta:
             fator *= _PENALIDADE_HORA_DE_ARQUIVO
         resultado.append((campo, round(fator, 3)))

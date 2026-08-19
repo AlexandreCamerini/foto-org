@@ -12,7 +12,7 @@ from fotoorganizer.grouping import (
     herdar_gps,
     raio_incerteza,
 )
-from fotoorganizer.grouping.correlacao import campos_confiaveis
+from fotoorganizer.grouping.correlacao import FATOR_BORDA_JANELA, campos_confiaveis
 
 CANON = ("Canon", "EOS R6")
 IPHONE = ("Apple", "iPhone 15 Pro")
@@ -297,6 +297,98 @@ def test_ancora_unica_sem_concordancia_por_padrao():
     h = _de(herdar_gps([_canon(1, 0), _iphone(2, -42)]), 1)
     assert h.concordancia == ()
     assert h.doador_concordante_id is None
+
+
+# -- Mecanismo A: promoção de cidade por cluster do mesmo lado (D-082) -------
+def test_cluster_do_mesmo_lado_promove_a_cidade():
+    """Duas doadoras do MESMO lado, próximas entre si: a segunda corrobora
+    a leitura da primeira e "cidade" é promovida mesmo com Δt (45 min) fora
+    da janela normal (10 min) — mas dentro do teto de cluster (60 min)."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -2700, lat=25.2000, lon=55.3000),   # escolhido, 45 min
+        _iphone(3, -3000, lat=25.2002, lon=55.3000),   # 2º do mesmo lado, 50 min, perto
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 2
+    assert h.delta == timedelta(seconds=2700)
+    assert h.fator_de("cidade") is not None
+    assert h.promovido_por_cluster == ("cidade",)
+    assert h.doador_cluster_id == 3
+    # Piso de borda da própria janela de cidade — nunca mais confiável que
+    # um doador único genuinamente dentro dela.
+    assert h.fator_de("cidade") == FATOR_BORDA_JANELA
+
+
+def test_cluster_acima_do_teto_nao_promove():
+    """Δt do escolhido acima de JANELA_PROMOCAO_CLUSTER (60 min): mesmo com
+    a segunda doadora do mesmo lado bem próxima, a promoção não acontece —
+    o teto é do dono, não uma medição a ser contornada por proximidade."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -75 * 60, lat=25.2000, lon=55.3000),   # 75 min
+        _iphone(3, -80 * 60, lat=25.2002, lon=55.3000),   # 80 min, perto
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is None
+    assert h.promovido_por_cluster == ()
+    assert h.doador_cluster_id is None
+
+
+def test_cluster_geograficamente_longe_nao_promove():
+    """Segunda doadora do mesmo lado longe demais (~300 km): os círculos de
+    incerteza não se tocam, então ela não corrobora nada — mesmo critério
+    geométrico de D-074, aplicado ao mesmo lado em vez do oposto."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -2700, lat=25.2000, lon=55.3000),
+        _iphone(3, -3000, lat=27.0000, lon=57.0000),      # ~300 km
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is None
+    assert h.promovido_por_cluster == ()
+
+
+def test_cluster_nao_promove_quando_cidade_ja_vem_do_delta():
+    """Δt já dentro da janela de cidade: a segunda doadora do mesmo lado
+    não precisa promover nada, e `promovido_por_cluster` fica vazio — a
+    cidade sobrevive por conta própria, não por corroboração."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -300, lat=25.2000, lon=55.3000),        # 5 min, já é cidade
+        _iphone(3, -3000, lat=25.2002, lon=55.3000),       # 2º do mesmo lado
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is not None
+    assert h.promovido_por_cluster == ()
+
+
+def test_cluster_com_hora_incerta_nao_promove():
+    """Hora incerta em qualquer lado desativa o mesmo teste geométrico que
+    D-074 já desativa para a concordância — a base (Δt) não é confiável o
+    bastante para promover nada em cima dela."""
+    fotos = [
+        _canon(1, 0, hora_do_arquivo=True),
+        _iphone(2, -2700, lat=25.2000, lon=55.3000),
+        _iphone(3, -3000, lat=25.2002, lon=55.3000),
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is None
+    assert h.promovido_por_cluster == ()
+
+
+def test_cluster_com_hora_do_candidato_incerta_nao_promove():
+    """A hora incerta pode estar só no CANDIDATO do cluster (não no
+    escolhido nem no alvo) — `incerta` de `Heranca` não cobre esse caso,
+    então `_promover_por_cluster` tem que checar por conta própria."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -2700, lat=25.2000, lon=55.3000),
+        _iphone(3, -3000, lat=25.2002, lon=55.3000, hora_do_arquivo=True),
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is None
+    assert h.promovido_por_cluster == ()
 
 
 def test_hora_incerta_em_qualquer_lado_desativa_o_teste_de_concordancia():
