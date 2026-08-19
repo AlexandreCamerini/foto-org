@@ -1529,3 +1529,135 @@ def test_cidade_promovida_por_cluster_diz_isso_na_justificativa(migrated_engine)
     assert heranca.score == round(
         0.75 * campos_confiaveis(timedelta(minutes=10))[-1][1], 3
     )
+
+
+def test_cidade_promovida_por_bracket_bilateral_diz_isso_na_justificativa(
+    migrated_engine,
+):
+    """Mecanismo B (D-082): doadora de CADA lado, ambas dentro do teto de
+    60 min, mas longe demais uma da outra para o teste geométrico de
+    D-074 — só a identidade de nome geocodificado (mesma cidade fake)
+    corrobora "cidade". A justificativa precisa dizer que veio de
+    identidade, não de proximidade."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "alvo.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "antes.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=45),
+            # Dentro da faixa (40, 46) do FakeGeocoder — mesma cidade fake
+            # que o lado oposto, mas a ~500 km de distância real: o teste
+            # geométrico de D-074/Mecanismo A falharia, o categórico não.
+            gps=(41.0, 4.0), make="Apple", model="iPhone 15",
+        ))
+        session.add(_media(
+            telefone.id, "depois.jpg", "/fotos/DCIM",
+            data=base + timedelta(minutes=50),
+            gps=(45.5, 5.0), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "alvo.jpg")
+    heranca = next(
+        e for e in evidencias
+        if e.origem == "vizinhanca_temporal" and e.campo == "cidade"
+    )
+    assert "herdado de 'antes.jpg'" in heranca.justificativa
+    assert "não bastaria para a cidade" in heranca.justificativa
+    assert "depois.jpg" in heranca.justificativa
+    assert "geocodifica para a mesma cidade" in heranca.justificativa
+    # Mesmo piso de borda dos outros dois mecanismos — identidade de nome
+    # não é mais confiável que uma leitura geométrica genuína.
+    assert heranca.score == round(
+        0.75 * campos_confiaveis(timedelta(minutes=10))[-1][1], 3
+    )
+
+
+def test_bracket_bilateral_nao_promove_acima_do_teto(migrated_engine):
+    """Δt do lado oposto (70 min) acima de JANELA_BRACKET_BILATERAL (60
+    min): mesmo com a mesma cidade fake dos dois lados, o bracket não
+    promove nada — o teto é do dono, não uma medição."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "alvo.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "antes.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=45),
+            gps=(41.0, 4.0), make="Apple", model="iPhone 15",
+        ))
+        session.add(_media(
+            telefone.id, "depois.jpg", "/fotos/DCIM",
+            data=base + timedelta(minutes=70),
+            gps=(45.5, 5.0), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "alvo.jpg")
+    campos = {e.campo for e in evidencias if e.origem == "vizinhanca_temporal"}
+    assert "cidade" not in campos
+
+
+def test_bracket_bilateral_nao_promove_cidades_diferentes(migrated_engine):
+    """Doadoras dos dois lados dentro do teto, mas geocodificando para
+    cidades DIFERENTES: não há identidade nenhuma para corroborar — o
+    bracket precisa do nome bater, não só de existir um segundo lado."""
+    @dataclass
+    class GeocoderDuasCidades:
+        def resolve(self, lat, lon):
+            if lat < 43:
+                return GeoResult("França", "Provence", "Avignon", "fake")
+            if lat < 46:
+                return GeoResult("França", "Île-de-France", "Paris", "fake")
+            return None
+
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "alvo.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "antes.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=45),
+            gps=(41.0, 4.0), make="Apple", model="iPhone 15",   # Avignon
+        ))
+        session.add(_media(
+            telefone.id, "depois.jpg", "/fotos/DCIM",
+            data=base + timedelta(minutes=50),
+            gps=(45.5, 5.0), make="Apple", model="iPhone 15",   # Paris
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(GeocoderDuasCidades()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "alvo.jpg")
+    campos = {e.campo for e in evidencias if e.origem == "vizinhanca_temporal"}
+    assert "cidade" not in campos

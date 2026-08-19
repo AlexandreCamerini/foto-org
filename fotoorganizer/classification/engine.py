@@ -47,6 +47,7 @@ from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.repositories.pasta_classificacao import PropostaDePasta
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
+from fotoorganizer.grouping.correlacao import FATOR_BORDA_JANELA
 from fotoorganizer.grouping import (
     FotoRef,
     Heranca,
@@ -76,7 +77,7 @@ from fotoorganizer.models import (
 
 log = logging.getLogger(__name__)
 
-VERSAO_LOGICA = "4.2"
+VERSAO_LOGICA = "4.3"
 
 
 def _delta_legivel(delta: timedelta) -> str:
@@ -104,6 +105,17 @@ _CAMPOS_QUE_NOMEIAM = ("categoria", "viagem", "evento", "pais", "regiao",
 _CAMPOS_DE_LUGAR = ("pais", "regiao", "cidade")
 # Como cada granularidade se lê numa frase (D-025).
 _GRANULARIDADE = {"pais": "o país", "regiao": "a região", "cidade": "a cidade"}
+# Teto para o bracket bilateral por identidade de cidade (D-082/Mecanismo
+# B) — mesmo valor e mesmo espírito de `JANELA_PROMOCAO_CLUSTER`
+# (Mecanismo A, `grouping/correlacao.py`): decisão explícita do dono, não
+# calibrada. Vive aqui, não em `correlacao.py`, porque o teste em si
+# (nome de cidade geocodificado igual dos dois lados) depende do
+# `LocationResolver`, que `correlacao.py` deliberadamente não tem.
+# Simétrico nos DOIS lados (ao contrário do Mecanismo A, que só limita o
+# lado escolhido): o bracket já não tem teste geométrico de raio para se
+# auto-limitar à medida que o Δt cresce — sem um teto nos dois lados, uma
+# doadora a 11h de distância "confirmaria" uma cidade sem nenhum freio.
+JANELA_BRACKET_BILATERAL = timedelta(minutes=60)
 # Fotos geocodificadas mínimas para um país contar como perna da viagem —
 # uma escala de aeroporto com 1-2 fotos não nomeia a viagem.
 _MIN_FOTOS_PERNA = 3
@@ -930,12 +942,51 @@ class SuggestionEngine:
             if location is not None:
                 media.location_id = location.id
                 doador = por_id.get(heranca.doador_id)
+
+                # Mecanismo B (D-082): bracket bilateral por identidade de
+                # cidade — calculado ANTES de `just` porque decide se a
+                # cláusula "não a cidade" abaixo ainda faz sentido. Só entra
+                # em jogo quando nem o Δt direto nem o cluster do mesmo lado
+                # (Mecanismo A) já deram cidade — sem raio geométrico: o
+                # nome geocodificado igual dos dois lados já é a prova, o
+                # que este mecanismo troca é precisão de coordenada por
+                # identidade categórica.
+                doador_bracket = None
+                if (
+                    heranca.fator_de("cidade") is None
+                    and not heranca.hora_incerta
+                    and heranca.delta <= JANELA_BRACKET_BILATERAL
+                    and heranca.doador_outro_lado_id is not None
+                    and heranca.delta_outro_lado is not None
+                    and heranca.delta_outro_lado <= JANELA_BRACKET_BILATERAL
+                ):
+                    candidato = por_id.get(heranca.doador_outro_lado_id)
+                    if (
+                        candidato is not None
+                        and candidato.gps_lat is not None
+                        and candidato.gps_lon is not None
+                        # Hora do próprio candidato precisa ser de captura,
+                        # não de mtime — mesmo cuidado de D-074
+                        # (`_confrontar_com_outro_lado`) para o lado oposto.
+                        and candidato.data_capturada is not None
+                    ):
+                        location_bracket = self._resolver.resolve(
+                            session, candidato.gps_lat, candidato.gps_lon
+                        )
+                        if (
+                            location_bracket is not None
+                            and location.cidade
+                            and location_bracket.cidade == location.cidade
+                        ):
+                            doador_bracket = candidato
+                promovido_por_bracket = doador_bracket is not None
+
                 just = (
                     f"GPS herdado de '{doador.nome if doador else '?'}'"
                     f"{_camera_legivel(doador)} — tirada a "
                     f"{_delta_legivel(heranca.delta)} de distância"
                 )
-                if heranca.granularidade != "cidade":
+                if heranca.granularidade != "cidade" and not promovido_por_bracket:
                     # A distância no tempo não sustenta a cidade. Dizer só
                     # "a 3h de distância" deixaria o usuário concluir sozinho
                     # que a cidade veio junto — ela não veio.
@@ -952,13 +1003,12 @@ class SuggestionEngine:
                     )
                 # A justificativa geral (sem concordância/promoção) vale
                 # para todo campo; só o campo corroborado por uma segunda
-                # doadora (D-074, lado oposto) ou promovido por cluster
-                # (Mecanismo A/D-082, mesmo lado) ganha a frase extra —
-                # dizer isso é parte do "por quê" que o usuário vê, não só
-                # um detalhe interno de score. As duas frases não são
-                # mutuamente exclusivas: nada impede que o mesmo campo
-                # "cidade" tenha sido promovido pelo cluster do mesmo lado
-                # E, separadamente, confirmado pelo lado oposto.
+                # doadora (D-074, lado oposto), promovido por cluster
+                # (Mecanismo A/D-082, mesmo lado) ou por bracket bilateral
+                # (Mecanismo B/D-082, identidade de cidade) ganha a frase
+                # extra — dizer isso é parte do "por quê" que o usuário vê,
+                # não só um detalhe interno de score. As três não são
+                # mutuamente exclusivas.
                 doador_cluster = por_id.get(heranca.doador_cluster_id)
                 drafts = []
                 for campo, valor in [
@@ -966,6 +1016,11 @@ class SuggestionEngine:
                     ("cidade", location.cidade),
                 ]:
                     fator = heranca.fator_de(campo)
+                    if campo == "cidade" and fator is None and promovido_por_bracket:
+                        # Mesmo piso de borda que o Mecanismo A usa: nunca
+                        # mais confiável que um doador único genuinamente
+                        # dentro da própria janela de cidade.
+                        fator = FATOR_BORDA_JANELA
                     if not valor or fator is None:
                         continue
                     score = round(
@@ -988,6 +1043,20 @@ class SuggestionEngine:
                             f"{_camera_legivel(doador_cluster)}, aponta "
                             "pro mesmo lugar — a cidade é mostrada mesmo "
                             "assim, sem reduzir a incerteza real do horário"
+                        )
+                    if campo == "cidade" and promovido_por_bracket:
+                        # Também muda só o RÓTULO, não a incerteza real: o
+                        # bracket prova identidade de nome, não posição —
+                        # dizer isso evita o usuário ler "confirmada" como
+                        # se fosse a mesma prova geométrica do Mecanismo A.
+                        texto += (
+                            "; a distância sozinha não bastaria para a "
+                            f"cidade, mas outra foto do lado oposto no "
+                            f"tempo, '{doador_bracket.nome}'"
+                            f"{_camera_legivel(doador_bracket)}, geocodifica "
+                            "para a mesma cidade — a cidade é mostrada "
+                            "mesmo assim, sem reduzir a incerteza real do "
+                            "horário"
                         )
                     drafts.append(
                         _Draft(campo, "vizinhanca_temporal", valor, texto,
