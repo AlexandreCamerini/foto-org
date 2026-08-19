@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { rotulosDeFontes } from "../fontes";
 import ArvoreDePastas from "./ArvoreDePastas";
+import ModalCaminho from "./ModalCaminho";
 import type { Job } from "../hooks/useJob";
 import Botao from "../ui/Botao";
 
@@ -19,6 +20,10 @@ interface Props {
   pastaAtual: string | null;
   onSelecionarPasta: (pasta: string | null) => void;
   job: Job;
+  /** Abre o modal de "Adicionar pasta…", que o App.tsx passou a possuir —
+   * é o único lugar que alcança as quatro telas que precisam dele
+   * (CONS-05/D-07). */
+  onAdicionarPasta: () => void;
 }
 
 export default function Sidebar({
@@ -27,6 +32,7 @@ export default function Sidebar({
   pastaAtual,
   onSelecionarPasta,
   job,
+  onAdicionarPasta,
 }: Props) {
   const { data: fontes } = useQuery({ queryKey: ["fontes"], queryFn: api.fontes });
   const { data: status } = useQuery({ queryKey: ["status"], queryFn: api.status });
@@ -37,7 +43,7 @@ export default function Sidebar({
     queryKey: ["reapontamentos"],
     queryFn: api.reapontamentos,
   });
-  const [modal, setModal] = useState<"pasta" | "takeout" | "apple" | null>(null);
+  const [modal, setModal] = useState<"takeout" | "apple" | null>(null);
   const [reapontarId, setReapontarId] = useState<number | null>(null);
   const [menuAberto, setMenuAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -112,7 +118,7 @@ export default function Sidebar({
       {/* ações */}
       <div className="space-y-2 border-t border-borda px-3 py-2">
         <Botao tamanho="sm" cheio
-          onClick={() => setModal("pasta")}
+          onClick={onAdicionarPasta}
           disabled={job.rodando}>
           Adicionar pasta…
         </Botao>
@@ -152,21 +158,12 @@ export default function Sidebar({
           o trabalho continua rodando quando o usuário troca de aba, e a
           sidebar não é o lugar de contar isso duas vezes. */}
 
-      {/* modal simples de caminho */}
-      {(modal === "pasta" || modal === "takeout") && (
+      {/* modal simples de caminho — só takeout aqui; o modal de pasta
+          pertence ao App.tsx (Task 1 do plano 04-06) */}
+      {modal === "takeout" && (
         <ModalCaminho
-          titulo={
-            modal === "pasta"
-              ? "Caminho da pasta de fotos"
-              : "Pasta do Google Takeout (extraída)"
-          }
-          onConfirmar={(caminho) =>
-            executar(
-              modal === "pasta"
-                ? job.escanear(caminho)
-                : job.importarTakeout(caminho),
-            )
-          }
+          titulo="Pasta do Google Takeout (extraída)"
+          onConfirmar={(caminho) => executar(job.importarTakeout(caminho))}
           onCancelar={() => setModal(null)}
         />
       )}
@@ -215,7 +212,7 @@ function ModalReapontar({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-[32rem] rounded-md border border-borda bg-painel p-4">
-        <div className="mb-2 font-semibold">Fonte mudou de lugar</div>
+        <div className="mb-2 font-titulo">Fonte mudou de lugar</div>
         {isLoading && <p className="text-texto-2">Verificando…</p>}
         {error && (
           <p className="text-erro">{(error as Error).message}</p>
@@ -238,7 +235,7 @@ function ModalReapontar({
                 →
               </span>
               <span
-                className="min-w-0 flex-1 truncate font-medium"
+                className="min-w-0 flex-1 truncate font-titulo"
                 title={previa.prefixo_novo}
               >
                 {previa.prefixo_novo}
@@ -291,7 +288,7 @@ function ModalAvisoApple({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-96 rounded-md border border-borda bg-painel p-4">
-        <div className="mb-2 font-semibold">Importar do Apple Fotos</div>
+        <div className="mb-2 font-titulo">Importar do Apple Fotos</div>
         <p className="mb-3 text-texto-2">
           A importação é somente leitura — nenhuma foto é movida, renomeada
           ou alterada na sua biblioteca. O macOS pode pedir Acesso Total ao
@@ -306,46 +303,6 @@ function ModalAvisoApple({
           <Botao variante="solido"
             onClick={onConfirmar}>
             Continuar
-          </Botao>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ModalCaminho({
-  titulo,
-  onConfirmar,
-  onCancelar,
-}: {
-  titulo: string;
-  onConfirmar: (caminho: string) => void;
-  onCancelar: () => void;
-}) {
-  const [valor, setValor] = useState("");
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-96 rounded-md border border-borda bg-painel p-4">
-        <div className="mb-2 font-semibold">{titulo}</div>
-        <input
-          autoFocus
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && valor.trim()) onConfirmar(valor.trim());
-            if (e.key === "Escape") onCancelar();
-          }}
-          placeholder="/Users/voce/Pictures/Viagens"
-          className="mb-3 w-full rounded-md border border-borda bg-cartao px-3 py-2 outline-none placeholder:text-texto-3 focus:border-acento"
-        />
-        <div className="flex justify-end gap-2">
-          <Botao variante="fantasma"
-            onClick={onCancelar}>
-            Cancelar
-          </Botao>
-          <Botao variante="solido"
-            onClick={() => valor.trim() && onConfirmar(valor.trim())}>
-            Confirmar
           </Botao>
         </div>
       </div>

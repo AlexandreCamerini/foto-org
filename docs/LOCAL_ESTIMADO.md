@@ -196,6 +196,69 @@ mostra exatamente onde:
   concentram a fotografia numa região por dia. Alguém que fotografe em voos
   diários teria outro teto. Recalibrar é rodar o script.
 
+## Concordância de duas âncoras (D-074)
+
+A busca por doadora já olhava os dois lados da linha do tempo (antes e
+depois); até D-074, o lado perdedor era só descartado — extrapolação de
+âncora única, mesmo quando os dois lados existiam. `herdar_gps` agora
+confronta os dois, campo a campo (cidade e região; país fica de fora, ver
+abaixo): concordam se os círculos de incerteza de cada lado
+(`raio_incerteza`, calibrado acima) se sobrepõem — o campo é mantido, com o
+MESMO fator de sempre, sem bônus de score inventado. Discordam, e o campo
+não é herdado por ninguém: duas doadoras a horas de distância uma da outra,
+uma de cada lado, é sinal de trânsito, não empate a favor da mais próxima.
+
+`scripts/calibrar_raio_incerteza.py --concordancia` refaz a mesma técnica de
+calibração (foto com GPS próprio tratada como herdeira hipotética) para
+medir isto. Rodado em 2026-08-17 sobre
+`catalog-antes-do-reset-20260816-013503.db` (backup pré-reset com GPS em 4
+fontes, 40.678 fotos com GPS, 39.443 pares na janela de 12h):
+
+```
+pares com doadora dos dois lados testável: 33889 de 39443
+  unica          5554  (14.1%)
+  concordante   33071  (83.8%)
+  discordante     818  (2.1%)
+
+unica       — cobertura geral 94.2%
+concordante — cobertura geral 97.5%
+discordante — cobertura geral 91.1%  (50.9% na banda 1–10 min)
+```
+
+(Números corrigidos após revisão por sub-agente: a primeira versão do
+script parava na janela de cidade, 10 min, para decidir se um par era
+"testável" nos dois lados; a janela certa é a mais larga que o Δt do lado
+escolhido sustenta — região, 2 h — igual `herdar_gps` confronta em
+produção. A conclusão não mudou, só a precisão dela: eram
+78,2%/1,9%/91,5%/48,8% antes do ajuste.)
+
+Duas perguntas, duas respostas:
+
+- **O corte de discordância melhora a cobertura do que sobra?** Sim, e o
+  tamanho do problema que ele resolve aparece na própria banda de
+  discordantes: 50,9% de cobertura na banda de 1–10 min é quase cara ou
+  coroa — quase metade das vezes em que os dois lados discordam nessa
+  banda, a coordenada da doadora mais próxima sozinha já estava FORA do
+  próprio círculo de incerteza dela. É o mesmo padrão de doadora com
+  coordenada errada que a seção anterior documentou para 2019-04-19 (Apple
+  Fotos gravando "casa" a 163 km do lugar real): quando a doadora mais
+  próxima está errada, a mais distante costuma discordar dela, e esse
+  desacordo é o sinal que a versão anterior tinha disponível e não usava.
+- **A concordância prevê distância real menor, o suficiente para apertar o
+  raio?** `min(raio_incerteza(delta_perto), raio_incerteza(delta_longe))`
+  já é, por construção, `raio_incerteza(delta)` de hoje — `delta` já é
+  sempre o Δt do lado mais próximo (a escolha de doadora sempre prefere o
+  mais próximo), e `raio_incerteza` é monótona em Δt. Não há aperto de
+  graça aí. Testado também um fator de encolhimento extra sobre o raio dos
+  concordantes: a cobertura **bruta** sobe suave e engana — a maioria dos
+  pares concordantes estão a ≤1 min, onde o raio já está no piso (15 m) e
+  quase qualquer fator ainda cobre. Ponderando por banda, como a
+  metodologia de D-032 exige (a herdeira real se concentra em 30 min–12 h,
+  não em segundos), a banda de 1–10 min só alcança 90% de cobertura por
+  volta de um fator K≈0,7–1,0 — ou seja, quase sem encolhimento livre.
+  **Nenhum fator novo foi adicionado**; um "chute com cara de medição"
+  teria sido pior que nenhum ajuste.
+
 ## Como reverter
 
 Tudo mora em três constantes de `fotoorganizer/grouping/correlacao.py`:

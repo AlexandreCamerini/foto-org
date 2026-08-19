@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api, type Agrupamento } from "../api";
+import Botao from "../ui/Botao";
 
 interface Props {
   /** Fonte escolhida na barra lateral. O controle vale nesta tela também:
@@ -15,11 +16,16 @@ interface Props {
     nome: string,
     vista?: "lista" | "mapa",
   ) => void;
+  /** Abre o modal de adicionar pasta do App.tsx (CONS-05/D-07). A frase do
+   * estado vazio fala de gerar sugestões e o botão adiciona pasta — é
+   * deliberado, D-07 manda a MESMA ação nas três telas, não inventar ação
+   * própria por tela. */
+  onAdicionarPasta: () => void;
 }
 
 /** Galeria de viagens e eventos como cards com capa — o agrupamento
  * explicável do motor apresentado do jeito que se mostra pra alguém. */
-export default function Trips({ onAbrir, fonte }: Props) {
+export default function Trips({ onAbrir, fonte, onAdicionarPasta }: Props) {
   const { data: viagens, isPending: viagensPendente } = useQuery({
     queryKey: ["viagens", fonte],
     queryFn: () => api.viagens(fonte),
@@ -46,13 +52,15 @@ export default function Trips({ onAbrir, fonte }: Props) {
         </div>
       )}
       {vazio && (
-        <div className="flex h-full items-center justify-center text-texto-2">
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-texto-2">
           Nenhuma viagem ou evento ainda — gere as sugestões na aba Revisão.
+          <Botao onClick={onAdicionarPasta}>Adicionar pasta…</Botao>
         </div>
       )}
       {(viagens ?? []).length > 0 && (
         <Secao
           titulo="Viagens"
+          secao="viagens"
           itens={viagens!}
           onAbrir={(g, vista) => onAbrir({ trip_id: g.id }, g.nome, vista)}
         />
@@ -60,6 +68,7 @@ export default function Trips({ onAbrir, fonte }: Props) {
       {(eventos ?? []).length > 0 && (
         <Secao
           titulo="Eventos"
+          secao="eventos"
           itens={eventos!}
           onAbrir={(g, vista) => onAbrir({ event_id: g.id }, g.nome, vista)}
         />
@@ -70,13 +79,26 @@ export default function Trips({ onAbrir, fonte }: Props) {
 
 function Secao({
   titulo,
+  secao,
   itens,
   onAbrir,
 }: {
   titulo: string;
+  secao: "viagens" | "eventos";
   itens: Agrupamento[];
   onAbrir: (g: Agrupamento, vista?: "lista" | "mapa") => void;
 }) {
+  // Selo de origem (CONS-02, D-03) só faz sentido quando dois cards da
+  // mesma seção colidem no nome — sinal de ambiguidade, não decoração
+  // permanente. Comparação case-insensitive e sem espaço nas pontas:
+  // "Natal" e "natal " contam como o mesmo nome.
+  const nomesNormalizados = itens.map((g) => g.nome.trim().toLowerCase());
+  const nomesColidindo = new Set(
+    nomesNormalizados.filter(
+      (nome, i) => nomesNormalizados.indexOf(nome) !== i,
+    ),
+  );
+
   return (
     <section className="mb-6">
       <div className="titulo-painel mb-3">{titulo}</div>
@@ -85,6 +107,8 @@ function Secao({
           <Card
             key={g.id}
             grupo={g}
+            secao={secao}
+            colideNome={nomesColidindo.has(g.nome.trim().toLowerCase())}
             onAbrir={() => onAbrir(g)}
             onAbrirMapa={() => onAbrir(g, "mapa")}
           />
@@ -96,10 +120,14 @@ function Secao({
 
 function Card({
   grupo,
+  secao,
+  colideNome,
   onAbrir,
   onAbrirMapa,
 }: {
   grupo: Agrupamento;
+  secao: "viagens" | "eventos";
+  colideNome: boolean;
   onAbrir: () => void;
   onAbrirMapa: () => void;
 }) {
@@ -148,7 +176,7 @@ function Card({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-3">
-          <div className="mb-0.5 text-realce font-semibold leading-tight">
+          <div className="mb-0.5 text-realce font-titulo leading-tight">
             {grupo.nome}
           </div>
           <div className="text-texto-2">
@@ -156,6 +184,18 @@ function Card({
           </div>
         </div>
       </div>
+      {/* Selo CONS-02/D-03: só quando o nome colide com outro card da mesma
+          seção Eventos — sinal de ambiguidade, não decoração permanente.
+          Rótulo é função pura do campo determinístico já servido pela API
+          (nunca LLM, ver 04-CONTEXT.md § Deferred). IRMÃO do role="button",
+          nunca dentro dele, pelo mesmo motivo do badge "Mapa" abaixo:
+          conteúdo dentro do role="button" vazaria pro nome acessível do
+          card. <span>, não <button> — o selo não é clicável. */}
+      {secao === "eventos" && colideNome && (
+        <span className="absolute left-2 top-2 z-10 rounded-full border border-borda bg-janela/80 px-2 py-0.5 text-[11px] text-texto-2 backdrop-blur-sm">
+          {grupo.metodo === "album_externo" ? "Álbum" : "Evento detectado"}
+        </span>
+      )}
       {/* Achado D-050: o mapa existe (Lista × Mapa, dentro do grupo aberto)
           mas não tinha nenhuma pista visível de que existe antes de já
           saber procurar. Badge sempre visível, não só no hover — é

@@ -1,0 +1,32 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/AUDITORIA_FUNCIONALIDADES.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Auditoria de funcionalidades — fase 2",
+  "summary": "Audit report exercising the Foto Organizer catalog engine, API, and screens end-to-end, documenting findings, defects, and coverage gaps.",
+  "scope": [
+    "evidence/suggestion linking (suggestion_evidence)",
+    "GPS/location inheritance between devices",
+    "metadata namespaces (exif, gps, iptc, xmp, fs)",
+    "scripts/verificar.sh sanity checks",
+    "CLI commands",
+    "server API endpoints",
+    "webapp screens (Panorama, Biblioteca, Viagens, Revisão, Duplicatas, Operações)",
+    "temporal grouping defects"
+  ],
+  "cross_refs": [
+    "docs/prompts/00-protocolo.md",
+    "docs/DECISOES.md",
+    "scripts/medir_heranca_gps.py",
+    "docs/ARQUITETURA.md",
+    "docs/COBERTURA_METADADOS.md",
+    "scripts/verificar.sh",
+    "models/catalog.py",
+    "server/app.py",
+    "grouping/classifier.py"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

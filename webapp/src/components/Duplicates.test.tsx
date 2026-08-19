@@ -151,4 +151,82 @@ describe("Duplicates", () => {
     expect(screen.getAllByText("RAW + JPEG do mesmo clique").length).toBeGreaterThan(0);
     expect(screen.queryByText("Bytes iguais")).not.toBeInTheDocument();
   });
+
+  it("membro cuja prévia falha mostra 'imagem indisponível' com a explicação completa no title, sem afetar o outro membro do grupo", async () => {
+    servirApi({
+      "/api/duplicatas": [
+        grupo({
+          membros: [
+            membro({}),
+            membro({ member_id: 2, media_id: 2, nome: "b.jpg" }),
+          ],
+        }),
+      ],
+    });
+    const { container } = montar(<Duplicates job={jobParado()} />);
+
+    await screen.findByText("a.jpg");
+    const imgA = container.querySelector<HTMLImageElement>(
+      'img[src="/api/midia/1/preview"]',
+    )!;
+    const imgB = container.querySelector<HTMLImageElement>(
+      'img[src="/api/midia/2/preview"]',
+    )!;
+    expect(imgA).toBeInTheDocument();
+    expect(imgB).toBeInTheDocument();
+
+    fireEvent.error(imgA);
+
+    // Só o membro A degrada — o <img> de B continua no documento.
+    expect(
+      container.querySelector('img[src="/api/midia/1/preview"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('img[src="/api/midia/2/preview"]'),
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("imagem indisponível")).toBeInTheDocument();
+    expect(screen.getByText("⊘")).toBeInTheDocument();
+    expect(screen.getByText("imagem indisponível").closest("div")).toHaveAttribute(
+      "title",
+      "O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação.",
+    );
+  });
+
+  it("bloco de erro usa bg-cartao, não bg-black — não lê como 'ainda carregando'", async () => {
+    servirApi({ "/api/duplicatas": [grupo({})] });
+    const { container } = montar(<Duplicates job={jobParado()} />);
+
+    const img = await screen.findByText("a.jpg").then(
+      () =>
+        container.querySelector<HTMLImageElement>(
+          'img[src="/api/midia/1/preview"]',
+        )!,
+    );
+    expect(img.className).toContain("bg-black");
+
+    fireEvent.error(img);
+
+    const bloco = screen.getByText("imagem indisponível").closest("div")!;
+    expect(bloco.className).toContain("bg-cartao");
+    expect(bloco.className).not.toContain("bg-black");
+  });
+
+  it("figcaption com nome, tamanho e botão de papel continua renderizando no estado de erro", async () => {
+    servirApi({
+      "/api/duplicatas": [
+        grupo({ membros: [membro({}), membro({ member_id: 2, media_id: 2, nome: "b.jpg" })] }),
+      ],
+    });
+    const { container } = montar(<Duplicates job={jobParado()} />);
+
+    await screen.findByText("a.jpg");
+    const imgA = container.querySelector<HTMLImageElement>(
+      'img[src="/api/midia/1/preview"]',
+    )!;
+    fireEvent.error(imgA);
+
+    expect(screen.getByText("a.jpg")).toBeInTheDocument();
+    expect(screen.getAllByText("Manter esta").length).toBeGreaterThan(0);
+  });
 });

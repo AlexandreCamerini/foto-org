@@ -1,0 +1,250 @@
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: Localização real e evidência expandida
+status: Fase 7 em andamento (07-10 Task 1 feita — docs; Task 2/3 pendentes por escolha do dono)
+stopped_at: "Phase 7 Plan 10 Task 1 executed — Task 2 (sessão real com chave) adiada pelo dono"
+last_updated: "2026-08-18T23:11:18.217Z"
+last_activity: "2026-08-18 — 07-09 fechado: scripts/medir_score_llm_pasta.py mediu o classificador de pasta contra verdade determinística do catálogo (mesmo payload/schema de produção). Dono rodou a medição real no próprio terminal (4 pastas de amostra, zero erros nos dois campos: categoria 2/2 acerto, cidade/país 2/2 recusa segura de D-06) e decidiu manter SCORES_REFERENCIA[\"llm_pasta\"] em 0.55 — agora medido (D-081), não mais PROVISÓRIO. docs/CONFIANCA.md documenta a origem nova. Amostra explicitamente preliminar (ARCH-01 deferido). GENAI-03 continua Pending — 07-10 reserva a marcação dos três requisitos GENAI para depois de checkpoint humano com evidência real."
+progress:
+  total_phases: 6
+  completed_phases: 1
+  total_plans: 19
+  completed_plans: 19
+  percent: 17
+---
+
+# Project State
+
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-08-16)
+
+**Core value:** Toda sugestão é auditável até a evidência que a gerou;
+nenhuma operação física acontece sem revisão humana e dry-run.
+**Current focus:** v2.0 — Fase 7 em andamento (classificação de pasta por
+GenAI); 07-01 (persistência), 07-02 (cliente Claude), 07-03 (pré-filtro +
+custo), 07-04 (gate + endpoints), 07-05 (integração na cascata), 07-06
+(assistente frontend, passos 0-3), 07-07 (assistente frontend, passos 4-5)
+e 07-08 (ponto de entrada em Review.tsx) fechados, próximo é 07-09 (medição
+do score de llm_pasta).
+
+## Current Position
+
+Phase: 7 — Classificação de pasta por GenAI (In Progress)
+Plan: 9/10 concluído, 07-10 Task 1/3 concluída — próximo: 07-10 Task 2 (sessão real de 10 itens com a chave do dono, servidor precisa subir com ANTHROPIC_API_KEY no ambiente)
+Status: docs/ARQUITETURA.md e docs/PRIVACIDADE.md documentam o recurso (commit 81f0553). Task 2 (checkpoint humano, 10 itens, evidência real incl. payload enviado) e Task 3 (fechar GENAI-01..03 em REQUIREMENTS.md) adiadas por escolha explícita do dono (2026-08-18) — não são blocker técnico, é agenda. GENAI-01..03 continuam Pending até a evidência real existir.
+Last activity: 2026-08-18 — 07-09 fechado: scripts/medir_score_llm_pasta.py mediu o classificador de pasta contra verdade determinística do catálogo, mesmo payload/schema de produção. Dono rodou a medição real (4 pastas de amostra, zero erros nos dois campos — categoria 2/2 acerto, cidade/país 2/2 recusa segura de D-06) e decidiu manter SCORES_REFERENCIA["llm_pasta"] em 0.55 — sai de PROVISÓRIO para medido (D-081). docs/CONFIANCA.md documenta a origem nova, distinguindo-a de `llm` (advisor de cluster) e `pasta` (parse determinístico). Amostra explicitamente preliminar (base pequena da Fase 7, ARCH-01 deferido). GENAI-03 continua Pending — 07-10 reserva a marcação dos três requisitos GENAI para depois de checkpoint humano com evidência real.
+
+Progresso v2.0: [██░░░░░░░░] 1/6 fases (Fase 7 em andamento, 9/10 planos)
+
+## Performance Metrics
+
+**Velocity:**
+
+- Total plans completed: 19
+- Average duration: - min
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 01 | 1 | - | - |
+| 02 | 1 | - | - |
+| 03 | 2 | - | - |
+| 04 | 7 | - | - |
+| 05 | 5 | - | - |
+| 06 P01 | 24min | 3 tasks | 4 files |
+| 06 P02 | 9min | 3 tasks | 6 files |
+| 06 P03 | 14min | 2 tasks | 2 files |
+| 06 P04 | 55min | 2 tasks | 6 files |
+| 06 P04b (correção D-077) | ~90min | 5 tasks | 6 files |
+| 06 P05 | ~35min | 3 tasks | 3 files |
+| 06 P06 | ~25min | 3 tasks | 5 files |
+| 06 P07 | ~20min | 2 tasks | 4 files |
+| 06 P08 | ~25min | 3 tasks | 2 files |
+| 06 P08b (correção D-078) | ~35min | 4 tasks | 4 files |
+| 07 P01 | ~20min | 3 tasks | 5 files |
+| 07 P02 | ~25min | 3 tasks | 2 files |
+| 07 P03 | ~15min | 3 tasks | 5 files |
+| 07 P04 | ~20min | 3 tasks | 5 files |
+
+**Recent Trend:**
+
+- Last 5 plans: 07-04 (~20min), 07-05 (~15min), 07-06 (~35min), 07-07 (~50min), 07-08 (~25min)
+- Trend: -
+
+*Updated after each plan completion*
+| Phase 07 P05 | ~15min | 3 tasks | 4 files |
+| Phase 07 P06 | ~35min | 3 tasks | 3 files |
+| Phase 07 P07 | ~50min | 3 tasks | 2 files |
+| Phase 07 P08 | ~25min | 3 tasks | 2 files |
+| Phase 07 P09 | ~20min | 3 tasks | 4 files |
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table (sample of the
+73-entry log in `docs/DECISOES.md`).
+
+Recent decisions affecting current work:
+
+- Ordem das fases v2.0 fixada pelo dono na discussão de
+  `/gsd:new-milestone`: EXIF → GenAI → Picker → Sidebar → Confiança →
+  Corroboração. Não reordenar sem sinalizar. Coincide com a única troca
+  que a pesquisa recomendava (Picker antes de Sidebar, por conflito de
+  arquivo).
+
+- D-075 autoriza escrita EXIF de localização em campo vazio (revoga parte
+  do invariante 7). EXIF-03 refina "hash antes/depois" de D-075 para
+  **diff de tags** antes/depois — hash de arquivo inteiro muda por
+  construção numa mutação intencional. Ver nota em REQUIREMENTS.md §
+  Traceability.
+
+- GenAI de pasta é **interativa por sessão** (custo confirmado antes de
+  rodar), não varredura em lote — fecha a lacuna "batch vs. síncrono" da
+  pesquisa. Modelo é **Sonnet 5, nunca Haiku** (precedente D-059/D-060;
+  entrada esparsa aumenta risco de alucinação).
+
+- Índice de saúde é **distribuição por dimensão** (% alta em localização,
+  data, categoria + bucket "sem evidência"), nunca score único — score
+  combinado violaria o modelo elo-mais-fraco de D-017 um nível acima
+  (classe de bug que já vazou em D-071).
+
+- Progresso de importação continua **linear** com granularidade extra
+  (taxa, ETA, contagem) — gauge radial descartado explicitamente pelo
+  dono.
+
+- Corroboração generalizada aterrissa **estreita**, direto em
+  `grouping/correlacao.py`; abstração compartilhada só com segundo
+  consumidor real. Campo categórico usa correspondência exata, nunca
+  limiar fuzzy. Nenhum bônus de confiança sem medição própria contra
+  acervo real (a calibração de GPS de D-074 não transfere por analogia).
+
+- Roadmap scope: mapa do lugar estimado e demais itens 1-4 do backlog v2+
+  do `docs/ROADMAP.md` já estavam implementados (confirmado via
+  D-031/032/033/034/065 + implementação de templates 2026-08-02) — não
+  entraram como requisitos v1, foram para PROJECT.md § Validated.
+
+- Reconectar volumes desmontados (Lightroom + Apple Fotos, ~90 mil
+  registros) é o candidato de maior alavancagem do backlog, mas **não é
+  decisão ainda** — ficou em REQUIREMENTS.md v2 (ARCH-01), fora das 5
+  fases deste roadmap. Trazer ao dono antes de qualquer trabalho nele.
+
+- `docs/NAVEGACAO.md` e `docs/EMPACOTAMENTO.md` tratados como DOC-precedence
+  (não ADR-locked) nesta sessão, por aprovação explícita do dono — ver
+  `.planning/INGEST-CONFLICTS.md`.
+
+- Plano 06-02 entregou as primitivas de escrita (`ExifToolWriter.escrever`,
+  `verificacao.diferenca`/`campo_gravado`, `pasta_sincronizada`,
+  `formatos.suportado`/`motivo`) — verificação por diff completo de tags é
+  o único sinal de sucesso aceito (exit code do exiftool provadamente
+  insuficiente, Pitfall 2). Nenhum requisito EXIF-02/03/04/05 foi marcado
+  como completo — são fundação, não o comportamento fim-a-fim (mesma
+  disciplina que 06-01 já seguiu). `formatos.py` continua provisório
+  (`MEDIDO_EM=None`) até 06-04 medir contra o acervo real.
+
+- Plano 06-03 entregou `ExifWritePlanner.criar_plano_exif()`: consulta
+  única de candidatos (GPS herdado ou cidade/país resolvidos), exclusão
+  de mídia já resolvida por plano anterior (com reabertura automática
+  após falha parcial), status/motivo por campo e classificação de linha
+  (sidecar opt-in D-06, sync opt-out-com-aviso D-07). Achado que valia a
+  pena registrar: `MediaFile.extensao` é gravada sem o ponto pelo
+  scanner, mas `formatos.suportado()/motivo()` (06-02) espera extensão
+  pontuada — todo chamador futuro dessas funções via `MediaFile.extensao`
+  precisa da mesma conversão `f".{extensao.lower()}"`. Nenhum requisito
+  EXIF-01/02/05 foi marcado como completo — este plano entrega o lado do
+  plano, não o comportamento fim-a-fim (mesma disciplina de 06-01/06-02).
+
+- [Phase 06-04]: D-076: allowlist medida contra o acervo real — nenhum formato aprovou (jpg/cr2/dng/tif reprovam por deslocar offset de bloco binário pré-existente ao inserir metadado; tif também por avisos novos). FORMATOS_APROVADOS vira frozenset() vazio, sidecar XMP é o único caminho de escrita hoje. Estender TAGS_ESTRUTURAIS_ESPERADAS fica como decisão futura do dono, não decidida aqui. — Byte a byte da miniatura embutida idêntico antes/depois confirma que o deslocamento é relocação, não corrupção — mas mudar a allowlist anti-mascaramento (EXIF-04) é política de segurança fora do escopo de arquivo deste plano.
+- [Phase 06-04b]: D-077: dono escolheu allowlist byte a byte (AskUserQuestion) sobre o achado em aberto de D-076 — jpg/cr2 remedidos e aprovados (20/20, 12/12), dng/tif continuam reprovados por motivos distintos (dng: parsing de offset multi-tile; tif: causa não relacionada a offset, inalterada). verificacao.py ganha esperadas_condicionais/reclassificar_deslocamentos_de_offset, categoria distinta de TAGS_ESTRUTURAIS_ESPERADAS, fail-safe em toda borda.
+- [Phase 06-05]: `ExifWriteExecutor.dry_run()`/`executar()` fecham o loop plano→dry-run→execução→auditoria: disco relido ao vivo em lote, reconferência TOCTOU antes de cada escrita, veredito sempre pelo diff completo de tags (nunca returncode), falha parcial registrada campo a campo, backup `_original` preservado até diff+avisos aprovarem tudo. `_executar_item` chama `reclassificar_deslocamentos_de_offset()` (D-077) depois de `diferenca()` — sem isso toda escrita real em `.jpg`/`.cr2` reprovaria de novo, regressão nomeada por 06-04b. Achado durante a integração: `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` precisou ganhar `File:FileType`/`FileTypeExtension`/`MIMEType` (andaime de criação de sidecar `.xmp` novo, nunca exercitado pela suíte de 06-02). Nenhum requisito EXIF-01..05 foi marcado como completo — falta a UI de aprovação (06-06+).
+- [Phase 06]: 06-06: seis endpoints /api/exif/* espelhando /api/operacoes*, ExifWriteRepository lendo veredito e auditoria via detalhe['exif_plan_id'], JobManager.iniciar_escrita_exif rodando ExifWriteExecutor em background. Nenhum requisito EXIF-01/02/03/05 marcado completo — aprovação do dono via UI (06-07+) ainda falta.
+- [Phase 06]: 06-07: EscritaExif.tsx (esqueleto) no molde de Operations.tsx, sem campo de destino (escrita in-place, D-075) — sidebar de planos, veredito com verbo "gravar", CTA "Gravar N arquivos" desabilitada sem dry-run aprovado (já dispara job.executarEscritaExif(id, null) — plano inteiro, sem seleção), estado vazio "Nada para gravar" e linha por item com os três chips de campo (GPS/Cidade/País: pronto/pulado/sem_valor). Checkbox por linha, linhas B/C (sidecar/pasta sincronizada) e detalhamento pós-execução ficam para 06-08 por delimitação explícita do próprio plano. Aba "Localização" global (fora de ABAS_COM_FONTE). Nenhum requisito EXIF-01/02 marcado completo — comportamento pós-execução (parte de EXIF-03) só fecha com 06-08.
+- [Phase 06]: 06-08: EscritaExif.tsx completo — checkbox por linha (`Set<number> marcados`) semeado do servidor a cada troca de plano, nunca de "todos marcados" (D-01/D-02); CTA envia `Array.from(marcados)`, nunca `null`. Linha tipo B (formato não suportado): fundo `bg-atencao/5`, motivo sempre visível como texto (D-05), badge redundante de sidecar `.xmp` (D-06), checkbox nasce desmarcado, chips com sufixo `→ .xmp`. Linha tipo C (pasta sincronizada): badge aditivo, linha continua marcada (D-07). Linha B+C mostra os dois badges. `CORES_CAMPO` declarado no próprio arquivo (não estende `Operations.tsx::CORES_STATUS` — sem categoria para "pulado deliberado"). Detalhamento pós-execução de 3 segmentos (✓/✗/—) com linha `falha — {Campo}: {motivo}` por campo em falha (EXIF-03), `item.erro`/`backup_original` surfaceados quando existem. 12 testes vitest presos ao Copywriting Contract da UI-SPEC. **EXIF-01, EXIF-03 e EXIF-05 marcados completos em REQUIREMENTS.md** — fecham o comportamento visível ao dono para os três; EXIF-02/EXIF-04 continuam Pending (garantias de backend, fora do `requirements` frontmatter deste plano). Achado de execução: `roadmap.update-plan-progress` conta arquivos `*-PLAN.md` vs `*-SUMMARY.md` na pasta da fase e os dois batem em 9 mesmo com 06-09 (gate/verificação) ainda não executado, porque `06-04b-SUMMARY.md` (correção sem PLAN.md numerado próprio) infla a contagem de summaries — a ferramenta marcou a Fase 6 como Complete por engano; corrigido manualmente para 8/9 In Progress. Falta 06-09 (documentação de arquitetura, gate completo, verificação humana) antes de fechar a fase de verdade.
+- [Phase 06]: D-078: IPTC:EnvelopeRecordVersion entra no andaime incondicional (achado real do checkpoint 06-09, JPEG Canon R6m2) — .jpg remedido 20/20, sem mudança em FORMATOS_APROVADOS. Achado à parte, registrado como blocker: JPEG com bloco IPTC pré-existente (Lightroom) produz aviso novo do exiftool ao escrever, sem allowlist de avisos hoje — fora do escopo desta correção.
+- [Phase 07]: 07-01: D-02 aplicada por CAMPO em ClassificacaoPastaRepository.salvar_propostas (mais estrita que a guarda por linha de LexicoRepository) — cidade/pais/categoria/evento preenchidos nunca são sobrescritos; linha origem='manual' é inteiramente intocável.
+- [Phase 07]: 07-02: ClassificacaoDePastaClaude — chamada única em lote (D-03), categoria restrita ao vocabulário canônico de engine.py, D-02/D-06 reaplicados sobre a resposta do modelo (não só no prompt). GENAI-02 continua Pending — falta 07-04 conectar o cliente a um trigger real de UI/endpoint.
+- [Phase 07]: 07-03: D-079 — dono decidiu (via AskUserQuestion, respondendo o checkpoint:decision da Task 1) a opção híbrida sobre a colisão count_tokens × critério 2 do ROADMAP: estimativa local conservadora antes de confirmar (nada sai da máquina), contagem exata só depois, mostrada no resumo pós-execução (passo 5). candidatas_de_pasta.py::candidatas() (D-01) e custo_genai.py::estimar()/contar_exato() (D-04/D-05) implementados conforme a decisão; 07-UI-SPEC.md atualizado no mesmo commit. GENAI-01 continua Pending — falta 07-04 conectar as duas peças a um endpoint/UI real.
+- [Phase 07-04]: SessaoDeClassificacaoDePasta liga o gate de dois consentimentos (D-080) aos endpoints /api/genai-pasta/*. GENAI-01/GENAI-02 continuam Pending até 07-06/07-07 (frontend) existirem.
+- [Phase 07-05]: llm_pasta é degrau PROVISÓRIO (score 0.55) e SEMPRE fallback na cascata — entra em _evidencias_geo depois da hierarquia de pasta falhar e em _categoria depois do advisor de cluster; medição fica para 07-09. `SuggestionEngine(pastas_classificadas=...)` lido em lote por `gerar()`, jobs.py repassa `ClassificacaoPastaRepository.aprovadas()`. GENAI-03 continua Pending — falta 07-06/07-07 (UI) para o comportamento ficar visível/acionável.
+- [Phase 07-06]: `api.ts` ganhou os tipos/funções de `/api/genai-pasta/*`; `ClassificacaoPasta.tsx` entrega os passos 0-3 do assistente (gate de dois consentimentos, candidatas opt-out D-01, custo sempre "até" com a nota de honestidade D-079, chamada em voo não-cancelável). `pastaCurta` foi reproduzida localmente em vez de importada de `Review.tsx` (não exportada lá, e Review.tsx importa este componente em 07-08 — importar de volta criaria ciclo de módulos). Passos 4/5 (revisão/aprovação) são marcador mínimo até 07-07. GENAI-01 continua Pending — falta 07-07 (revisão/aprovação) e 07-08 (ponto de entrada em Review.tsx) para o dono conseguir usar o recurso de ponta a ponta.
+- [Phase 07-07]: `ClassificacaoPasta.tsx` fecha o assistente com os passos 4 (revisão agrupada por PASTA — propostas achatadas por campo no backend, reagrupadas no cliente, D-01/D-03; pastilha "IA · pasta" em paleta `herdado`, nível de confiança fixo "média" porque `SCORES_REFERENCIA["llm_pasta"]` (0.55, provisório) não é devolvido por proposta; resumo de D-06 para `pastas_sem_resposta` como uma linha só) e 5 (concluído, custo real honesto via D-079). Montagem do modal ganhou recuperação de sessão paga não aprovada (`api.propostasGenaiPasta()`, D-07) — falha na consulta cai no caminho normal, nunca trava. 19 testes vitest no arquivo (182 na suíte). GENAI-01/02/03 continuam Pending — falta 07-08 (ponto de entrada em Review.tsx) para o dono conseguir abrir o modal.
+- [Phase 07-08]: `Review.tsx` ganha o botão "Classificar pastas por IA…" (contorno/md, imediatamente antes de "Gerar/atualizar sugestões") e a montagem condicional de `ClassificacaoPasta` como último filho do elemento de raiz — ponto de montagem confirmado por leitura íntegra do arquivo pré-edição (`return (` em 134, raiz 135-380, exatamente 500 linhas), não assumido do `07-PATTERNS.md`, que registrava o item como não verificado. `PorQue` ganha a pastilha "IA · pasta" (paleta `herdado`, distinta da neutra de colisão de fonte CONS-01) para `ev.origem === "llm_pasta"` — `ev.origem` já trafegava ponta a ponta, nenhuma mudança de backend/`api.ts` foi necessária. 4 testes vitest novos (24 no arquivo, 186 na suíte). **GENAI-03 NÃO foi marcado completo** apesar de estar no `requirements:` do frontmatter deste plano — 07-10 reserva explicitamente a marcação dos três requisitos GENAI para depois de um checkpoint humano com evidência real (mesmo rigor da Fase 6); marcar aqui anteciparia essa conclusão. Ver `07-08-SUMMARY.md` § Deviations para duas correções de registro (nenhuma de código): números de linha do commit da Task 1 estavam imprecisos (arquivo batia exatamente com o que o plano assumia, sem divergência), e a acceptance criteria de grep da Task 1 subconta por 1 (`setClassificacaoAberta` não casa com o padrão minúsculo por case-sensitivity, não por ausência do disparo).
+- [Phase 07]: D-081: score de llm_pasta permanece 0.55, agora medido (nao mais PROVISORIO) contra verdade deterministica do catalogo — 4 pastas de amostra, zero erros nos dois campos; amostra pequena e preliminar (ARCH-01 deferido).
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+- **Fase 11 é a de maior risco de regressão do milestone**: toca o
+  comportamento de herança de GPS já calibrado e medido por D-074
+  (40.678 fotos, cobertura 91,1%). Critério 5 da fase exige provar
+  que o GPS sai idêntico.
+
+- **Fases 7, 10 e 11 medem contra uma base pequena, por decisão explícita
+  do dono (2026-08-18).** `catalog.db` de produção só tem 2 fontes
+  cadastradas hoje — `~/Users/acamerini/Pictures/2026` e
+  `/Volumes/Externo/Fotos/Do Peru ao Chile` (~1.400 arquivos). As duas
+  fontes que formam o grosso do acervo real (Apple Fotos só-iCloud,
+  ~44.661 registros; Lightroom em volume desmontado, ~45.397 registros)
+  não estão cadastradas — reconectá-las é ARCH-01, deferido pra v3+
+  (ver REQUIREMENTS.md), fora de escopo desta milestone. Medição de
+  custo do GenAI, baseline de confiança e calibração dos comparadores de
+  corroboração são preliminares contra ~1.400 arquivos; podem precisar
+  de reajuste se/quando ARCH-01 entrar. Dono optou por seguir assim em
+  vez de abrir ARCH-01 agora.
+
+- **Lacunas de pesquisa a fechar antes/durante a Fase 6** (flagadas em
+  `research/SUMMARY.md`, confiança MÉDIA e de fonte externa): confiabilidade
+  de escrita em CR3/HEIC e comportamento de iCloud Drive/Dropbox sob
+  rename atômico do exiftool. Verificar contra a distribuição real de
+  formatos do acervo antes de fechar escopo da fase.
+
+- `catalog.db` de produção foi zerado em 2026-08-16 (backup em
+  `catalog-antes-do-reset-20260816-013503.db`); nova varredura completa
+  ainda não rodou. Não bloqueia planejamento, mas fases que dependem de
+  medição contra o acervo real (ex. Phase 5 baseline de performance)
+  precisarão de um catálogo populado primeiro.
+
+- Dívida técnica relevante às fases 1-2: motor de sugestões e detector de
+  duplicatas fazem full-scan em memória sem caminho incremental; nenhuma
+  reconciliação de boot para `OperationPlan.EXECUTANDO` travado. Ver
+  `.planning/codebase/CONCERNS.md`.
+
+- ~~Escrita EXIF direta (feature #1 do roadmap v2.0) hoje não tem NENHUM formato com suporte medido~~ — **resolvido em parte por D-077 (06-04b, 2026-08-18):** o dono escolheu allowlist byte a byte (`verificacao.reclassificar_deslocamentos_de_offset`), não a extensão incondicional de `TAGS_ESTRUTURAIS_ESPERADAS` cogitada em D-076. `.jpg`/`.cr2` remedidos e aprovados (20/20, 12/12 amostras). `.dng` continua reprovado — duas de suas tags de offset (tiles demais) não dão para verificar byte a byte com o dump padrão do exiftool, fica fail-safe. `.tif` continua reprovado por motivo sempre não relacionado a offset. `.dng`/`.tif`/`.cr3`/`.heic`/`.heif` seguem no fallback de sidecar XMP.
+
+- ~~**Atenção para 06-05 (ExifWriteExecutor):** o gate de verificação da escrita real não pode chamar só `verificacao.diferenca()` — precisa chamar `reclassificar_deslocamentos_de_offset()` depois.~~ — **resolvido em 06-05 (2026-08-18):** `_executar_item` chama a reclassificação no ponto exato especificado, com o backup `<alvo>_original` do writer como par "antes" byte a byte; provado de ponta a ponta por `test_executar_nao_regride_por_deslocamento_de_offset` (miniatura injetada via exiftool). Ver `06-05-SUMMARY.md`.
+- Escrita EXIF em JPEG com bloco IPTC pré-existente (gravado por outra ferramenta antes deste app, ex. Lightroom) produz aviso novo do exiftool "IPTCDigest is not current. XMP may be out of sync" — reprova a verificação D-04 mesmo com IPTC:EnvelopeRecordVersion já corrigido (D-078). Não existe allowlist de avisos hoje (TAGS_ESTRUTURAIS_ESPERADAS só cobre tags). Achado real testando /Users/acamerini/Pictures/2026/Serena 15 Anos/ACM_7122.JPG (cópia descartável), fora do escopo de D-078. Mesma classe de decisão que D-076/D-077 (allowlist byte a byte de offset) — aguarda dono.
+
+## Deferred Items
+
+Items acknowledged and carried forward from previous milestone close:
+
+| Category | Item | Status | Deferred At |
+|----------|------|--------|-------------|
+| Reconhecimento/visão | FACE-01, FACE-02, VIS-01 (v2) | Deferred — bloqueado por alcance de pixel (~90% inalcançável) | Roadmap init, 2026-08-16 |
+| Metadados | META-01 sidecar XMP (v2) | Deferred — sem destino de escrita para ~90 mil registros | Roadmap init, 2026-08-16 |
+| Infraestrutura | SYNC-01 SyncProvider, DAM-01 lacunas de esquema (v2) | Deferred — sem urgência medida / não-bloqueio de MVP (D-008) | Roadmap init, 2026-08-16 |
+| Decisão pendente | ARCH-01 reconectar volumes (v2) | Pending dono — maior alavancagem medida, forma ainda não aprovada | Roadmap init, 2026-08-16 |
+| UAT | Fase 2 — verificação visual humana do filtro "Tudo" (acervo × testemunha) | Deferred — pendente desde 2026-08-16 (catálogo estava zerado na época), `02-HUMAN-UAT.md` (1 cenário aberto), `02-VERIFICATION.md` status `human_needed` | Milestone v1.0 close, 2026-08-18 |
+
+## Session Continuity
+
+Last session: 2026-08-18T23:08:29.265Z
+Stopped at: Phase 7 Plan 09 executed — próximo: 07-10-PLAN.md
+Resume file: None
+
+## Operator Next Steps
+
+- Executar `07-10-PLAN.md` — fecha a fase: documentação de
+  arquitetura/privacidade e checkpoint humano com evidência real antes de
+  marcar GENAI-01/02/03 como completos em REQUIREMENTS.md
+
+- Fases 6, 7, 8, 9 e 10 estão marcadas com `UI hint` no ROADMAP —
+  considerar `/gsd:ui-phase` antes de planejar cada uma (a da Fase 7 é
+  estreita: só a confirmação de custo)

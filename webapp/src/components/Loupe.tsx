@@ -15,6 +15,7 @@ interface Props {
 export default function Loupe({ itens, index, onNavegar, onFechar }: Props) {
   const media = itens[index];
   const [zoom100, setZoom100] = useState(false);
+  const [falhouPreview, setFalhouPreview] = useState(false);
 
   // Pré-carrega as vizinhas para navegação instantânea.
   useEffect(() => {
@@ -23,6 +24,7 @@ export default function Loupe({ itens, index, onNavegar, onFechar }: Props) {
       if (m) new Image().src = api.previewUrl(m.id);
     }
     setZoom100(false);
+    setFalhouPreview(false);
   }, [index, itens]);
 
   if (!media) return null;
@@ -35,7 +37,7 @@ export default function Loupe({ itens, index, onNavegar, onFechar }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/95">
       <header className="flex items-center gap-3 px-4 py-2 text-texto-2">
-        <span className="font-semibold text-texto">{media.nome}</span>
+        <span className="font-titulo text-texto">{media.nome}</span>
         <span>{dataLegivel}</span>
         <span>
           {index + 1} / {itens.length}
@@ -58,18 +60,33 @@ export default function Loupe({ itens, index, onNavegar, onFechar }: Props) {
         className={`flex min-h-0 flex-1 ${
           zoom100 ? "overflow-auto" : "items-center justify-center overflow-hidden"
         }`}
-        onClick={() => setZoom100((v) => !v)}
+        onClick={() => !falhouPreview && setZoom100((v) => !v)}
       >
-        <img
-          src={api.previewUrl(media.id)}
-          alt={media.nome}
-          draggable={false}
-          className={
-            zoom100
-              ? "max-w-none cursor-zoom-out"
-              : "max-h-full max-w-full cursor-zoom-in object-contain"
-          }
-        />
+        {falhouPreview ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+            <span aria-hidden className="text-5xl text-texto-3">
+              ⊘
+            </span>
+            <div className="text-texto-2">
+              Não foi possível carregar esta imagem em alta resolução.
+            </div>
+            <div className="text-texto-3">
+              O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação.
+            </div>
+          </div>
+        ) : (
+          <img
+            src={api.previewUrl(media.id)}
+            alt={media.nome}
+            draggable={false}
+            onError={() => setFalhouPreview(true)}
+            className={
+              zoom100
+                ? "max-w-none cursor-zoom-out"
+                : "max-h-full max-w-full cursor-zoom-in object-contain"
+            }
+          />
+        )}
       </div>
 
       <footer className="flex justify-center gap-1 overflow-x-auto px-4 py-2">

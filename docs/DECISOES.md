@@ -2631,3 +2631,616 @@ inteiro passa a ser contado numa passada só
   fechado (a fração 3.220/8.192 da regra 6 que era pasta cronológica); a
   fração por keyword fraca (regra 2, 3.300 fotos) e o resto de "álbum +
   duração" continuam abertos.
+
+---
+
+## D-074 — Herança de GPS confronta os dois lados em vez de só descartar o perdedor
+
+- Fase: fatia independente (fora do roadmap de fase), a pedido do
+  orquestrador de agentes.
+- Classe: A
+- Data: 2026-08-17
+- Contexto: `herdar_gps` já buscava doadora dos DOIS lados (antes e
+  depois) desde a versão que atravessa vizinhos da mesma origem
+  (`procurar`, comentário sobre os 27.117 candidatos barrados), mas
+  descartava o lado perdedor inteiro com `min(candidatos, key=...)` — pura
+  extrapolação de âncora única. Quando a doadora mais próxima e a mais
+  distante discordam geograficamente (uma indica São Paulo, a outra
+  Campinas), a foto do meio está em algum lugar EM TRÂNSITO — afirmar a
+  cidade da mais próxima como se a outra não existisse é a "sugestão
+  errada com aparência de fundamentada" que D-025 já havia nomeado, agora
+  aplicada ao caso de duas evidências, não uma.
+- Medido: `scripts/calibrar_raio_incerteza.py --concordancia` (mesma
+  técnica de D-032 — foto com GPS próprio tratada como herdeira
+  hipotética), contra o backup pré-reset com GPS em 4 fontes
+  (`catalog-antes-do-reset-20260816-013503.db`, 40.678 fotos com GPS,
+  39.443 pares na janela de 12h). Dos 33.889 pares com doadora testável
+  dos dois lados (números abaixo já são os corrigidos após a revisão por
+  sub-agente ter achado um bug na PRÓPRIA medição — ver "Achado na
+  revisão" adiante):
+  - **83,8% concordam** (os círculos de incerteza de cada lado se
+    sobrepõem) — cobertura real 97,5%, contra 94,2% do subconjunto de
+    âncora única na mesma amostra.
+  - **2,1% discordam** — e é aí que mora o problema que esta fatia
+    resolve: cobertura de só **91,1%** no geral, e **50,9%** (quase cara
+    ou coroa) na banda de 1–10 min — quer dizer, quase metade das vezes
+    em que os dois lados discordam nessa banda, a coordenada da doadora
+    mais próxima sozinha estaria FORA do próprio círculo de incerteza
+    dela. É exatamente o padrão de doadora com coordenada errada que
+    D-032 já havia flagueado (2019-04-19, Apple Fotos gravando "casa" a
+    163 km do lugar real) — só que ali só um caso ficou registrado; a
+    medição agora generaliza: quando a doadora mais próxima está errada,
+    a mais distante costuma discordar dela, e esse desacordo é o sinal
+    que sobrava sem uso.
+  - **Testado e descartado**: apertar o raio de incerteza quando os dois
+    lados concordam. `min(raio_incerteza(delta_perto),
+    raio_incerteza(delta_longe))` já é, por construção,
+    `raio_incerteza(delta)` de hoje — `delta` já é sempre o Δt do lado
+    mais próximo (a escolha de doadora sempre prefere o mais próximo) e
+    `raio_incerteza` é monótona em Δt. Não há aperto de graça aí.
+    Testei também um fator de encolhimento extra sobre o raio dos
+    concordantes: a cobertura **bruta** sobe suave e engana (dominada
+    pelos 94,8% dos pares concordantes que estão a ≤1 min, onde o raio já
+    está no piso e quase qualquer fator cobre); ponderando por banda —
+    como a própria metodologia de D-032 exige, porque a herdeira real se
+    concentra em 30 min–12 h, não em segundos — a banda de 1–10 min só
+    alcança 90% de cobertura por volta de K≈0,7–1,0, ou seja, quase sem
+    encolhimento livre. **Nenhum fator novo foi adicionado.**
+- Escolhida — três regras, sem constante nova:
+  1. Cada campo (cidade, região) é confrontado contra o lado oposto
+     quando o Δt desse lado também cabe na janela daquele campo
+     (D-025). Concordam se a distância entre as duas doadoras cabe na
+     soma dos dois `raio_incerteza` — reusa a constante calibrada de
+     D-032, não inventa outra.
+  2. Concordam: o campo é mantido, com o MESMO fator de sempre (Δt do
+     lado mais próximo, sem bônus de score) — só ganha uma marca
+     (`Heranca.concordancia`) e uma frase extra na justificativa
+     ("confirmada por outra foto do lado oposto no tempo").
+  3. Discordam: o campo não é herdado por ninguém — nem pelo lado mais
+     próximo. Se uma granularidade mais grossa (ex.: região quando só
+     cidade discordou) não chegou a ser testada — porque o Δt do lado
+     distante não cabe na janela dela — ela segue como sempre seguiu,
+     sem teste, sem regressão.
+  País fica de fora do teste inteiro, de propósito: `raio_incerteza` tem
+  teto de 50 km (deslocamento de pessoa em 12h), e duas doadoras a
+  300 km — claramente no mesmo país — falhariam um teste calibrado
+  numa escala cem vezes menor. Resolver isso direito pede
+  geocodificação, que `grouping/correlacao.py` deliberadamente não tem.
+- Por quê: o ganho real e mensurável é reportar quando NÃO afirmar, não
+  inflar confiança quando afirma. A cobertura do subconjunto discordante
+  (91,1%, com um poço de 50,9% numa banda inteira) é o preço que o modelo
+  anterior pagava em silêncio; descartar esse campo é assumir a incerteza
+  real em vez de escondê-la atrás do "doador mais próximo venceu".
+- Achado na revisão por sub-agente, antes do commit, na PRÓPRIA medição:
+  `montar_pares_duplo` (script) parava na janela mais estreita (cidade,
+  600 s) para decidir se um par era "testável", em vez da mais larga que
+  o Δt escolhido sustenta (região, 7200 s) — igual `herdar_gps` faz
+  campo a campo. Isso subcontava como "única" todo par em que só região
+  era de fato confrontada em produção, justamente na banda mais citada
+  como evidência (1–10 min). Corrigido antes do commit; os números acima
+  já são os corrigidos (eram 78,2%/1,9%/91,5%/48,8%/31.577 antes do
+  ajuste — a conclusão não mudou, só a precisão dela).
+- Não modelado: hora de qualquer um dos três lados envolvidos (a foto que
+  herda, o doador escolhido ou o doador do outro lado) vinda do mtime do
+  arquivo derruba a confiabilidade do Δt usado no teste geométrico — o
+  campo simplesmente não é testado nesse caso (fica como se só houvesse um
+  lado), em vez de inventar um multiplicador de penalidade sem dado que o
+  sustente (mesma postura de D-032 para `hora_incerta`). Achado na revisão
+  por sub-agente antes do commit: a primeira versão só olhava a hora do
+  lado DESCARTADO — deixava passar o caso em que a foto ou o doador
+  ESCOLHIDO tinham hora incerta, produzindo uma justificativa que dizia
+  "a proximidade pode ser coincidência" e "confirmada por outra foto" na
+  mesma frase. Corrigido antes do commit.
+- Como reverter: `_confrontar_com_outro_lado` em
+  `fotoorganizer/grouping/correlacao.py` é a função isolada — remover a
+  chamada em `herdar_gps` volta ao `min(candidatos, ...)` de sempre.
+  `scripts/calibrar_raio_incerteza.py --concordancia` refaz a medição
+  contra qualquer catálogo.
+- Status: decidido por medição.
+
+## D-075 — Escrita EXIF de localização (lat/long, cidade, país) autorizada em campo vazio, revoga parte do invariante 7
+
+- Fase: discussão do milestone v2.0 (`/gsd:new-milestone`), antes do
+  roadmap.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: o invariante 7 original ("MVP não implementa exclusão de fotos
+  nem escrita de EXIF — futuro: sidecar XMP apenas") tratava sidecar XMP
+  como o único caminho futuro para gravar localização corrigida/herdada.
+  O dono pediu explicitamente, em conversa, escrita EXIF direta no
+  arquivo original para as 3 evidências de localização que o motor de
+  sugestões já produz (GPS lat/long herdado por D-074, cidade e país
+  inferidos) — perguntado e confirmado via `AskUserQuestion`, não
+  assumido.
+- Decisão: EXIF direto é autorizado, mas com escopo estreito e o mesmo
+  rigor de `operations/`, não uma porta aberta para qualquer campo:
+  - Campos: só localização (GPS lat/long, cidade, país). Data, câmera,
+    autor e qualquer outro campo EXIF seguem fora de escopo — precisam de
+    nova decisão se algum dia entrarem.
+  - Só escreve quando o campo já está vazio no original. Nunca sobrescreve
+    valor EXIF existente, mesmo que a sugestão discorde dele — mesma
+    postura não-destrutiva do invariante 3 (nunca sobrescrever no
+    destino), agora aplicada à escrita em metadado do original.
+  - Precisa do mesmo pipeline de `operations/`: plano dry-run revisado
+    antes de aprovação explícita, hash antes/depois de cada escrita,
+    audit log completo. Não é uma escrita direta sem revisão.
+  - Refinamento de forma feito no roadmap da Fase 6 (2026-08-18): "hash
+    antes/depois" aqui quer dizer fato de auditoria, não critério de
+    aprovação — a escrita é mutação intencional, então o hash do arquivo
+    inteiro sempre muda. O critério que aprova é diff completo de tags
+    (as tags de localização esperadas mudaram e nenhuma outra tag mudou).
+    O rigor exigido por este parágrafo continua o mesmo; só a métrica de
+    verificação foi precisada.
+  - Sidecar XMP deixa de ser o único caminho, mas continua disponível como
+    alternativa não-destrutiva quando o dono preferir não tocar o
+    original.
+- Por quê: sidecar XMP exige que o software consumidor (Lightroom,
+  Finder, iCloud, etc.) saiba ler XMP — parte do fluxo real do dono não
+  lê. Gravar no EXIF do original torna o dado utilizável em qualquer
+  ferramenta, ao custo de ser a primeira escrita em arquivo original do
+  produto. O escopo estreito (só localização, só campo vazio) e o rigor
+  de `operations/` existem justamente para não abrir precedente maior do
+  que o pedido.
+- Como reverter: remover a permissão do invariante 7, voltar ao texto
+  anterior ("MVP não implementa... futuro: sidecar XMP apenas"); nenhum
+  código de escrita EXIF ainda existe neste commit — a decisão precede a
+  implementação.
+- Status: decidido pelo dono, aguardando fase de implementação (roadmap
+  v2.0).
+
+## D-076 — Allowlist de formatos com suporte de escrita EXIF, medida contra o acervo real: nenhum formato aprovou
+
+- Fase: 6 — escrita EXIF de localização, plano 06-04
+- Classe: B
+- Data: 2026-08-18
+- Contexto: D-03/D-04 exigiam medição real, não suposição, de quais
+  formatos aceitam a escrita de localização (GPS lat/long, cidade, país —
+  D-075) sem sujar nenhuma tag fora de escopo e sem passar a emitir aviso
+  novo do exiftool. `fotoorganizer/exif_write/formatos.py` (plano 06-02)
+  tinha allowlist provisória (`{jpg, cr2, dng, tif}`, os formatos
+  presentes no catálogo, "sem histórico de corrupção documentado" — uma
+  suposição razoável, não uma medição). `scripts/testar_escrita_exif.py`
+  (plano 06-04) roda o teste, contra cópias descartáveis (`shutil.copy2`
+  em `tempfile.mkdtemp()`, nunca no original) de arquivos reais do
+  `catalog.db` de produção (1.399 registros de acervo: 1.384 `.jpg`, 12
+  `.cr2`, 2 `.dng`, 1 `.tif` — zero `.cr3`/`.heic`/`.heif`, confirma D-09).
+  Usa o MESMO caminho de código de produção (`ExifToolWriter.escrever`,
+  `verificacao.diferenca`/`campo_gravado`/`avisos`), nunca reimplementa a
+  montagem de argumentos.
+- Decisão: **nenhum formato aprovou.** `FORMATOS_APROVADOS` passa de
+  `{jpg, jpeg, cr2, dng, tif, tiff}` (suposição) para `frozenset()`
+  (medido). Tabela completa (amostras = todas as alcançáveis em disco por
+  extensão; `.jpeg`/`.tiff` não amostrados separadamente — mesmo
+  formato/codec de `.jpg`/`.tif`, mesmo resultado por construção):
+
+  | extensão | amostras | veredito  | motivo medido |
+  |----------|---------:|-----------|----------------|
+  | .jpg     | 3        | reprovado | tags inesperadas: `IFD1:ThumbnailOffset`, `MPImage2:MPImageStart` |
+  | .cr2     | 3        | reprovado | tags inesperadas: `IFD0:PreviewImageStart`, `IFD1:ThumbnailOffset`, `IFD2:StripOffsets`, `IFD3:StripOffsets` |
+  | .dng     | 2        | reprovado | tags inesperadas: `IFD0:StripOffsets`, `SubIFD2:JpgFromRawStart`, `SubIFD3/4/5:TileOffsets`, `SubIFD:TileOffsets` |
+  | .tif     | 1        | reprovado | tag inesperada `IPTC:EnvelopeRecordVersion` + avisos novos do exiftool (`IPTCDigest is not current`, `Missing required TIFF GPS tag 0x001b GPSProcessingMethod`) |
+  | .cr3/.heic/.heif | 0 | sem_amostra | zero arquivos no acervo real hoje (D-09) — não testado, não reprovado |
+
+  O critério aplicado é o de D-04 na íntegra, as três condições juntas:
+  (a) `diferenca(antes, depois).inesperadas` vazio; (b) delta de avisos do
+  exiftool vazio (`avisos_depois - avisos_antes`, não "zero depois"); (c)
+  releitura estrutural (`largura`/`altura`/`data_capturada`/`model` via
+  `PurePythonExtractor`) idêntica antes/depois. Uma amostra reprovada
+  reprova a extensão inteira (conservador de propósito). Os quatro formatos
+  reprovaram todos pela condição (a): a escrita insere um bloco IPTC/XMP
+  novo num arquivo que já tinha outros blocos binários (miniatura
+  embutida, segunda imagem MPF, dados RAW/tiles), e a inserção desloca os
+  ponteiros de offset desses blocos existentes — efeito colateral
+  estrutural do próprio exiftool ao reescrever o container, não perda ou
+  troca do conteúdo apontado (verificado à parte: o byte a byte da
+  miniatura embutida de um `.jpg` real é idêntico antes/depois do
+  deslocamento de `IFD1:ThumbnailOffset` — `sha256` batendo). Mas esse
+  deslocamento cai fora do escopo hoje reconhecido por
+  `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` (plano 06-02), que só cobre o
+  caso "arquivo nunca teve bloco IPTC/XMP/GPS nenhum" — não o caso "já
+  tinha bloco binário X, e X só mudou de endereço". `.tif` reprova por um
+  segundo motivo, independente do deslocamento de offset: uma tag IPTC de
+  andaime ainda não catalogada (`EnvelopeRecordVersion`, distinta da já
+  aprovada `ApplicationRecordVersion`) e dois avisos genuinamente novos do
+  exiftool.
+
+  Achado à parte, corrigido antes desta medição: `verificacao.avisos()`
+  (plano 06-02) usava a saída `-j` do exiftool para coletar avisos, que
+  **colapsa** tags `Warning`/`Error` repetidas em uma só (medido: um
+  `.tif` real com 6 warnings devolvia 1 via `-j`, as 6 via texto plano) e
+  incluía o resumo agregado `Validate` no conjunto — um `.jpg` cujos 3
+  warnings sumiram após a escrita (o exiftool renormaliza o IFD ao
+  reescrever) registrava `"Validate: OK"` como aviso NOVO, quando é
+  melhora, não regressão. Corrigido para parsing de texto plano, com
+  `Validate` fora do conjunto (não é warning nem error, é uma contagem
+  derivada). 2 testes de regressão cobrem os dois casos.
+- Por quê: os três critérios juntos, não um só — diff de tags sozinho não
+  pega corrupção fora das tags (aviso novo do exiftool pode sinalizar
+  problema estrutural que o diff não captura, como o caso do `.tif`);
+  aviso sozinho não pega escrita fora de escopo silenciosa (verificado na
+  pesquisa: `-GPSLatitude=999` é aceito sem aviso nenhum); releitura
+  estrutural prova que o arquivo continua abrindo e lendo igual, não só
+  que as tags batem. Reprovar por padrão quando qualquer um dos três falha
+  é a postura conservadora que D-04 pede — o risco de aprovar cedo demais
+  (mascarar corrupção real) é maior que o custo de reprovar cedo demais
+  (usuário some tempo sem escrita direta, sidecar continua disponível).
+- **Consequência de escopo, não decidida aqui:** com `FORMATOS_APROVADOS`
+  vazio, todo arquivo de todo formato cai hoje no fallback de sidecar XMP
+  (D-06/EXIF-05) — não há formato com escrita direta em EXIF disponível
+  neste milestone. Os arquivos daquele formato aparecem no plano como
+  "formato não suportado" com motivo visível e oferta de sidecar, nunca
+  omitidos (D-05). Estender `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` para
+  reconhecer deslocamento de offset de bloco binário pré-existente como
+  andaime estrutural (o que, pela evidência do byte a byte idêntico da
+  miniatura, é candidato plausível a reverter esse resultado para pelo
+  menos `.jpg`/`.cr2`/`.dng`) é uma mudança na política de segurança de
+  `verificacao.py` — não uma correção de bug — e fica como candidato a
+  decisão futura do dono, não decidida por este plano.
+- Como reverter: `scripts/testar_escrita_exif.py --json` refaz a medição
+  contra qualquer catálogo; `fotoorganizer/exif_write/formatos.py`
+  documenta a data e o resultado no próprio docstring do módulo.
+- Status: decidido por medição.
+
+## D-077 — Allowlist byte a byte estende D-076: jpg/cr2 passam a aprovar escrita EXIF direta
+
+- Fase: 6 — escrita EXIF de localização, correção de meio-de-fase sobre o
+  plano 06-04
+- Classe: B
+- Data: 2026-08-18
+- Contexto: D-076 deixou explicitamente em aberto, como "candidato a
+  decisão futura do dono, não decidida por este plano", estender
+  `verificacao.TAGS_ESTRUTURAIS_ESPERADAS` para reconhecer deslocamento de
+  offset de bloco binário pré-existente como andaime — candidato
+  plausível pela evidência anexada a D-076 (byte a byte da miniatura
+  embutida de um `.jpg` real idêntico antes/depois do deslocamento de
+  `IFD1:ThumbnailOffset`). O dono foi consultado diretamente
+  (`AskUserQuestion`) e escolheu explicitamente **"Estender allowlist com
+  verificação byte a byte"**: aprovar jpg/cr2/dng se o conteúdo apontado
+  pelas tags de offset for idêntico (sha256) antes/depois, só o endereço
+  mudando — não estender a allowlist incondicional
+  `TAGS_ESTRUTURAIS_ESPERADAS` (que aprovaria pelo NOME da tag, sem checar
+  o conteúdo arquivo por arquivo, mascarando corrupção real igual a
+  qualquer outra tag daquela lista).
+- Decisão: `verificacao.py` ganha uma categoria nova e distinta de
+  `TAGS_ESTRUTURAIS_ESPERADAS` —
+  `reclassificar_deslocamentos_de_offset(diff, antes, depois,
+  arquivo_antes, arquivo_depois)` rebaixa de `inesperadas` para
+  `esperadas_condicionais` só a tag de offset/ponteiro (mapa fechado de
+  seis sufixos: `ThumbnailOffset`, `PreviewImageStart`, `StripOffsets`,
+  `TileOffsets`, `JpgFromRawStart`, `MPImageStart` — as mesmas que
+  apareceram como "inesperada" nos três formatos com amostra em D-076)
+  cujo par offset+tamanho aponta para um intervalo de bytes sha256-idêntico
+  entre o arquivo antes da escrita (o backup `<arquivo>_original` que o
+  writer já deixa, por nunca usar `-overwrite_original`) e o arquivo
+  depois. Toda borda que impede a prova — tag fora do mapa, tag de
+  tamanho irmã ausente, tamanho que mudou junto, contagem de valores que
+  não bate, valor não-numérico, leitura que falha — mantém a tag em
+  `inesperadas`, fail-safe, nunca promove por omissão.
+
+  `scripts/testar_escrita_exif.py` chama a reclassificação antes de
+  aplicar o critério de D-04 (as três condições continuam as mesmas: diff
+  sem inesperadas, delta de avisos vazio, releitura estrutural idêntica —
+  só o que conta como "inesperada" mudou). Remedição contra o
+  `catalog.db` de produção real (cópias descartáveis, nunca o original):
+
+  | extensão | amostras | veredito  | motivo medido |
+  |----------|---------:|-----------|----------------|
+  | .jpg     | 20/20    | **aprovado** | todo deslocamento medido (`IFD1:ThumbnailOffset`, `MPImage2:MPImageStart`) prova relocação byte a byte — sha256 idêntico |
+  | .cr2     | 12/12 (todas as alcançáveis) | **aprovado** | todo deslocamento medido (`IFD0:PreviewImageStart`, `IFD1:ThumbnailOffset`, `IFD2:StripOffsets`, `IFD3:StripOffsets`) prova relocação byte a byte |
+  | .dng     | 2/2      | reprovado (inalterado) | `SubIFD:TileOffsets`/`SubIFD3:TileOffsets` têm tiles demais — o exiftool devolve `"(Binary data N bytes, use -b option to extract)"` no dump em vez de lista de inteiros, a prova byte a byte não consegue parsear o offset, fica fail-safe |
+  | .tif     | 1/1      | reprovado (inalterado) | motivo de D-076 não é offset — tag `IPTC:EnvelopeRecordVersion` nova + 2 avisos novos do exiftool, fora do escopo desta correção |
+
+  `FORMATOS_APROVADOS` passa de `frozenset()` (D-076) para `{".jpg",
+  ".jpeg", ".cr2"}`. Todo arquivo `.dng`/`.tif`/`.cr3`/`.heic`/`.heif`
+  continua caindo no fallback de sidecar XMP (D-06/EXIF-05).
+- Por quê: verificação byte a byte é a única forma de aprovar relocação
+  sem abrir a mesma porta de mascaramento que `TAGS_ESTRUTURAIS_ESPERADAS`
+  fecha por desenho (EXIF-04) — aprovar pelo NOME da tag confiaria que
+  TODO deslocamento futuro daquela tag, em qualquer arquivo, é sempre
+  inofensivo; aprovar pelo CONTEÚDO confia só no que foi medido, arquivo
+  por arquivo, a cada escrita. O caso do `.dng` prova o valor da postura
+  fail-safe: em vez de estender a lógica para tentar extrair um offset de
+  dentro do texto `"(Binary data...)"` (o que seria ler o tamanho da
+  descrição, não o offset real — um bug esperando para acontecer), a
+  tag simplesmente fica `inesperada` e o formato continua reprovado. É
+  mais seguro reprovar um formato que provavelmente é inofensivo do que
+  arriscar aprovar um que não é.
+- Superseded/relacionado: **supera D-076 em parte** — a tabela de
+  veredito de jpg/cr2 muda de "reprovado" para "aprovado"; o achado de
+  D-076 sobre `.tif` (motivo distinto, não-offset) **permanece válido e
+  inalterado**, não superado por esta decisão. O achado de D-076 sobre o
+  byte a byte idêntico da miniatura do `.jpg` é a evidência empírica que
+  motivou esta decisão — generalizada aqui para produção, não mais só
+  uma observação anexa à medição.
+- Como reverter: `scripts/testar_escrita_exif.py --json` refaz a medição
+  contra qualquer catálogo, já usando a reclassificação; reverter para o
+  comportamento de D-076 exige remover a chamada a
+  `reclassificar_deslocamentos_de_offset` do script (a função em si pode
+  ficar sem uso, não precisa ser apagada) e restaurar
+  `FORMATOS_APROVADOS = frozenset()`.
+- Status: decidido pelo dono, medido.
+
+## D-078 — `IPTC:EnvelopeRecordVersion` entra no andaime incondicional; achado à parte de digest IPTC desatualizado fica registrado, não corrigido
+
+- Fase: 6 — escrita EXIF de localização, correção de meio-de-fase sobre o
+  checkpoint humano do plano 06-09
+- Classe: B
+- Data: 2026-08-18
+- Contexto: no checkpoint 06-09, o dono rodou uma escrita real contra um
+  JPEG real de produção do Canon EOS R6m2 (cópia própria, não o original —
+  `~/Desktop/teste-exif/ACM_7122.JPG`, copiada de
+  `/Users/acamerini/Pictures/2026/Serena 15 Anos/ACM_7122.JPG`). A escrita
+  teve sucesso no nível do exiftool (City="Rio de Janeiro"/Country="Brasil"
+  gravados corretamente, confirmado por `exiftool -City -Country` no
+  arquivo pós-escrita), mas `verificacao.diferenca()` sinalizou
+  `IPTC:EnvelopeRecordVersion` como tag inesperada e reprovou a
+  verificação — fail-safe preservou o backup `_original`, item marcou
+  `falha`, nada corrompeu, mas a escrita ficou presa fora do fluxo normal.
+  A tag já tinha aparecido, sem catalogação, em D-076 (achado do `.tif`:
+  "tag inesperada `IPTC:EnvelopeRecordVersion` + avisos novos do
+  exiftool") — não perseguida na época porque `.tif` reprovava por um
+  segundo motivo independente também, e a remedição de D-077 (jpg/cr2
+  20/20 e 12/12) não incluiu nenhuma amostra que exercitasse esta tag
+  especificamente.
+- Decisão: `IPTC:EnvelopeRecordVersion` (marcador de versão do registro de
+  ENVELOPE IPTC, distinto de `IPTC:ApplicationRecordVersion` — marcador de
+  versão do registro de APLICAÇÃO, já allowlisted) entra em
+  `verificacao.TAGS_ESTRUTURAIS_ESPERADAS`, mesma justificativa das quatro
+  entradas originais (D-02) e das três de sidecar (plano 06-05): tag de
+  versão obrigatória, escrita sem condição ao criar um bloco IPTC novo,
+  não é dado de localização — sempre idêntica para todo arquivo que este
+  módulo escreve pela primeira vez. Não é extensão da allowlist byte a
+  byte de D-077 (essa cobre deslocamento de offset de bloco binário
+  pré-existente, categoria distinta) — é o mesmo tipo de andaime
+  incondicional que as outras oito entradas de `TAGS_ESTRUTURAIS_ESPERADAS`
+  já cobrem.
+
+  Regressão coberta por dois testes novos em
+  `tests/test_exif_write_writer.py`: classificação isolada da tag em
+  `estruturais`, e uma escrita completa (GPS+cidade+país) que produz todo
+  o andaime obrigatório junto — inclusive esta tag — confirmando
+  `diff.inesperadas` vazio e os três campos gravados.
+
+  Remedição de `.jpg` contra o `catalog.db` de produção real (mesmo
+  método de D-076/D-077 — cópias descartáveis via `shutil.copy2` em
+  `tempfile.mkdtemp()`, nunca o original): 20/20 amostras aprovadas,
+  `FORMATOS_APROVADOS` continua `{".jpg", ".jpeg", ".cr2"}` (D-077),
+  nenhuma mudança — esta correção fecha uma lacuna de reconhecimento de
+  tag, não abre nem fecha suporte de formato novo.
+- **Achado à parte, registrado e explicitamente NÃO corrigido aqui:**
+  testar a mesma extensão da escrita diretamente contra o arquivo original
+  de produção citado no achado
+  (`/Users/acamerini/Pictures/2026/Serena 15 Anos/ACM_7122.JPG`, via cópia
+  descartável, nunca o original nem a cópia de teste do dono no Desktop)
+  confirma que a tag `EnvelopeRecordVersion` deixa de reprovar a
+  verificação — mas revela uma SEGUNDA falha, estruturalmente diferente e
+  não coberta por esta correção: o arquivo já chega com um bloco IPTC
+  pré-existente (gravado por outra ferramenta antes deste app, ex.
+  Lightroom — `IPTC:ApplicationRecordVersion`/`Keywords`/`By-line` já
+  presentes antes da escrita), e a escrita do exiftool nesse caso produz o
+  aviso NOVO `"IPTCDigest is not current. XMP may be out of sync"` — o
+  mesmo aviso que já aparecia, também não perseguido, no achado do `.tif`
+  em D-076. Nenhuma das 20 amostras genéricas usadas na remedição acima
+  tinha bloco IPTC pré-existente (confirmado por inspeção individual),
+  então D-076/D-077 nunca mediram este caminho. Não existe hoje mecanismo
+  equivalente a `TAGS_ESTRUTURAIS_ESPERADAS` para avisos — reconhecer este
+  aviso como andaime inofensivo exigiria um allowlist de avisos novo,
+  mudança de política de segurança (mesma classe de decisão que D-076
+  deixou em aberto para offsets, resolvida só depois por D-077 com
+  aprovação explícita do dono). Fica fora do escopo desta correção
+  (`TAGS_ESTRUTURAIS_ESPERADAS` é só para tags, não avisos) — registrado
+  como blocker em `STATE.md`, não decidido aqui.
+- Por quê: mesmo raciocínio de D-02/D-077 — reconhecer o NOME de uma tag
+  de andaime incondicional (sempre idêntica, nunca dado) é seguro; inventar
+  um mecanismo de allowlist para avisos, sem medição própria contra o
+  acervo real e sem aprovação do dono, seria abrir a mesma porta de
+  mascaramento que EXIF-04 fecha por desenho — por isso o achado do
+  digest fica registrado, não resolvido, nesta correção.
+- Superseded/relacionado: estende D-076 (cataloga a tag que D-076 já tinha
+  visto, sem perseguir) e D-077 (usa a mesma allowlist incondicional,
+  categoria distinta da allowlist byte a byte). Não supera nem contradiz
+  nenhuma das duas — a tabela de D-077 sobre `.tif` continua válida:
+  `.tif` ainda reprova, agora só pela causa do aviso (que já estava lá,
+  documentada, e não muda com esta correção).
+- Como reverter: remover `IPTC:EnvelopeRecordVersion` de
+  `TAGS_ESTRUTURAIS_ESPERADAS`; os dois testes de regressão passam a
+  falhar, sinalizando a reversão.
+- Status: decidido — achado da tag corrigido e medido; achado do digest
+  registrado como blocker pendente, aguardando decisão futura do dono.
+
+## D-079 — Prévia de custo do GenAI de pasta: estimativa local antes de confirmar, contagem exata só depois (híbrida)
+
+- Fase: 7 — classificação de pasta por GenAI, `checkpoint:decision`
+  bloqueante da Task 1 do plano 07-03, respondido pelo dono via
+  `AskUserQuestion` antes da execução da tarefa.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: `07-RESEARCH.md` § Pattern 2 recomendava `client.messages
+  .count_tokens` para a prévia de custo do passo 2 do assistente (grátis,
+  exato, já no SDK pinado), e `07-UI-SPEC.md` chegou a escrever a tela em
+  cima disso (`"Entrada (exata): 3.420 tokens"`). O que a pesquisa não
+  considerou: `count_tokens` é uma chamada HTTP para `api.anthropic.com`
+  que transmite o payload inteiro (system, schema, lista de pastas) só
+  para contar — não custa dinheiro, mas os dados já saíram da máquina.
+  Isso colide de frente com o critério de sucesso 2 da Fase 7 no
+  `ROADMAP.md` ("nada é enviado antes de ele confirmar") e com o
+  invariante 4 do `CLAUDE.md` (indicação prévia do que sai, antes de
+  sair). Três opções foram postas ao dono: (a) contagem exata antes de
+  confirmar, com aviso explícito de que isso já envia o texto; (b)
+  estimativa local, nada sai antes do confirmar, número de entrada fica
+  aproximado; (c) híbrida — estimativa local antes, contagem exata depois
+  de confirmar, mostrada no resumo pós-execução.
+- Decisão: opção (c), híbrida. Nada sai da máquina antes do "Confirmar e
+  classificar" (critério 2 do ROADMAP intacto, sem reinterpretação). A
+  prévia do passo 2 mostra `Entrada (estimada)` — contagem local
+  deliberadamente conservadora (nunca abaixo do real). Depois que o dono
+  confirma, `contar_exato()` roda imediatamente antes de
+  `messages.create` — a mesma chamada de rede que já ia acontecer de
+  qualquer forma, agora só uma etapa adiantada dentro da mesma
+  transmissão consentida — e o passo 5 (resumo pós-execução) mostra o
+  custo real com a contagem exata de entrada.
+- Por quê: a opção (a) foi descartada por violar o critério 2 na letra —
+  o dado sairia antes do botão de confirmação, mesmo que o payload fosse
+  idêntico ao que seria enviado de qualquer forma; reinterpretar esse
+  critério não é decisão de implementação, é decisão do dono, e ele
+  preferiu não abrir essa exceção. A opção (b) pura foi descartada porque
+  descartava também o número exato que a opção (c) consegue entregar
+  sem violar o critério — bastava adiar a contagem exata para
+  depois da confirmação, não abrir mão dela. A opção (c) preserva o
+  critério 2 e entrega o número exato no mesmo fluxo, só que depois em
+  vez de antes — o dono acaba vendo os dois números (estimado e real) em
+  vez de só um, o que é estritamente mais informação, não menos.
+- Impacto em código (executado nesta mesma sessão, plano 07-03):
+  `custo_genai.py::estimar()` sempre devolve `entrada_exata=False`
+  (estimativa local, fator conservador documentado no código);
+  `custo_genai.py::contar_exato(client, corpo)` existe separado,
+  chamado só depois da confirmação (fora do escopo deste plano — o
+  ponto de chamada real fica em 07-04, o endpoint que orquestra a
+  sessão). `07-UI-SPEC.md` § Copywriting Contract atualizado no mesmo
+  commit desta decisão: rótulo do passo 2 vira `"Entrada (estimada):"`
+  (era `"Entrada (exata):"`), nota de honestidade do passo 2 reescrita
+  para declarar que nada foi enviado ainda, e o passo 5 (Concluído) ganha
+  uma linha nova de custo real com a contagem exata pós-confirmação.
+- Como reverter: para voltar à opção (a), trocar `estimar()` para receber
+  o cliente e chamar `contar_exato()` direto (com `entrada_exata=True`) e
+  reverter as três linhas do Copywriting Contract afetadas de volta a
+  `"Entrada (exata)"`; nenhuma chamada de rede nova foi introduzida por
+  esta decisão que precise ser desfeita além disso. Para voltar à opção
+  (b) pura, remover a chamada a `contar_exato()` do ponto de integração
+  em 07-04 e a linha de custo real do passo 5.
+- Status: decidido pelo dono (não pelo planejador nem pelo executor).
+
+## D-080 — Opt-in de classificação de pasta por GenAI mora em `application_settings`, não em `PrivacySettings`/TOML
+
+- Fase: 7 — classificação de pasta por GenAI, Task 1 do plano 07-04.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: `07-RESEARCH.md` propôs `PrivacySettings.classificacao_pasta_genai`
+  no `config.toml`, no mesmo molde de `servicos_externos`. Mas
+  `07-UI-SPEC.md` (posterior e aprovado) exige que o passo 0 do assistente
+  LIGUE o flag por um checkbox na própria tela, com um link "Desligar"
+  sempre disponível depois — ou seja, a UI precisa GRAVAR essa preferência,
+  não só lê-la. `PrivacySettings` é uma dataclass `frozen` carregada do
+  TOML na subida do processo (`fotoorganizer/config/settings.py`), e o
+  servidor não escreve de volta no arquivo TOML em lugar nenhum do código
+  — não existe hoje (nem é desejável abrir) um caminho de escrita de
+  config.toml pelo processo do app. Colocar o flag lá criaria uma chave que
+  a UI mostra mas não consegue gravar.
+- Decisão: o opt-in PRÓPRIO do recurso (`classificacao_pasta_genai`) mora
+  em `application_settings`, via `SettingsRepository` — o mesmo mecanismo
+  que este projeto já usa para "o usuário decidiu algo pela interface"
+  (hoje só o template de destino; ver a docstring do próprio módulo).
+  `servicos_externos` (a chave MESTRA, invariante 4) continua só no TOML,
+  fora do alcance da UI — nenhum endpoint deste plano escreve
+  `PrivacySettings`. O gate do recurso é a CONJUNÇÃO dos dois:
+  `settings.privacidade.servicos_externos AND
+  SettingsRepository.genai_pasta_habilitado()`.
+- Por quê: reaproveitar `application_settings` evita inventar um segundo
+  mecanismo de "preferência gravável pela UI" quando um já existe e já é
+  testado (par `obter_template`/`salvar_template`); manter `servicos_externos`
+  fora do TOML preservaria a UI mostrando uma chave que ela não pode
+  alterar de fato, quebrando a expectativa de que todo controle visível na
+  tela funciona.
+- Impacto em código (executado nesta mesma sessão, plano 07-04):
+  `fotoorganizer/repositories/settings.py` ganha `CHAVE_GENAI_PASTA` e o
+  par `genai_pasta_habilitado()`/`definir_genai_pasta()`, no molde exato de
+  `obter_template()`/`salvar_template()`. `fotoorganizer/config/settings.py`
+  não ganha nenhum campo novo (`grep -c "classificacao_pasta_genai"` = 0
+  nesse arquivo). `fotoorganizer/server/genai_pasta.py::SessaoDeClassificacaoDePasta.liberado()`
+  é a conjunção dos dois flags — copiar o gate de UM flag só de
+  `jobs.py::_advisor` (que olha só `servicos_externos`) seria a regressão
+  nomeada em `07-RESEARCH.md` Pitfall 4, porque esse recurso tem opt-in
+  PRÓPRIO, separado do consentimento já dado ao Advisor de cluster.
+- Como reverter: mover a chave para `PrivacySettings` exigiria primeiro
+  abrir um caminho de escrita de `config.toml` pelo processo do app (mudança
+  maior, não coberta por este plano) — não é uma reversão trivial de uma
+  linha.
+- Status: decidido pelo executor durante a Task 1 do plano 07-04, conforme
+  a instrução explícita do `<action>` do plano (registrar a justificativa
+  já dada pelo planejador, não uma decisão nova em aberto).
+
+## D-081 — Score de `llm_pasta` medido contra o acervo real: 0.55, preliminar
+
+- Fase: 7 — classificação de pasta por GenAI, Task 2/3 do plano 07-09.
+- Classe: B
+- Data: 2026-08-18
+- Contexto: `SCORES_REFERENCIA["llm_pasta"]` nasceu em 07-05 com o valor
+  `0.55` marcado `PROVISÓRIO` — escolhido por analogia ao advisor de
+  cluster (`llm`), sem medição própria. A convenção deste projeto (D-074,
+  D-059/D-060) é medir contra o acervo real antes de travar um score; um
+  número por analogia aqui viraria verdade de base para o índice de saúde
+  da Fase 10 sem nunca ter sido checado — a mesma classe de bug que já
+  vazou em D-071. Este plano não podia escolher por analogia porque
+  `llm_pasta` mede uma pergunta diferente da do advisor de cluster (lê o
+  NOME da pasta, uma vez por sessão, não metadado de mídia individual) —
+  são origens distintas por design (comentário já existente em
+  `confidence.py`), então a taxa de acerto de uma não informa a da outra.
+- Método: `scripts/medir_score_llm_pasta.py` (07-09 Task 1) monta a
+  amostra a partir das pastas onde a cascata DETERMINÍSTICA já resolveu
+  categoria e/ou cidade/país (origem `pasta`, `gps`, `geocoding_offline`
+  ou `exif`) — a verdade de referência é o próprio catálogo, exigindo
+  unanimidade entre origens determinísticas antes de aceitar um valor
+  como verdade (duas pastas com evidência conflitante, ver
+  `deferred-items.md` item 1, foram corretamente excluídas). O modelo
+  recebe o MESMO `PastaPayload` e o mesmo schema que a produção usaria
+  (`location_advisor.py`), com o campo em medição ausente — nunca vê a
+  resposta. Cada item cai em um de três baldes: acertou, recusou
+  (`null`, comportamento desejado de D-06 quando não dá para saber) ou
+  errou (afirmou valor diferente da verdade). O dono rodou o script no
+  próprio terminal, com a própria chave (`ANTHROPIC_API_KEY`) — esta
+  sessão de desenvolvimento nunca manuseou a credencial, mesmo protocolo
+  de D-048/D-049/D-059.
+- Resultado numérico (`--limite 60`, 4 pastas na amostra):
+  ```
+  CATEGORIA
+    categoria: 2 itens — acertou 2 (100.0%)  recusou 0 (0.0%)  errou 0 (0.0%)
+
+  CIDADE/PAÍS
+    cidade: 2 itens — acertou 0 (0.0%)  recusou 2 (100.0%)  errou 0 (0.0%)
+    país:   2 itens — acertou 0 (0.0%)  recusou 2 (100.0%)  errou 0 (0.0%)
+  ```
+  Zero erros observados nos dois campos — é o sinal que mais importa: o
+  padrão "afirma sem base" que D-049 mediu e que motivou trocar de
+  modelo (Haiku → Sonnet) não apareceu. `categoria` acertou 2/2.
+  `cidade`/`país` recusaram 2/2 (retornaram `null` as duas vezes) — é o
+  comportamento seguro de D-06 (nunca inventar quando incerto), não
+  evidência de falha, mas também não é sinal positivo de acerto: o
+  modelo nunca se comprometeu com um valor nesse campo na amostra.
+- Alternativas consideradas: (a) manter `0.55` por analogia ao advisor
+  de cluster, sem medir — descartado porque é exatamente o que este
+  plano existe para evitar (T-07-09-01); (b) subir para `0.60`
+  (igualando a `pasta`, parse determinístico) — descartado porque
+  `pasta` é fato lido de um segmento de caminho, `llm_pasta` é
+  julgamento sobre string ambígua; igualar os dois esconderia que um é
+  determinístico e o outro é inferência, mesmo com zero erros
+  observados; (c) descer para abaixo de `0.50` (nasce BAIXA na
+  cascata) — descartado porque a taxa de erro (o sinal que mais importa
+  aqui) ficou em zero; um número que penaliza mais que `vizinhanca`/
+  `curadoria`/`album_externo` (0.55, todos com vínculo mais fraco de
+  contemporaneidade) não teria medição que o sustente.
+- Escolhida: manter `0.55` — mesmo valor do antigo `PROVISÓRIO`, mas
+  agora com medição por trás em vez de analogia. Iguala ao advisor de
+  cluster (`llm`) apesar da entrada mais esparsa (uma vez por sessão de
+  pasta, não por mídia individual) porque o que a medição prova é
+  ausência de alucinação nos dois campos, que é a mesma barra que
+  justificou o 0.55 do advisor.
+- Limitação de escala: a base de medição da Fase 7 tem só ~1.400
+  arquivos e 2 fontes cadastradas em `catalog.db` de produção
+  (`~/Pictures/2026` e `/Volumes/Externo/Fotos/Do Peru ao Chile`) — as
+  duas fontes que formam o grosso do acervo real (Apple Fotos só-iCloud,
+  ~44.661 registros; Lightroom em volume desmontado, ~45.397 registros)
+  não estão cadastradas (ARCH-01, deferido, `.planning/STATE.md` §
+  Blockers/Concerns). A amostra desta medição — 4 pastas, 2 itens por
+  campo — é preliminar mesmo para o padrão já pequeno da fase; não tem o
+  porte de D-059/D-060 (104 clusters) nem de D-074 (40.678 fotos). O
+  valor é revisitável, e deve ser revisto, quando ARCH-01 reconectar os
+  volumes maiores.
+- Como reverter: `SCORES_REFERENCIA["llm_pasta"]` em
+  `fotoorganizer/classification/confidence.py` é uma linha; o comentário
+  ao lado documenta a medição para quem for revisar. Reexecutar
+  `scripts/medir_score_llm_pasta.py --limite N` (N maior, quando ARCH-01
+  ampliar a base) refaz a medição sem tocar em código de produção — o
+  script é só leitura sobre o catálogo.
+- Status: decidido pelo dono, via `AskUserQuestion` apresentado pelo
+  orquestrador com o relatório real da medição e a tabela de scores já
+  travados como baliza.

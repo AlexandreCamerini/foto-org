@@ -8,6 +8,8 @@ from fotoorganizer.classification import SuggestionEngine
 from fotoorganizer.classification.confidence import nivel_para_score
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.geolocation import GeoResult, LocationResolver
+from fotoorganizer.geolocation.timezones import TZ_POR_PAIS
+from fotoorganizer.grouping.correlacao import campos_confiaveis
 from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.models import (
     ConfidenceLevel,
@@ -1056,6 +1058,123 @@ def test_estimativa_some_quando_a_foto_ganha_gps_proprio(migrated_engine):
         assert cam.coordenada_estimada is False
 
 
+def test_tz_estimado_de_gps_proprio(ambiente):
+    """País vindo de GPS próprio grava tz_estimado direto em MediaFile —
+    sem Evidence nova, sem entrada em docs/CONFIANCA.md (D-03)."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    with factory() as session:
+        franca = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "franca_0.jpg")
+        )
+        assert franca.tz_estimado == TZ_POR_PAIS["França"]
+
+
+def test_tz_estimado_de_pais_herdado(ambiente):
+    """País só por herança temporal (sem GPS próprio, D-025) também grava
+    tz_estimado — mesmo resultado do GPS próprio."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    with factory() as session:
+        sem_gps = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "sem_gps.jpg")
+        )
+        assert sem_gps.gps_lat is None
+        assert sem_gps.tz_estimado == TZ_POR_PAIS["França"]
+
+
+def test_tz_estimado_none_sem_pais_conhecido(ambiente):
+    """Sem nenhum país conhecido, tz_estimado fica None — nunca inventa,
+    nunca lança erro (D-04)."""
+    factory, engine = ambiente
+    engine.gerar()
+
+    with factory() as session:
+        misteriosa = session.scalar(
+            select(MediaFile).where(MediaFile.nome == "misteriosa.jpg")
+        )
+        assert misteriosa.tz_estimado is None
+
+
+def test_tz_estimado_atualiza_ao_regenerar_sugestoes(migrated_engine):
+    """Regenerar sugestões não pode deixar um tz_estimado obsoleto de uma
+    rodada anterior — mesmo padrão de
+    test_estimativa_some_quando_a_foto_ganha_gps_proprio, mas para
+    tz_estimado: a foto perde o país que tinha (pasta renomeada) e a
+    segunda gerar() precisa refletir isso, não preservar o valor velho."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "toquio.jpg", "/fotos/Japão/Tóquio", data=base,
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "toquio.jpg"))
+        assert foto.tz_estimado == TZ_POR_PAIS["Japão"]
+        foto.pasta = "/fotos/sem_pais_no_nome"
+        foto.caminho = "/fotos/sem_pais_no_nome/toquio.jpg"
+        session.commit()
+
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "toquio.jpg"))
+        assert foto.tz_estimado is None
+
+
+def test_tz_estimado_atualiza_mesmo_com_sugestao_decidida(migrated_engine):
+    """CR-01: `_persistir_sugestao` (onde tz_estimado era calculado antes)
+    é pulada para mídia com sugestão já decidida — mas tz_estimado precisa
+    do MESMO padrão de recálculo incondicional de gps_lat_estimado
+    (`_persistir_herancas`), então não pode congelar no valor da última
+    rodada em que a sugestão ainda estava pendente."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "camera.jpg", "/fotos/desorganizadas", data=base,
+            gps=(43.95, 4.8083),
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "camera.jpg"))
+        assert foto.tz_estimado == TZ_POR_PAIS["França"]
+        sugestao = session.scalar(
+            select(Suggestion).where(Suggestion.media_id == foto.id)
+        )
+        sugestao.status = SuggestionStatus.APROVADA
+        # GPS muda para fora da cobertura do FakeGeocoder (deixa de
+        # resolver para qualquer país conhecido) — o país efetivo da foto
+        # mudou, mesmo com a sugestão da câmera já decidida.
+        foto.gps_lat, foto.gps_lon = 10.0, 10.0
+        session.commit()
+
+    engine.gerar()
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "camera.jpg"))
+        assert foto.tz_estimado is None
+        # A decisão do usuário continua preservada — só o dado técnico
+        # auxiliar (D-038) acompanha a mudança.
+        sugestao = session.scalar(
+            select(Suggestion).where(Suggestion.media_id == foto.id)
+        )
+        assert sugestao.status == SuggestionStatus.APROVADA
+
+
 def test_captura_de_tela_sai_do_fluxo_de_viagem(migrated_engine):
     """Captura de tela feita durante a viagem não pertence à pasta da
     viagem. Vai para ramo próprio, por tipo e ano, com a justificativa
@@ -1319,3 +1438,47 @@ def test_heranca_distante_afirma_o_pais_e_cala_a_cidade(migrated_engine):
     assert "cidade" not in campos
     heranca = next(e for e in evidencias if e.origem == "vizinhanca_temporal")
     assert "não a cidade" in heranca.justificativa
+
+
+def test_heranca_concordante_diz_que_foi_confirmada(migrated_engine):
+    """D-074: com doadora dos dois lados perto uma da outra, a cidade
+    herdada fica corroborada — e a justificativa precisa dizer isso, não só
+    guardar o dado internamente. Sem bônus de score: mesma fórmula de
+    sempre, só a frase muda."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        camera = Source(caminho="/fotos/raw")
+        telefone = Source(caminho="/fotos/DCIM")
+        session.add_all([camera, telefone])
+        session.flush()
+        session.add(_media(
+            camera.id, "meio.jpg", "/fotos/raw", data=base,
+            make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            telefone.id, "antes.jpg", "/fotos/DCIM",
+            data=base - timedelta(minutes=3),
+            gps=(43.9500, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.add(_media(
+            telefone.id, "depois.jpg", "/fotos/DCIM",
+            data=base + timedelta(minutes=4),
+            gps=(43.9520, 4.8083), make="Apple", model="iPhone 15",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    _, evidencias = _sugestao_de(factory, "meio.jpg")
+    heranca = next(
+        e for e in evidencias
+        if e.origem == "vizinhanca_temporal" and e.campo == "cidade"
+    )
+    assert "confirmada por outra foto" in heranca.justificativa
+    assert "herdado de 'antes.jpg'" in heranca.justificativa
+    # Sem bônus: o score é o mesmo que uma âncora única a 3 min daria.
+    assert heranca.score == round(0.75 * campos_confiaveis(
+        timedelta(minutes=3)
+    )[-1][1], 3)

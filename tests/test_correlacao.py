@@ -12,6 +12,7 @@ from fotoorganizer.grouping import (
     herdar_gps,
     raio_incerteza,
 )
+from fotoorganizer.grouping.correlacao import campos_confiaveis
 
 CANON = ("Canon", "EOS R6")
 IPHONE = ("Apple", "iPhone 15 Pro")
@@ -40,7 +41,10 @@ def test_heranca_do_doador_mais_proximo():
     fotos = [
         _canon(1, 0),                       # sem GPS
         _iphone(2, -42),                    # doadora 42s antes
-        _iphone(3, 600, lat=25.9, lon=55.9),
+        # 3h depois: longe demais NO TEMPO para opinar sobre cidade/região
+        # (D-074) — só existe para provar que o mais próximo vence, não
+        # para testar concordância.
+        _iphone(3, 10800, lat=25.9, lon=55.9),
     ]
     h = _de(herdar_gps(fotos), 1)
     assert h.doador_id == 2
@@ -49,6 +53,7 @@ def test_heranca_do_doador_mais_proximo():
     # 42s sustenta até a cidade, com confiança cheia (janela curta).
     assert h.granularidade == "cidade"
     assert h.fator_de("cidade") == 1.0
+    assert h.concordancia == ()   # outro lado longe demais no tempo p/ testar
 
 
 def test_fora_da_janela_da_cidade_ainda_herda_o_pais():
@@ -204,6 +209,130 @@ def test_o_mais_proximo_vence_mesmo_vindo_do_outro_lado():
     ]
     h = _de(herdar_gps(fotos), 1)
     assert h.doador_id == 4 and h.lat == 20.0
+
+
+# -- duas âncoras: concordância e discordância (D-074) -----------------------
+def test_duas_ancoras_concordantes_confirmam_sem_inflar_score():
+    """Doadora dos dois lados, coordenadas próximas: os círculos de
+    incerteza se sobrepõem — a granularidade fica corroborada, mas o fator
+    de confiança continua sendo o de sempre (mesmo Δt, sem bônus inventado).
+    O ganho é reportar QUE houve concordância, não inflar o score.
+    """
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -180, lat=25.2000, lon=55.3000),   # antes, 3 min
+        _iphone(3, 240, lat=25.2020, lon=55.3000),    # depois, 4 min — perto
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 2                      # o mais próximo continua vencendo
+    assert h.delta == timedelta(seconds=180)
+    assert set(h.concordancia) == {"cidade", "regiao"}
+    assert h.doador_concordante_id == 3
+    assert "pais" not in h.concordancia           # país nunca ganha bônus (D-074)
+    # Sem bônus de fator: o score é idêntico ao de uma âncora única no mesmo Δt.
+    assert h.campos == campos_confiaveis(timedelta(seconds=180))
+    # O raio já é o do lado mais próximo — mais apertado que o do lado que
+    # perdeu, sem precisar de fórmula geométrica nova (ver Heranca.raio_m).
+    assert h.raio_m == raio_incerteza(timedelta(seconds=180))
+    assert h.raio_m < raio_incerteza(timedelta(seconds=240))
+
+
+def test_duas_ancoras_discordantes_nao_herdam_a_granularidade_em_disputa():
+    """Doadoras dos dois lados, mas longe uma da outra: os círculos de
+    incerteza não se tocam. Não é 'fica com a mais próxima mesmo assim' — é
+    sinal de trânsito, e nenhuma das duas fica confiável para cidade/região.
+    País sobrevive porque nunca passa por este teste (D-074)."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -180, lat=25.2, lon=55.3),   # antes, 3 min
+        _iphone(3, 240, lat=25.9, lon=55.9),    # depois, 4 min — longe (~100 km)
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 2                       # continua sendo o mais próximo
+    assert h.fator_de("cidade") is None
+    assert h.fator_de("regiao") is None
+    assert h.fator_de("pais") is not None
+    assert h.concordancia == ()
+
+
+def test_lado_distante_demais_no_tempo_nao_opina_sobre_o_campo_mais_fino():
+    """O lado fora da janela de um campo simplesmente não opina sobre ele:
+    cidade sobrevive sem teste (o outro lado está longe demais NO TEMPO
+    para valer como segunda opinião); só região, que o Δt do lado distante
+    ainda alcança, é de fato confrontada — e cai."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -180, lat=25.2, lon=55.3),      # antes, 3 min: dentro da cidade
+        _iphone(3, 3000, lat=27.0, lon=57.0),      # depois, 50 min: só região, longe
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is not None        # não testada (outro fora da janela)
+    assert "cidade" not in h.concordancia
+    assert h.fator_de("regiao") is None             # testada e discordante
+    assert h.fator_de("pais") is not None
+
+
+def test_pais_nunca_ganha_bonus_de_concordancia():
+    """Duas doadoras a centenas de km uma da outra são obviamente do mesmo
+    país — mas `raio_incerteza` é calibrado para deslocamento de PESSOA
+    (teto 50 km), não para o tamanho de um país. Testar concordância de
+    país com esse raio quebraria o caso óbvio; por isso país nunca entra
+    no teste (D-074), a distância real não importa."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, -5 * 3600, lat=25.2, lon=55.3),   # antes, 5 h
+        _iphone(3, 6 * 3600, lat=28.0, lon=58.0),    # depois, 6 h — ~380 km
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.fator_de("cidade") is None      # Δt já não sustenta cidade nem sozinho
+    assert h.fator_de("regiao") is None
+    assert h.fator_de("pais") is not None
+    assert h.concordancia == ()
+    assert h.fator_de("pais") == campos_confiaveis(timedelta(hours=5))[0][1]
+
+
+def test_ancora_unica_sem_concordancia_por_padrao():
+    """Sem doadora do outro lado, `concordancia` fica vazia — o
+    comportamento de sempre, sem regressão."""
+    h = _de(herdar_gps([_canon(1, 0), _iphone(2, -42)]), 1)
+    assert h.concordancia == ()
+    assert h.doador_concordante_id is None
+
+
+def test_hora_incerta_em_qualquer_lado_desativa_o_teste_de_concordancia():
+    """Achado da revisão por sub-agente: a primeira versão só desligava o
+    teste geométrico quando a hora incerta estava no lado DESCARTADO —
+    deixava passar foto ou doador escolhido com hora incerta, produzindo
+    uma justificativa que diria "pode ser coincidência" e "confirmada" na
+    mesma frase (`classification/engine.py`). Hora incerta em QUALQUER um
+    dos três lados (foto, doador escolhido, doador do outro lado) precisa
+    desligar o teste — mesmo com coordenadas idênticas dos dois lados."""
+    perto_antes = dict(mid=2, segundos=-180, lat=25.2000, lon=55.3000)
+    perto_depois = dict(mid=3, segundos=240, lat=25.2020, lon=55.3000)
+
+    # Hora incerta na FOTO que herda.
+    h = _de(herdar_gps([
+        _canon(1, 0, hora_do_arquivo=True),
+        _iphone(**perto_antes), _iphone(**perto_depois),
+    ]), 1)
+    assert h.concordancia == ()
+
+    # Hora incerta no doador ESCOLHIDO (o mais próximo, id 2).
+    h2 = _de(herdar_gps([
+        _canon(1, 0),
+        _iphone(**{**perto_antes, "hora_do_arquivo": True}),
+        _iphone(**perto_depois),
+    ]), 1)
+    assert h2.concordancia == ()
+
+    # Hora incerta no OUTRO lado (o descartado, id 3) — já coberto pela
+    # implementação original, reafirmado aqui junto dos outros dois casos.
+    h3 = _de(herdar_gps([
+        _canon(1, 0),
+        _iphone(**perto_antes),
+        _iphone(**{**perto_depois, "hora_do_arquivo": True}),
+    ]), 1)
+    assert h3.concordancia == ()
 
 
 def test_hora_vinda_do_arquivo_vale_menos():

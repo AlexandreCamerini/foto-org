@@ -1,0 +1,26 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/REFERENCIAS_DESIGN.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Referências de design — comparativo de tokens",
+  "summary": "Comparative study of design tokens from Linear, Peakto (cyme.io), and macOS HIG to inform the webapp redesign in fase 6.",
+  "scope": [
+    "design tokens",
+    "Linear",
+    "Peakto (cyme.io)",
+    "macOS Human Interface Guidelines",
+    "webapp redesign",
+    "fase 6 UX",
+    "cor e tipografia da interface",
+    "badge de confiança"
+  ],
+  "cross_refs": [
+    "docs/prompts/fase-6-ux.md",
+    "docs/DIRECAO_DE_ARTE.md",
+    "developer.apple.com/design/human-interface-guidelines"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

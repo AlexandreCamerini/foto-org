@@ -1,9 +1,9 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import App from "./App";
-import { ROTAS_BASE, montar, servirApi } from "./test/servidor";
+import { ROTAS_BASE, erro, montar, servirApi } from "./test/servidor";
 
 describe("App", () => {
   it("abre no Panorama e mostra as lacunas do catálogo", async () => {
@@ -37,6 +37,48 @@ describe("App", () => {
 
     await usuario.click(chip);
     expect(screen.queryByTitle("Limpar recorte")).not.toBeInTheDocument();
+  });
+
+  it("CONS-06: a barra da Biblioteca empilha em dois grupos, não um flex único", async () => {
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Biblioteca" }),
+    );
+
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    const tudo = screen.getByRole("button", { name: "Tudo" });
+
+    // O contêiner externo empilha abaixo de `lg` (D-09: token padrão do
+    // Tailwind, sem media query em JS) e volta a uma linha a partir de
+    // 1024px.
+    const barra = tudo.closest("div.flex.flex-col");
+    expect(barra).not.toBeNull();
+    expect(barra?.className).toContain("flex-col");
+    expect(barra?.className).toContain("lg:flex-row");
+
+    // Busca e "Tudo" pertencem a grupos (linhas) distintos — prova de que a
+    // barra tem dois grupos declarados por intenção, não um `flex` único de
+    // N filhos, o que é o que garante no máximo duas linhas.
+    const grupoBusca = busca.closest(".flex-nowrap");
+    const grupoTudo = tudo.closest(".flex-nowrap");
+    expect(grupoBusca).not.toBeNull();
+    expect(grupoTudo).not.toBeNull();
+    expect(grupoBusca).not.toBe(grupoTudo);
+
+    // Cada grupo é `flex-nowrap` + `overflow-x-auto`, nunca `flex-wrap`: um
+    // grupo que quebra sozinho em sub-linhas pode, somado ao outro grupo,
+    // estourar o orçamento de 2 linhas (era exatamente o bug em ~700px —
+    // "Tudo" quebrava para uma segunda sub-linha dentro do próprio grupo 1).
+    // O excesso agora rola horizontalmente dentro do grupo em vez de quebrar.
+    expect(grupoBusca?.className).toContain("overflow-x-auto");
+    expect(grupoBusca?.className).not.toContain("flex-wrap");
+    expect(grupoTudo?.className).toContain("overflow-x-auto");
+    expect(grupoTudo?.className).not.toContain("flex-wrap");
   });
 
   it("lacuna zerada não é clicável — não há conjunto para atacar", async () => {
@@ -117,6 +159,10 @@ describe("App", () => {
     // Bug relatado: com "IMG" ainda no campo de busca de uma visita
     // anterior, abrir uma viagem de 4.812 fotos mostrava "nenhuma foto no
     // filtro" — a busca antiga filtrava tudo, e a tela não dizia por quê.
+    // Depois de REV-03 o clique na aba "Viagens" também limpa a busca — este
+    // teste deixou de isolar só `Trips.onAbrir` e passou a cobrir o
+    // contrato de saída (busca vazia ao chegar na Biblioteca), não mais o
+    // call site sozinho.
     servirApi({
       ...ROTAS_BASE,
       "/api/viagens": [{
@@ -140,6 +186,113 @@ describe("App", () => {
     expect(
       await screen.findByPlaceholderText("Buscar por nome ou caminho…"),
     ).toHaveValue("");
+  });
+
+  it("trocar de aba pelo botão limpa a busca deixada na Biblioteca", async () => {
+    // REV-03, ponto 1/3: o botão de troca de aba ainda não chamava
+    // setBusca(""). Sequência escolhida de propósito — nenhum outro
+    // handler de REV-03 é tocado — para isolar o botão de aba.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    await usuario.type(busca, "IMG");
+
+    await usuario.click(screen.getByRole("button", { name: "Duplicatas" }));
+    await usuario.click(screen.getByRole("button", { name: "Biblioteca" }));
+
+    expect(
+      await screen.findByPlaceholderText("Buscar por nome ou caminho…"),
+    ).toHaveValue("");
+  });
+
+  it("escolher uma pasta na lateral limpa a busca deixada na Biblioteca", async () => {
+    // REV-03, ponto 2/3: onSelecionarPasta (prop de Sidebar) só limpava
+    // selIndex, não busca. Nenhum clique em aba entre typar e o gatilho —
+    // isso prova onSelecionarPasta, não o botão de aba.
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/pastas": {
+        caminho: "/Volumes",
+        aqui: 3,
+        filhos: [
+          {
+            nome: "photo",
+            caminho: "/Volumes/photo",
+            total: 225914,
+            alcancaveis: 0,
+          },
+        ],
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    await usuario.type(busca, "IMG");
+
+    // A árvore navega um nível (não filtra) antes de "ver na grade" existir
+    // — mesmo contrato provado em ArvoreDePastas.test.tsx.
+    await usuario.click(await screen.findByText("photo"));
+    await usuario.click(
+      await screen.findByRole("button", { name: "ver na grade" }),
+    );
+
+    expect(
+      await screen.findByPlaceholderText("Buscar por nome ou caminho…"),
+    ).toHaveValue("");
+  });
+
+  it("clicar um degrau do funil na barra de status limpa a busca", async () => {
+    // REV-03, ponto 3/3: aoIrPara (prop de StatusBar/Funil) não limpava
+    // busca. aoIrPara chama setAba("Biblioteca") estando já na Biblioteca,
+    // então o botão de aba não participa — isola aoIrPara.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    await usuario.type(busca, "IMG");
+
+    const funil = await screen.findByTestId("funil");
+    await usuario.click(
+      within(funil).getByRole("button", { name: /conhecidas/ }),
+    );
+
+    expect(
+      await screen.findByPlaceholderText("Buscar por nome ou caminho…"),
+    ).toHaveValue("");
+  });
+
+  it("clicar na aba já ativa não apaga a busca recém-digitada", async () => {
+    // Guarda da decisão de discretion do D-03: clicar na aba em que já se
+    // está é no-op hoje e continua sendo — não pode destruir o texto que o
+    // usuário acabou de digitar.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(await screen.findByRole("button", { name: "Biblioteca" }));
+    const busca = await screen.findByPlaceholderText(
+      "Buscar por nome ou caminho…",
+    );
+    await usuario.type(busca, "IMG");
+
+    await usuario.click(screen.getByRole("button", { name: "Biblioteca" }));
+
+    expect(
+      await screen.findByPlaceholderText("Buscar por nome ou caminho…"),
+    ).toHaveValue("IMG");
   });
 });
 
@@ -214,5 +367,183 @@ describe("âncora temporal", () => {
     await usuario.click(screen.getByTitle("jun/2024 · 5 fotos"));
 
     expect(await screen.findByText(/todo o período/)).toBeInTheDocument();
+  });
+});
+
+describe("Adicionar pasta — um modal, quatro pontos de entrada (CONS-05/D-07)", () => {
+  it("Panorama vazio: clicar 'Adicionar pasta…' abre 'Caminho da pasta de fotos' e confirmar dispara POST /api/scan com o caminho digitado", async () => {
+    const chamadas = servirApi({
+      ...ROTAS_BASE,
+      "/api/panorama": {
+        total: 0,
+        lacunas: [],
+        por_ano: [],
+        por_camera: [],
+        por_extensao: [],
+        cruzamento_ano_fonte: [],
+      },
+      "/api/scan": { status: "rodando", tipo: "scan" },
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Adicionar pasta…" }),
+    );
+    expect(
+      await screen.findByText("Caminho da pasta de fotos"),
+    ).toBeInTheDocument();
+
+    await usuario.type(
+      screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
+      "/Users/eu/Fotos/Viagem",
+    );
+    await usuario.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => {
+      const chamada = chamadas.find((c) => c.caminho === "/api/scan");
+      expect(chamada).toBeDefined();
+      expect(chamada?.metodo).toBe("POST");
+      expect(chamada?.corpo).toEqual({ caminho: "/Users/eu/Fotos/Viagem" });
+    });
+
+    // O disparo teve sucesso: o modal fecha em vez de ficar preso na tela.
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Caminho da pasta de fotos"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("o mesmo modal é alcançável pelo botão da barra lateral, na aba Biblioteca", async () => {
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Biblioteca" }),
+    );
+    const barraLateral = (await screen.findByText("Fontes")).closest(
+      "aside",
+    )!;
+    await usuario.click(
+      within(barraLateral).getByRole("button", { name: "Adicionar pasta…" }),
+    );
+
+    expect(
+      await screen.findByText("Caminho da pasta de fotos"),
+    ).toBeInTheDocument();
+  });
+
+  it("Biblioteca com grade vazia: o estado vazio da grade também tem o botão", async () => {
+    // ROTAS_BASE já serve /api/midia com total 0 — grade genuinamente
+    // vazia, não um catálogo inteiro vazio.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Biblioteca" }),
+    );
+
+    expect(
+      await screen.findByText(/Nenhuma foto no filtro atual/),
+    ).toBeInTheDocument();
+    // Dois botões "Adicionar pasta…" na tela: o da barra lateral e o do
+    // estado vazio da grade — os dois alcançam o mesmo modal do App.
+    expect(
+      screen.getAllByRole("button", { name: "Adicionar pasta…" }),
+    ).toHaveLength(2);
+  });
+
+  it("Trips com viagens e eventos vazios: tem o botão, e a frase original continua", async () => {
+    // Viagens é uma das abas onde a barra lateral também está montada
+    // (ABAS_COM_FONTE) — por isso dois botões "Adicionar pasta…" na tela,
+    // igual à Biblioteca; o que este teste prova é o do estado vazio do
+    // Trips especificamente, escopado à área principal.
+    servirApi(ROTAS_BASE);
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Viagens" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Nenhuma viagem ou evento ainda — gere as sugestões na aba Revisão.",
+      ),
+    ).toBeInTheDocument();
+    const areaPrincipal = document.querySelector("main") as HTMLElement;
+    expect(
+      within(areaPrincipal).getByRole("button", { name: "Adicionar pasta…" }),
+    ).toBeInTheDocument();
+  });
+
+  it("quando o POST /api/scan responde erro, o modal permanece aberto e a mensagem do servidor aparece", async () => {
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/panorama": {
+        total: 0,
+        lacunas: [],
+        por_ano: [],
+        por_camera: [],
+        por_extensao: [],
+        cruzamento_ano_fonte: [],
+      },
+      "/api/scan": erro(422, "caminho não existe no disco"),
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Adicionar pasta…" }),
+    );
+    await usuario.type(
+      screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
+      "/Users/eu/pasta/inexistente",
+    );
+    await usuario.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(
+      await screen.findByText("caminho não existe no disco"),
+    ).toBeInTheDocument();
+    // O .catch não engoliu a falha nem fechou o modal — o campo de caminho
+    // continua no documento, pronto para o usuário corrigir.
+    expect(
+      screen.getByPlaceholderText("/Users/voce/Pictures/Viagens"),
+    ).toBeInTheDocument();
+  });
+
+  it("regressão UAT 2026-08-17 (LANC-03): o backdrop do modal usa opacidade que ocluí o conteúdo de trás, não bg-black/60", async () => {
+    // vitest/jsdom não renderiza pixel real — não teria pego o defeito
+    // original (texto do estado vazio vazando por trás do modal e se
+    // sobrepondo ao título/input, visto no teste de usuário sem instrução).
+    // Este teste trava a classe do fix (mesma opacidade que Loupe.tsx já
+    // usa para backdrop que precisa ocluir por completo) para não deixar
+    // alguém reintroduzir bg-black/60 por engano.
+    servirApi({
+      ...ROTAS_BASE,
+      "/api/panorama": {
+        total: 0,
+        lacunas: [],
+        por_ano: [],
+        por_camera: [],
+        por_extensao: [],
+        cruzamento_ano_fonte: [],
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<App />);
+
+    await usuario.click(
+      await screen.findByRole("button", { name: "Adicionar pasta…" }),
+    );
+    const titulo = await screen.findByText("Caminho da pasta de fotos");
+    const backdrop = titulo.closest("div.fixed.inset-0") as HTMLElement | null;
+
+    expect(backdrop).not.toBeNull();
+    expect(backdrop!.className).not.toMatch(/bg-black\/60\b/);
+    expect(backdrop!.className).toMatch(/bg-black\/95\b/);
   });
 });

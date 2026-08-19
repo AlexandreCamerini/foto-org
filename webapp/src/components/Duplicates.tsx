@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { api } from "../api";
+import { api, type GrupoDuplicatas, type MembroDuplicata } from "../api";
 import type { Job } from "../hooks/useJob";
 import Botao from "../ui/Botao";
 
@@ -131,7 +131,7 @@ export default function Duplicates({ job }: { job: Job }) {
       ) : (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center gap-2 border-b border-borda px-3 py-2">
-            <span className="shrink-0 font-semibold">{grupo.rotulo}</span>
+            <span className="shrink-0 font-titulo">{grupo.rotulo}</span>
             {grupo.resolvido_automaticamente && (
               <span
                 title="Bytes idênticos (SHA-256): o algoritmo escolheu a cópia mais organizada como principal. Revise ou desfaça se preferir outra."
@@ -166,59 +166,98 @@ export default function Duplicates({ job }: { job: Job }) {
           </div>
           <div className="grid flex-1 auto-rows-min grid-cols-2 gap-4 overflow-y-auto p-4 xl:grid-cols-3">
             {grupo.membros.map((m) => (
-              <figure
+              <MembroFigura
                 key={m.member_id}
-                className={`overflow-hidden rounded-md border bg-cartao ${
-                  m.papel === "principal"
-                    ? "border-ok"
-                    : m.papel === "ignorado"
-                      ? "border-borda opacity-50"
-                      : "border-borda"
-                }`}
-              >
-                <img
-                  src={api.previewUrl(m.media_id)}
-                  alt={m.nome}
-                  loading="lazy"
-                  className="aspect-[4/3] w-full bg-black object-contain"
-                />
-                <figcaption className="space-y-1 p-2">
-                  <div className="truncate font-medium" title={m.caminho}>
-                    {m.nome}
-                  </div>
-                  <div className="flex items-center justify-between text-texto-2">
-                    <span>{tamanhoLegivel(m.tamanho)}</span>
-                    {m.papel === "principal" ? (
-                      <span className="text-ok">✓ principal</span>
-                    ) : (
-                      <Botao tamanho="sm"
-                        onClick={() =>
-                          acao.mutate({
-                            url: `/api/duplicatas/${grupo.id}/principal`,
-                            body: { media_id: m.media_id },
-                          })
-                        }
-                        title={
-                          grupo.nivel === "variante"
-                            ? "A outra versão (RAW ou JPEG) sai do plano de cópia — continua no disco de origem, mas não vai para o destino organizado."
-                            : undefined
-                        }
-            className="bg-transparent hover:border-ok hover:text-ok">
-                        {grupo.nivel === "sequencia"
-                          ? "Melhor frame"
-                          : grupo.nivel === "variante"
-                            ? "Manter só esta"
-                            : "Manter esta"}
-                      </Botao>
-                    )}
-                  </div>
-                </figcaption>
-              </figure>
+                membro={m}
+                grupo={grupo}
+                onMarcarPrincipal={() =>
+                  acao.mutate({
+                    url: `/api/duplicatas/${grupo.id}/principal`,
+                    body: { media_id: m.media_id },
+                  })
+                }
+              />
             ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** Um card do grid de comparação. Extraído do `.map()` porque cada membro
+ * precisa do próprio estado de falha de prévia — hook não roda dentro de
+ * `.map()`, e um `useState` no componente pai seria compartilhado por
+ * todos os membros do grupo. */
+function MembroFigura({
+  membro: m,
+  grupo,
+  onMarcarPrincipal,
+}: {
+  membro: MembroDuplicata;
+  grupo: GrupoDuplicatas;
+  onMarcarPrincipal: () => void;
+}) {
+  const [falhouPreview, setFalhouPreview] = useState(false);
+
+  return (
+    <figure
+      className={`overflow-hidden rounded-md border bg-cartao ${
+        m.papel === "principal"
+          ? "border-ok"
+          : m.papel === "ignorado"
+            ? "border-borda opacity-50"
+            : "border-borda"
+      }`}
+    >
+      {falhouPreview ? (
+        <div
+          title="O arquivo pode ter sido movido, renomeado ou corrompido desde a catalogação."
+          className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-cartao text-texto-3"
+        >
+          <span aria-hidden className="text-2xl">
+            ⊘
+          </span>
+          <span className="text-texto-2">imagem indisponível</span>
+        </div>
+      ) : (
+        <img
+          src={api.previewUrl(m.media_id)}
+          alt={m.nome}
+          loading="lazy"
+          onError={() => setFalhouPreview(true)}
+          className="aspect-[4/3] w-full bg-black object-contain"
+        />
+      )}
+      <figcaption className="space-y-1 p-2">
+        <div className="truncate font-titulo" title={m.caminho}>
+          {m.nome}
+        </div>
+        <div className="flex items-center justify-between text-texto-2">
+          <span>{tamanhoLegivel(m.tamanho)}</span>
+          {m.papel === "principal" ? (
+            <span className="text-ok">✓ principal</span>
+          ) : (
+            <Botao
+              tamanho="sm"
+              onClick={onMarcarPrincipal}
+              title={
+                grupo.nivel === "variante"
+                  ? "A outra versão (RAW ou JPEG) sai do plano de cópia — continua no disco de origem, mas não vai para o destino organizado."
+                  : undefined
+              }
+              className="bg-transparent hover:border-ok hover:text-ok"
+            >
+              {grupo.nivel === "sequencia"
+                ? "Melhor frame"
+                : grupo.nivel === "variante"
+                  ? "Manter só esta"
+                  : "Manter esta"}
+            </Botao>
+          )}
+        </div>
+      </figcaption>
+    </figure>
   );
 }
 

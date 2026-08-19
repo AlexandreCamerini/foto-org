@@ -1,0 +1,27 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/RESUMO_INSTRUCOES.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Resumo de instruções — Foto Organizer",
+  "summary": "Consolidated quick-reference summary of global work preferences and Foto Organizer project rules: invariants, stack, architecture, method.",
+  "scope": [
+    "preferências de trabalho",
+    "seleção de modelo",
+    "invariantes de segurança",
+    "stack tecnológica",
+    "arquitetura de módulos",
+    "modelo de evidências e confiança",
+    "método de trabalho"
+  ],
+  "cross_refs": [
+    "CLAUDE.md (global, ~/.claude/CLAUDE.md)",
+    "CLAUDE.md (projeto)",
+    "docs/ROADMAP.md",
+    "docs/CONFIANCA.md",
+    "docs/DIRECAO_DE_ARTE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

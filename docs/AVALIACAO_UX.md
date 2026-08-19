@@ -1,3 +1,166 @@
+# Rodada de 2026-08-18 — reteste pós-fix (fase 5, LANC-03)
+
+**Chegou a uma grade populada.** Reteste da rodada anterior (2026-08-17),
+com uma segunda pessoa que nunca usou o app, depois do fix do backdrop
+(`bg-black/95`, commit `f820d1a`) — critério 3 da Fase 5 (D-06) atendido
+nesta rodada.
+
+## Método
+
+Testador: uma segunda pessoa, diferente da rodada anterior, sem
+participação na construção do app (perfil, não nome). Como o `.app`
+empacotado do Marco 1 foi construído antes do fix, e reconstruir o bundle
+nativo exigiria repetir o empacotamento do runtime PBS (~15-20min,
+indisponível nesta worktree), o reteste rodou o mesmo código-fonte
+corrigido (`webapp/dist` reconstruído, `bg-black/95` presente) servido
+pelo backend Python direto, aberto no Safari — mesmo motor de
+renderização (WebKit) do `WKWebView` do Tauri no macOS. Catálogo
+genuinamente vazio via `FOTOORG_DATA_DIR` descartável; pasta de fotos
+sintéticas separada para o teste (6 JPEGs gerados por
+`tests.fixtures.make_jpeg`, metade com GPS). Mesma frase única dita ao
+testador: "este app organiza fotos; use como quiser".
+
+Ressalva honesta, mesmo espírito das rodadas anteriores: a sessão foi
+conduzida pelo dono do produto, que relatou o resultado de volta no chat
+desta sessão de execução — este documento transcreve esse relato.
+
+## O que foi observado
+
+- O campo de caminho do `ModalCaminho` está legível agora — relato
+  literal do dono: "a entrada de dados agora está limpa possibilitando a
+  digitação da pasta". O bloqueador da rodada anterior (achado 1,
+  2026-08-17) está confirmado corrigido por uma segunda pessoa, não só
+  pelo diagnóstico técnico da rodada passada.
+- O testador chegou à grade populada — sucesso do critério 3.
+- Atrito relatado (não bloqueador): "um usuário normal pode não saber
+  onde estão as pastas" — a mesma observação da rodada anterior (achado
+  2, ausência de seletor de pasta navegável). O dono comentou "isto
+  deveria ter sido resolvido", mas o item já está no backlog separado
+  (`task_16e8effc`, picker de pasta navegável + gauge de importação,
+  retomado pelo próprio dono em outra sessão) — D-04/D-05 mantêm essa
+  reconstrução de fluxo fora do escopo de LANC-03; não é trabalho novo
+  desta rodada.
+
+## Achados classificados
+
+**1. Bloqueador da rodada de 2026-08-17 — confirmado corrigido.** Ver
+detalhe técnico na seção anterior; esta rodada é a confirmação
+comportamental que faltava, com uma segunda pessoa sem instrução.
+
+**2. Atrito / não-bloqueador — sem seletor de pasta navegável.** Mesmo
+achado 2 da rodada anterior, reafirmado por um segundo testador. Fora de
+escopo aqui, já em backlog.
+
+## Recomendação
+
+| Ordem | Item | Classificação | Esforço |
+|---|---|---|---|
+| 1 | Backdrop translúcido demais no `ModalCaminho` | bloqueador — corrigido e confirmado por reteste | — (feito) |
+| 2 | Seletor de pasta navegável (árvore de diretório) | atrito — confirmado por dois testadores, já no backlog do dono | M/G (backlogged) |
+
+LANC-03 atendido: critério 3 da Fase 5 confirmado com evidência
+comportamental de dois testadores reais (rodada 2026-08-17: travou;
+rodada 2026-08-18, pós-fix: chegou à grade).
+
+---
+
+# Rodada de 2026-08-17 — teste de primeira execução (fase 5, LANC-03)
+
+**Não chegou a uma grade populada sem documentação.** O teste travou no
+próprio campo de caminho do `ModalCaminho` — critério 3 da Fase 5 (D-06) não
+foi atendido nesta rodada. O bloqueador tinha causa de renderização, foi
+diagnosticado com evidência visual e corrigido dentro desta mesma sessão
+(commit `f820d1a`); ver "Achados classificados" abaixo.
+
+## Método
+
+Testador: alguém que nunca usou o Foto Organizer e não participou da
+construção do app (perfil, não nome — T-05-41). O app era o `.app`
+empacotado do Marco 1 (`05-03`), aberto sobre catálogo genuinamente vazio
+via `FOTOORG_DATA_DIR` descartável, com uma pasta de fotos neutra separada
+para o teste (Task 1 desta rodada). A única frase dita ao testador: "este
+app organiza fotos; use como quiser".
+
+Ressalva honesta, no mesmo espírito das rodadas anteriores: a sessão em si
+foi conduzida fora deste agente executor — o dono do produto operou o
+lançamento e a observação diretamente e relatou o resultado de volta no
+chat desta sessão de execução; este documento transcreve esse relato, não
+uma observação de primeira mão do agente. A cobertura vai da primeira tela
+em diante, não do duplo-clique no ícone.
+
+## O que foi observado
+
+- O testador chegou à tela inicial (estado vazio do Panorama, "Catálogo
+  vazio — adicione uma pasta na barra lateral para começar.") e encontrou
+  um dos pontos de entrada de "Adicionar pasta…" — isso funcionou.
+- Ao abrir o `ModalCaminho`, os textos da tela de trás (a frase do estado
+  vazio do Panorama e o próprio botão "Adicionar pasta…") apareciam
+  sobrepostos ao título e ao campo de caminho do modal — relato literal do
+  dono: "os textos estão se sobrepondo".
+- O testador travou exatamente nesse ponto e não avançou sozinho — relato
+  literal do dono, quando perguntado diretamente: **"travou ali, não
+  passou desse ponto"**. O teste terminou em falha, não em sucesso com
+  atrito.
+- Um segundo comentário do dono, no mesmo relato: "não tem widget que abre
+  uma árvore de diretório" — dito sobre o mesmo momento, mas é uma
+  observação distinta (ausência de funcionalidade, não defeito visual; ver
+  achado 2 abaixo).
+
+## Achados classificados
+
+**1. Bloqueador — textos sobrepostos no `ModalCaminho`, corrigido nesta
+rodada.**
+
+Causa raiz diagnosticada empiricamente (screenshot real do `.app`
+empacotado antes de qualquer alteração de código, não inspeção de fonte
+isolada — `webapp/src/components/ModalCaminho.tsx` lido primeiro e parecia
+estruturalmente correto, sem overlap óbvio de z-index/espaçamento no JSX;
+o defeito só ficou visível ao renderizar de fato): o backdrop do modal
+(`bg-black/60`, 60% de opacidade) não é opaco o bastante para ocluir o
+conteúdo da tela por trás — a frase do estado vazio do Panorama e o botão
+"Adicionar pasta…" atravessavam visualmente o backdrop e o painel do modal
+(`bg-painel`, translúcido por design — D-017/`docs/DIRECAO_DE_ARTE.md`) e
+se sobrepunham ao título/input do próprio modal. `vitest`/`jsdom` não
+renderiza pixel real, por isso o bug nunca apareceu na suíte automatizada
+apesar do wiring estar coberto (`App.test.tsx:373-510`).
+
+Fix mínimo aplicado: `bg-black/60` → `bg-black/95` em
+`ModalCaminho.tsx`, reusando o mesmo valor de opacidade que
+`Loupe.tsx` já usa para um backdrop que precisa ocluir por completo —
+nenhum token novo, nenhuma mudança em `bg-painel` nem em qualquer outro
+componente. Re-verificado visualmente (captura de tela antes/depois,
+Safari/WebKit — mesmo motor de renderização do WKWebView do Tauri no
+macOS — servindo `webapp/dist` reconstruído contra o backend Python
+direto): o vazamento de texto deixou de ser legível/sobreposto. Regressão
+travada em `App.test.tsx` (asserção de classe do backdrop, já que
+`vitest` não pode travar o pixel em si). Commit `f820d1a`.
+
+**2. Atrito / não-bloqueador — sem seletor de pasta navegável (árvore de
+diretório).**
+
+O `ModalCaminho` pede o caminho digitado à mão, sem widget de navegação de
+diretórios. Isso já é um item de backlog rastreado separadamente (tarefa
+de fundo iniciada pelo dono em outra sessão, sobre um componente de
+seletor de pasta navegável + gauge de progresso de importação) — **não**
+é trabalho novo desta rodada, e D-04/D-05 mantêm essa reconstrução de
+fluxo fora do escopo de LANC-03. Registrado aqui só como confirmação de
+que o próprio teste de usuário tocou nesse ponto, não como tarefa a
+executar.
+
+## Recomendação
+
+| Ordem | Item | Classificação | Esforço |
+|---|---|---|---|
+| 1 | Backdrop translúcido demais no `ModalCaminho` | bloqueador — já corrigido nesta rodada | P (feito) |
+| 2 | Seletor de pasta navegável (árvore de diretório) | atrito — já no backlog do dono, fora de escopo aqui | M/G (backlogged, não decidir aqui) |
+
+Recomendação de reteste: repetir o teste de primeira execução (Task 2 desta
+mesma rodada) com o fix aplicado, antes de fechar LANC-03 como atendido —
+esta rodada corrige o bloqueador observado mas não reexecuta o teste de
+usuário do zero.
+
+---
+
 # Rodada de 2026-08-06 — pós-correções de scan + feedback do dono
 
 Contexto: nesta rodada primeiro foram corrigidos os defeitos de scan/SSE/log

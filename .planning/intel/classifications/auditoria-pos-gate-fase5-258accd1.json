@@ -1,0 +1,31 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/auditoria-pos-gate-fase5.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Auditoria pós-gate da fase 5 — 18 achados medidos, priorizados, cruzados com PhotoPrism/Immich",
+  "summary": "Audit report cataloging 18 measured, prioritized UX/data findings across classification, duplicates, trips and operations; no changes implemented.",
+  "scope": [
+    "classification/engine.py confidence badges",
+    "duplicate detection (VARIANTE/CONTEUDO/VISUAL)",
+    "webapp Trips/Duplicates/Review/Panorama/Funil/Operations UI",
+    "grouping/classifier.py and grouping/eventos.py category heuristics",
+    "operations/inventario.py performance",
+    "api/duplicatas pagination",
+    "evidence and confidence model",
+    "PhotoPrism/Immich competitive reference"
+  ],
+  "cross_refs": [
+    "docs/referencia-photoprism/",
+    "docs/referencia-immich/",
+    "docs/prompts/fase-14-photoprism-e-sintese.md",
+    "docs/CONFIANCA.md",
+    "docs/METODO_DE_TRABALHO.md",
+    "docs/DECISOES.md",
+    "CLAUDE.md",
+    "docs/referencia-photoprism/02-metadados-imagem-e-visao.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Audit/findings report referencing decision log entries (D-041 to D-069) but making no decisions itself; each finding is explicitly a 'candidate to decision' deferred to the owner. Not ADR/PRD/SPEC despite containing code-line evidence and measured metrics — no accepted decision, no user-facing requirements, no implementation contract."
+}

@@ -52,6 +52,11 @@
   --text-corpo: 13px;
   --text-realce: 15px;
 
+  /* Peso único de ênfase — reconciliação full-codebase de font-semibold/font-medium
+     convivendo sem regra (B.8). Mesmo valor (500) que font-medium já era; o ganho é
+     nomear a decisão, não mudar o número. */
+  --font-weight-titulo: 500;
+
   /* --- Raio ---------------------------------------------------------------
      Hoje há quatro valores sem regra (`rounded-md` 61×, `rounded` 21×,
      `rounded-sm`, e 6px/5px/4px soltos no CSS). Dois bastam para o que o app

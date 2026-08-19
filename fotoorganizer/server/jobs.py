@@ -19,6 +19,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.config.settings import Settings
+from fotoorganizer.exif_write.executor import DryRunObrigatorioExif, ExifWriteExecutor
 from fotoorganizer.metadata import criar_extrator
 from fotoorganizer.operations import (
     DryRunObrigatorio,
@@ -132,6 +133,19 @@ class JobManager:
             plan_id, controle,
         )
 
+    def iniciar_escrita_exif(self, plan_id: int) -> bool:
+        """Executa um plano de escrita EXIF aprovado (D-075). Mesmo padrão
+        de `iniciar_execucao`: o `ExecutionControl` nasce aqui, na thread
+        do pedido, para que um cancelamento imediato não se perca."""
+        if self.ocupado():
+            return False
+        controle = ExecutionControl()
+        self._exec_control = controle
+        return self._iniciar(
+            "escrita_exif", f"plano {plan_id}", self._rodar_escrita_exif,
+            plan_id, controle,
+        )
+
     def _iniciar(self, tipo: str, alvo: str, funcao, *args) -> bool:
         if self.ocupado():
             return False
@@ -186,6 +200,9 @@ class JobManager:
             from fotoorganizer.geolocation import LocationResolver
             from fotoorganizer.geolocation.offline import OfflineGeocoder
             from fotoorganizer.repositories.lexico import LexicoRepository
+            from fotoorganizer.repositories.pasta_classificacao import (
+                ClassificacaoPastaRepository,
+            )
             from fotoorganizer.repositories.settings import SettingsRepository
 
             # Sem preferência salva, o comportamento é idêntico a antes desta
@@ -198,12 +215,20 @@ class JobManager:
             # (`scripts/classificar_nomes.py`). Léxico vazio = cascata
             # decide como sempre decidiu.
             lexico = LexicoRepository(self._factory).conhecidos()
+            # Propostas de GenAI de pasta JÁ APROVADAS, lidas do CACHE local
+            # — nada sai da máquina aqui. A chamada paga ao Claude já
+            # aconteceu na sessão interativa (07-02/07-04); `gerar()` só
+            # relê o que foi decidido (mesma nota que `lexico` acima).
+            pastas_classificadas = ClassificacaoPastaRepository(
+                self._factory
+            ).aprovadas()
             engine = SuggestionEngine(
                 self._factory,
                 LocationResolver(OfflineGeocoder()),
                 template=template,
                 advisor=self._advisor(),
                 lexico=lexico,
+                pastas_classificadas=pastas_classificadas,
             )
             resultado = engine.gerar()
             self._atualizar(
@@ -235,6 +260,34 @@ class JobManager:
             self._atualizar(status="erro", mensagem=str(exc))
         except Exception as exc:
             log.exception("job execução falhou")
+            self._atualizar(status="erro", mensagem=str(exc))
+
+    def _rodar_escrita_exif(self, plan_id: int, controle: ExecutionControl) -> None:
+        executor = ExifWriteExecutor(self._factory)
+
+        def progresso(n: int, total: int, origem: str) -> None:
+            self._atualizar(vistos=total, processados=n,
+                            arquivo=Path(origem).name)
+
+        try:
+            stats = executor.executar(
+                plan_id, progress=progresso, control=controle
+            )
+            self._atualizar(
+                status="cancelado" if stats["cancelado"] else "concluido",
+                # gravados+sidecars: a forma de "processados" que o analog
+                # usa (stats["copiados"]) não existe aqui — o resultado real
+                # deste domínio é por campo/rota de escrita, não uma
+                # contagem única; "resultado" completo (com
+                # falhas_parciais) vai junto para a UI não perder o detalhe.
+                processados=stats["gravados"] + stats["sidecars"],
+                pulados=stats["pulados"], erros=stats["erros"],
+                resultado=stats,
+            )
+        except DryRunObrigatorioExif as exc:
+            self._atualizar(status="erro", mensagem=str(exc))
+        except Exception as exc:
+            log.exception("job escrita exif falhou")
             self._atualizar(status="erro", mensagem=str(exc))
 
     def _rodar_duplicatas(self) -> None:

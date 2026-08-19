@@ -75,4 +75,21 @@ describe("RetomarScan", () => {
     expect(screen.queryByTestId("retomar-scan")).toBeNull();
     expect(chamadas.every((c) => c.metodo === "GET")).toBe(true);
   });
+
+  it("Retomar usa o contorno padrão do Botao, não o acento permanente de antes (D-04, CONS-03)", async () => {
+    servirApi({ ...ROTAS_BASE, "/api/scan/interrompidos": [INTERROMPIDO] });
+    montar(<RetomarScan job={job()} />);
+
+    const botao = await screen.findByRole("button", { name: "Retomar" });
+    // Tokens exatos (não substring): "hover:border-acento" do contorno
+    // padrão contém "border-acento" como substring, então a checagem tem
+    // que ser por token para não confundir o hover legítimo com o override
+    // fixo que este teste trava a regressão de.
+    const classes = botao.className.split(" ");
+    expect(classes).not.toContain("border-acento");
+    expect(classes).not.toContain("text-acento");
+    expect(classes).toContain("border-borda");
+    expect(classes).toContain("bg-cartao");
+    expect(classes).toContain("text-texto");
+  });
 });

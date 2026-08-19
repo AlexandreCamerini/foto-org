@@ -1,0 +1,20 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/METODO_DE_TRABALHO.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Método de trabalho — engenharia, UX e performance",
+  "summary": "Reusable cross-project guide of engineering, UX, data, performance and cost principles plus a Definition of Done checklist.",
+  "scope": [
+    "arquitetura em camadas",
+    "UX teclado-first",
+    "dados local-first e nuvem opcional",
+    "performance de processamento",
+    "otimização de custo",
+    "Definition of Done"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

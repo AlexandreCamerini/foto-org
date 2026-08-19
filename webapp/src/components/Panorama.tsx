@@ -123,8 +123,12 @@ function OAcervo({ inv }: { inv: Inventario }) {
  * Cada lacuna é clicável porque contar sem poder agir não resolve nada. */
 export default function Panorama({
   aoRecortar,
+  onAdicionarPasta,
 }: {
   aoRecortar: (recorte: Recorte) => void;
+  /** Abre o modal de adicionar pasta do App.tsx — mesma ação do botão da
+   * Sidebar, que nem está montada nesta aba (CONS-05/D-07). */
+  onAdicionarPasta: () => void;
 }) {
   const { data } = useQuery({ queryKey: ["panorama"], queryFn: api.panorama });
   // Mesma queryKey da Sidebar: o cache do react-query serve as duas.
@@ -146,8 +150,9 @@ export default function Panorama({
   }
   if (data.total === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-texto-2">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-texto-2">
         Catálogo vazio — adicione uma pasta na barra lateral para começar.
+        <Botao onClick={onAdicionarPasta}>Adicionar pasta…</Botao>
       </div>
     );
   }

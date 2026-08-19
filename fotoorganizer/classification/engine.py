@@ -42,8 +42,10 @@ from fotoorganizer.grouping.datas import (
     rotulo_mes,
 )
 from fotoorganizer.geolocation.folder_names import _normalizar
+from fotoorganizer.geolocation.timezones import TZ_POR_PAIS
 from fotoorganizer.metadata.base import NAMESPACE_CURADORIA
 from fotoorganizer.metadata.camera import nome_da_camera
+from fotoorganizer.repositories.pasta_classificacao import PropostaDePasta
 from fotoorganizer.geolocation.home import detectar_casa, distancia_km
 from fotoorganizer.grouping import (
     FotoRef,
@@ -249,6 +251,7 @@ class SuggestionEngine:
         advisor: ClassificationAdvisor | None = None,
         config: ConfigClassificacao = ConfigClassificacao(),
         lexico: dict[str, str] | None = None,
+        pastas_classificadas: dict[str, PropostaDePasta] | None = None,
     ) -> None:
         self._factory = session_factory
         self._resolver = resolver
@@ -259,6 +262,13 @@ class SuggestionEngine:
         # desligado (padrão) — e aí a cascata decide como sempre decidiu.
         self._tipos_de_nome: tuple[tuple[str, str], ...] = tuple(
             (lexico or {}).items()
+        )
+        # Propostas de GenAI de pasta JÁ APROVADAS (07-01/07-05), lidas em
+        # lote UMA vez por rodada — mesmo tratamento de `lexico` acima.
+        # Vazio quando nenhuma proposta foi aprovada, e aí a cascata decide
+        # como sempre decidiu (GENAI-03).
+        self._pastas_classificadas: dict[str, PropostaDePasta] = (
+            pastas_classificadas or {}
         )
 
     # -- API ----------------------------------------------------------------
@@ -302,6 +312,16 @@ class SuggestionEngine:
                 session, organizaveis, midias, sessoes, sessao_da_media
             )
 
+            # tz_estimado segue o mesmo padrão de recálculo incondicional
+            # dos campos gps_*_estimado (`_persistir_herancas`, acima):
+            # roda para TODA mídia organizável, inclusive a que já tem
+            # sugestão decidida e por isso nunca passa pelo loop abaixo
+            # (CR-01 — antes ficava congelado no valor da última rodada em
+            # que a sugestão ainda estava pendente).
+            self._atualizar_tz_estimado(
+                session, organizaveis, sessao_da_media, herancas, por_id,
+            )
+
             geradas = 0
             for media in organizaveis:
                 if media.id in decididas:
@@ -309,6 +329,7 @@ class SuggestionEngine:
                 drafts = self._evidencias_para(
                     session, media, sessao_da_media.get(media.id),
                     herancas, por_id, curadoria.get(media.id, ()),
+                    proposta_de_pasta=self._pastas_classificadas.get(media.pasta),
                 )
                 self._persistir_sugestao(session, media, drafts)
                 geradas += 1
@@ -380,9 +401,64 @@ class SuggestionEngine:
             if chave not in resolvidos:
                 location = self._resolver.resolve(session, *coordenada)
                 resolvidos[chave] = location.id if location is not None else None
-            location_id = resolvidos[chave]
-            if location_id is not None:
-                media.location_id = location_id
+            # Grava sempre, inclusive None: se a coordenada deixou de
+            # resolver nesta rodada (doadora mudou, provider rejeitou o
+            # ponto), o location_id de uma coordenada antiga não pode
+            # sobreviver — sem isto a mídia ficava presa a um país que
+            # ela não tem mais (WR-01).
+            media.location_id = resolvidos[chave]
+
+    def _pais_efetivo(self, session: Session, media: MediaFile,
+                      sessao: "_Sessao | None",
+                      herancas: dict[int, Heranca],
+                      por_id: dict[int, MediaFile]) -> str | None:
+        """País efetivo desta mídia, pela MESMA cascata de `_evidencias_geo`
+        (GPS próprio > GPS herdado > pasta > vizinhança da sessão), mas sem
+        gravar Evidence/Suggestion — usado por `_atualizar_tz_estimado`
+        (CR-01) para recalcular `tz_estimado` incondicionalmente, inclusive
+        para mídia com sugestão já decidida (que nunca chama
+        `_evidencias_geo`). Duplicada em vez de compartilhada de propósito:
+        reaproveitar `_evidencias_geo` aqui arriscaria mudar o texto de
+        justificativa/score da evidência existente, fora do escopo deste
+        fix. Mantém o mesmo critério de parada de cada ramo do original:
+        GPS próprio decide sozinho assim que resolve (mesmo que
+        `location.pais` seja `None`), herdado só decide quando a janela de
+        tempo sustenta o campo país (`heranca.fator_de('pais')`)."""
+        if media.gps_lat is not None and self._resolver is not None:
+            location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
+            if location is not None:
+                return location.pais
+
+        heranca = herancas.get(media.id)
+        if heranca is not None and self._resolver is not None:
+            location = self._resolver.resolve(session, heranca.lat, heranca.lon)
+            if location is not None and heranca.fator_de("pais") is not None:
+                return location.pais
+
+        hierarquia = extrair_hierarquia_da_pasta(media.pasta)
+        if hierarquia.pais:
+            return hierarquia.pais
+
+        if sessao is not None and sessao.pais_dominante:
+            return sessao.pais_dominante
+
+        return None
+
+    def _atualizar_tz_estimado(self, session: Session, organizaveis,
+                               sessao_da_media: dict[int, "_Sessao"],
+                               herancas: dict[int, Heranca],
+                               por_id: dict[int, MediaFile]) -> None:
+        """tz_estimado segue o mesmo padrão de recálculo incondicional dos
+        campos gps_*_estimado em `_persistir_herancas`: roda para TODA mídia
+        organizável a cada `gerar()`, inclusive a que já tem sugestão
+        decidida (CR-01 — antes só era recalculado dentro de
+        `_persistir_sugestao`, que é pulada para mídia decidida, e o valor
+        ficava congelado para sempre)."""
+        for media in organizaveis:
+            pais = self._pais_efetivo(
+                session, media, sessao_da_media.get(media.id), herancas, por_id,
+            )
+            media.tz_estimado = TZ_POR_PAIS.get(pais) if pais else None
 
     # -- correlação entre fontes ---------------------------------------------
     @staticmethod
@@ -708,7 +784,9 @@ class SuggestionEngine:
                          sessao: _Sessao | None,
                          herancas: dict[int, Heranca],
                          por_id: dict[int, MediaFile],
-                         palavras_chave: tuple[str, ...] = ()) -> list[_Draft]:
+                         palavras_chave: tuple[str, ...] = (),
+                         proposta_de_pasta: PropostaDePasta | None = None,
+                         ) -> list[_Draft]:
         drafts: list[_Draft] = []
 
         # Foto de câmera ou imagem que só passou pelo disco? Decide antes de
@@ -782,7 +860,10 @@ class SuggestionEngine:
             drafts.append(_Draft("ano", "pasta", str(data_pasta.ano), just))
 
         drafts.extend(
-            self._evidencias_geo(session, media, sessao, herancas, por_id)
+            self._evidencias_geo(
+                session, media, sessao, herancas, por_id,
+                proposta_de_pasta=proposta_de_pasta,
+            )
         )
 
         if sessao is not None and sessao.tipo == "viagem":
@@ -797,8 +878,23 @@ class SuggestionEngine:
                 f"{sessao.draft.n_fotos} fotos em "
                 f"{sessao.draft.periodo_legivel()} — {sessao.justificativa}",
             ))
+        # Evento vindo da proposta de GenAI de pasta: a sessão (viagem/
+        # evento) tem precedência — a proposta só preenche o silêncio,
+        # nunca disputa com um veredito que a cascata determinística já deu.
+        if (
+            proposta_de_pasta is not None
+            and proposta_de_pasta.evento
+            and not any(d.campo == "evento" for d in drafts)
+        ):
+            drafts.append(_Draft(
+                "evento", "llm_pasta", proposta_de_pasta.evento,
+                proposta_de_pasta.justificativa,
+            ))
 
-        categoria = self._categoria(media, sessao, drafts, palavras_chave)
+        categoria = self._categoria(
+            media, sessao, drafts, palavras_chave,
+            proposta_de_pasta=proposta_de_pasta,
+        )
         if categoria is not None:
             drafts.append(categoria)
         return drafts
@@ -806,7 +902,9 @@ class SuggestionEngine:
     def _evidencias_geo(self, session: Session, media: MediaFile,
                         sessao: _Sessao | None,
                         herancas: dict[int, Heranca],
-                        por_id: dict[int, MediaFile]) -> list[_Draft]:
+                        por_id: dict[int, MediaFile],
+                        proposta_de_pasta: PropostaDePasta | None = None,
+                        ) -> list[_Draft]:
         # 1) GPS + geocodificação offline.
         if media.gps_lat is not None and self._resolver is not None:
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
@@ -852,6 +950,14 @@ class SuggestionEngine:
                         "; a hora de uma delas é a do arquivo, não a da "
                         "captura — a proximidade pode ser coincidência"
                     )
+                # A justificativa geral (sem concordância) vale para todo
+                # campo; só o campo corroborado por uma segunda doadora
+                # (D-074) ganha a frase extra — dizer isso é parte do "por
+                # quê" que o usuário vê, não só um detalhe interno de score.
+                just_concordante = just + (
+                    "; confirmada por outra foto do lado oposto no tempo, "
+                    "na mesma área plausível"
+                )
                 drafts = []
                 for campo, valor in [
                     ("pais", location.pais), ("regiao", location.regiao),
@@ -863,8 +969,12 @@ class SuggestionEngine:
                     score = round(
                         SCORES_REFERENCIA["vizinhanca_temporal"] * fator, 3
                     )
+                    texto = (
+                        just_concordante if campo in heranca.concordancia
+                        else just
+                    )
                     drafts.append(
-                        _Draft(campo, "vizinhanca_temporal", valor, just,
+                        _Draft(campo, "vizinhanca_temporal", valor, texto,
                                score_override=score)
                     )
                 if drafts:
@@ -883,6 +993,27 @@ class SuggestionEngine:
                 if valor
             ]
 
+        # 2c) Proposta de GenAI de pasta (aprovada, 07-01/07-05). Só chega
+        # aqui quando a hierarquia determinística do passo 2 já falhou — as
+        # duas condições coincidem por construção, porque D-01 (07-03) só
+        # oferece à sessão de classificação a pasta cuja hierarquia
+        # determinística já veio vazia. Fica ACIMA da vizinhança (passo 3)
+        # porque a proposta é sobre ESTA pasta; vizinhança é inferência
+        # sobre o grupo inteiro da sessão.
+        if proposta_de_pasta is not None and (
+            proposta_de_pasta.cidade or proposta_de_pasta.pais
+        ):
+            drafts = [
+                _Draft(campo, "llm_pasta", valor, proposta_de_pasta.justificativa)
+                for campo, valor in [
+                    ("pais", proposta_de_pasta.pais),
+                    ("cidade", proposta_de_pasta.cidade),
+                ]
+                if valor
+            ]
+            if drafts:
+                return drafts
+
         # 3) Vizinhança: a sessão tem país dominante pelo GPS das outras.
         if sessao is not None and sessao.pais_dominante:
             return [_Draft(
@@ -895,7 +1026,9 @@ class SuggestionEngine:
 
     def _categoria(self, media: MediaFile, sessao: _Sessao | None,
                    drafts: list[_Draft],
-                   palavras_chave: tuple[str, ...] = ()) -> _Draft | None:
+                   palavras_chave: tuple[str, ...] = (),
+                   proposta_de_pasta: PropostaDePasta | None = None,
+                   ) -> _Draft | None:
         # 1) Pasta de categoria explícita no caminho da foto.
         for segmento in reversed(media.pasta.split("/")):
             canonico = _CATEGORIAS_PASTA.get(_normalizar(segmento))
@@ -934,6 +1067,18 @@ class SuggestionEngine:
             return _Draft("categoria", "llm", sessao.categoria,
                           sessao.justificativa or
                           "sugerido por LLM a partir de metadados")
+        # 3b) Proposta de GenAI de pasta (aprovada, 07-01/07-05) — degrau
+        # IRMÃO do advisor de cluster (item 3), nunca fundido com ele: a
+        # origem chega diferente ao banco (`llm_pasta`, não `llm`) porque
+        # são afirmações de natureza distinta (nome da pasta vs. metadado
+        # da mídia) e a Revisão precisa distinguir as duas (ROADMAP/CONTEXT
+        # da fase 7). Só age quando o advisor não decidiu — fallback, nunca
+        # substituição.
+        if proposta_de_pasta is not None and proposta_de_pasta.categoria:
+            return _Draft(
+                "categoria", "llm_pasta", proposta_de_pasta.categoria,
+                proposta_de_pasta.justificativa,
+            )
         return None
 
     @staticmethod
@@ -1059,6 +1204,12 @@ class SuggestionEngine:
             )
             session.add(evidencia)
             evidencias[draft.campo] = evidencia
+
+        # tz_estimado NÃO é calculado aqui: esta função é pulada para mídia
+        # com sugestão já decidida (ver `gerar()`), e tz_estimado precisa do
+        # mesmo padrão de recálculo incondicional de gps_lat_estimado
+        # (CR-01) — quem grava é `_atualizar_tz_estimado`, chamado sobre
+        # TODA mídia organizável antes deste loop rodar.
 
         campos = {campo: ev.valor for campo, ev in evidencias.items()}
         if "data" in evidencias:

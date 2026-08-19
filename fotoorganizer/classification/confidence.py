@@ -57,6 +57,30 @@ SCORES_REFERENCIA: dict[str, float] = {
     "fs": 0.40,            # data do filesystem (sem EXIF)
     "visao": 0.30,         # apenas análise visual
     "usuario": 1.00,       # correção manual prevalece sobre tudo
+    # Cidade/país/categoria inferidos pelo Claude a partir do NOME da pasta
+    # e do metadado já catalogado (opt-in, classification/pasta_classificacao,
+    # GENAI-03) — não lê imagem, não sai da máquina sem consentimento.
+    # Abaixo de `pasta` (0.60): `pasta` é parse determinístico de um
+    # segmento que já nomeia o lugar; aqui o modelo INFERE a partir de uma
+    # string ambígua ("Praia 2019" não é parseável, precisa de julgamento).
+    # Chave separada de `llm` (0.55) mesmo com o mesmo número provisório:
+    # são afirmações de natureza diferente (uma lê metadado de mídia
+    # individual via Advisor de cluster, a outra lê o nome da pasta uma vez
+    # por sessão) — docs/CONFIANCA.md proíbe fundir origens distintas, e o
+    # ROADMAP exige degrau próprio na cascata para manter a Revisão
+    # distinguindo as duas.
+    # MEDIDO (D-081, 07-09) — 4 pastas de amostra contra verdade
+    # determinística do catálogo (categoria: 2 itens, cidade/país: 2 itens
+    # cada, mesmo payload/schema de produção). Zero erros observados nos
+    # dois campos: categoria acertou 2/2 (100%); cidade/país recusou 2/2
+    # (100%, `null` — comportamento seguro de D-06, não falha). Dono
+    # decidiu manter em 0.55, igualando ao advisor de cluster (`llm`),
+    # porque o sinal que mais importa (taxa de erro/alucinação, o que
+    # D-049 mediu) ficou em zero. Amostra pequena e preliminar — base de
+    # medição da Fase 7 tem só ~1.400 arquivos e 2 fontes cadastradas
+    # (`.planning/STATE.md` § Blockers/Concerns); revisitar se/quando
+    # ARCH-01 reconectar os volumes maiores do acervo.
+    "llm_pasta": 0.55,
 }
 
 _LIMIAR_ALTA = 0.8

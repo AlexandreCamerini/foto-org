@@ -1,10 +1,23 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import Review from "./Review";
 import type { Job } from "../hooks/useJob";
 import { ROTAS_BASE, erro, montar, servirApi } from "../test/servidor";
+
+// Dublê trivial: isola este arquivo do assistente GenAI inteiro (07-06/07-07
+// já têm a suíte própria). Os testes da pastilha no PorQue, mais abaixo,
+// NÃO usam este dublê — exercitam o PorQue real, que é o que este plano
+// (07-08) alterou.
+vi.mock("./ClassificacaoPasta", () => ({
+  ClassificacaoPasta: ({ onFechar }: { onFechar: () => void }) => (
+    <div>
+      <span>Assistente de classificação por IA (mock)</span>
+      <button onClick={onFechar}>Fechar mock</button>
+    </div>
+  ),
+}));
 
 function jobParado(): Job {
   return {
@@ -109,6 +122,20 @@ describe("Review", () => {
     expect(screen.getByText("Aprovar 1")).toBeInTheDocument();
     // Dobrado por padrão: a decisão é o grupo, não as 3 linhas.
     expect(screen.queryByText("DSC_0100.jpg")).not.toBeInTheDocument();
+  });
+
+  it("Gerar/atualizar sugestões usa o contorno padrão, não o preenchido de antes (D-04, CONS-03)", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    montar(<Review job={jobParado()} />);
+
+    const botao = await screen.findByRole("button", {
+      name: "Gerar/atualizar sugestões",
+    });
+    const classes = botao.className.split(" ");
+    expect(classes).not.toContain("bg-acento");
+    expect(classes).not.toContain("text-texto-invertido");
+    expect(classes).toContain("border-borda");
+    expect(classes).toContain("bg-cartao");
   });
 
   it("abre e fecha o grupo pelo teclado, sem depender do mouse", async () => {
@@ -407,6 +434,107 @@ describe("badge de confiança em 'Não classificadas'", () => {
     });
 });
 
+describe("selo de fonte (CONS-01)", () => {
+  // Duas fontes de nomes distintos: o selo precisa mostrar o nome de cada
+  // uma, não um rótulo genérico ("fonte 1", "fonte 2").
+  const FONTES = [
+    {
+      id: 1, caminho: "/Volumes/disco-a/fotos", apelido: "Disco A",
+      tipo: "pasta" as const, disponivel: true, fotos: 5,
+    },
+    {
+      id: 2, caminho: "/Volumes/disco-b/fotos", apelido: "Disco B",
+      tipo: "pasta" as const, disponivel: true, fotos: 5,
+    },
+  ];
+
+  // Itens 1 e 2 colidem: mesmo nome, data e câmera, media_id diferente — a
+  // mesma foto catalogada a partir de duas fontes. Item 3 é o controle:
+  // nome diferente, não colide com o vizinho (item 2).
+  const SUGESTOES_COLISAO = {
+    contagens: { pendente: 3 },
+    total: 3,
+    itens: [
+      {
+        id: 1, media_id: 101, nome: "IMG_0001.jpg", pasta: "/fotos/a",
+        destino: "Viagens/2024 - Grécia", nivel: "alta", status: "pendente",
+        data_capturada: "2024-06-01T09:00:00", camera: "Apple iPhone 15 Pro",
+        gps_estimado: false, source_id: 1,
+      },
+      {
+        id: 2, media_id: 102, nome: "IMG_0001.jpg", pasta: "/fotos/b",
+        destino: "Viagens/2024 - Grécia", nivel: "alta", status: "pendente",
+        data_capturada: "2024-06-01T09:00:00", camera: "Apple iPhone 15 Pro",
+        gps_estimado: false, source_id: 2,
+      },
+      {
+        id: 3, media_id: 103, nome: "IMG_0002.jpg", pasta: "/fotos/a",
+        destino: "Viagens/2024 - Grécia", nivel: "alta", status: "pendente",
+        data_capturada: "2024-06-01T09:05:00", camera: "Apple iPhone 15 Pro",
+        gps_estimado: false, source_id: 1,
+      },
+    ],
+  };
+  const GRUPOS_COLISAO = [
+    {
+      destino: "Viagens/2024 - Grécia", total: 3, nivel: "alta",
+      estimadas: 0, fora_de_alcance: 0,
+      origens: [{ pasta: "/fotos/a", fotos: 2 }, { pasta: "/fotos/b", fotos: 1 }],
+    },
+  ];
+
+  it("sugestões vizinhas com mesmo nome+data+câmera mostram o selo com o nome da fonte, e o item sem colisão fica sem selo", async () => {
+    servirApi({
+      "/api/sugestoes": SUGESTOES_COLISAO,
+      "/api/sugestoes/grupos": GRUPOS_COLISAO,
+      "/api/fontes": FONTES,
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupo(usuario, "Viagens/2024 - Grécia");
+    const linhasImg1 = await screen.findAllByText("IMG_0001.jpg");
+    expect(linhasImg1).toHaveLength(2);
+
+    // Cada uma das duas linhas colididas mostra o selo com o nome da SUA
+    // fonte — não um selo único, não o nome da outra.
+    const linhaDiscoA = linhasImg1[0].closest("div")!;
+    expect(within(linhaDiscoA).getByText("Disco A")).toBeInTheDocument();
+    const linhaDiscoB = linhasImg1[1].closest("div")!;
+    expect(within(linhaDiscoB).getByText("Disco B")).toBeInTheDocument();
+
+    // O título explica a colisão, não expõe caminho nem id.
+    const selos = screen.getAllByTitle(/Mesmo nome, data e câmera/);
+    expect(selos).toHaveLength(2);
+
+    // Item de controle: mesma fonte do primeiro item, mas nome diferente —
+    // não colide com ninguém, não ganha selo.
+    const linhaControle = (await screen.findByText("IMG_0002.jpg")).closest("div")!;
+    expect(within(linhaControle).queryByText("Disco A")).not.toBeInTheDocument();
+    expect(
+      within(linhaControle).queryByTitle(/Mesmo nome, data e câmera/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("selo cai no rótulo de fallback quando a fonte da sugestão não está no cache", async () => {
+    // /api/fontes só conhece a fonte 1 — a sugestão colidida referencia a
+    // fonte 2, ausente do cache (ex.: fonte removida entre a geração da
+    // sugestão e a revisão). O selo não pode sumir nem quebrar a tela.
+    servirApi({
+      "/api/sugestoes": SUGESTOES_COLISAO,
+      "/api/sugestoes/grupos": GRUPOS_COLISAO,
+      "/api/fontes": [FONTES[0]],
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupo(usuario, "Viagens/2024 - Grécia");
+    await screen.findAllByText("IMG_0001.jpg");
+
+    expect(screen.getByText("fonte")).toBeInTheDocument();
+  });
+});
+
 describe("foto fora de alcance", () => {
   it("a linha diz por quê em vez de desenhar imagem quebrada", async () => {
     // O primeiro grupo da fila de um acervo real estava inteiro num volume
@@ -438,5 +566,114 @@ describe("foto fora de alcance", () => {
       await screen.findByText("volume ou pasta fora de alcance"),
     ).toBeInTheDocument();
     expect(screen.queryByAltText("1W0B3275.dng")).not.toBeInTheDocument();
+  });
+});
+
+describe("botão de classificação de pasta por IA (07-08)", () => {
+  it("botão de classificação abre o modal", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await usuario.click(
+      await screen.findByText("Classificar pastas por IA…"),
+    );
+
+    // Texto que só existe dentro do dublê do modal — prova que ele montou.
+    expect(
+      await screen.findByText("Assistente de classificação por IA (mock)"),
+    ).toBeInTheDocument();
+  });
+
+  it("modal fecha e a Revisão continua", async () => {
+    servirApi({ "/api/sugestoes": SUGESTOES, "/api/sugestoes/grupos": GRUPOS });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await usuario.click(
+      await screen.findByText("Classificar pastas por IA…"),
+    );
+    await screen.findByText("Assistente de classificação por IA (mock)");
+
+    await usuario.click(screen.getByText("Fechar mock"));
+
+    expect(
+      screen.queryByText("Assistente de classificação por IA (mock)"),
+    ).not.toBeInTheDocument();
+    // A Revisão por baixo continua intacta — fechar o modal não desmontou a
+    // tela nem perdeu o estado de grupos.
+    expect(
+      await screen.findByText("Viagens/2024 - França"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("pastilha de origem llm_pasta no PorQue (07-08)", () => {
+  // Reusa a mesma sugestão (media_id 12) das fixtures de PorQue acima —
+  // só o corpo de /api/midia/12 muda entre os dois testes.
+  const DETALHE_LLM_PASTA = {
+    id: 12,
+    nome: "DSC_0100.jpg",
+    sugestao: {
+      id: 2, destino: "Viagens/2024 - França", nivel: "media", status: "pendente",
+      evidencias: [
+        {
+          campo: "cidade", origem: "llm_pasta", valor: "Lisboa",
+          nivel: "media", score: 0.55,
+          justificativa: "Nome da pasta sugere Lisboa, Portugal",
+        },
+      ],
+    },
+  };
+  const DETALHE_GPS = {
+    id: 12,
+    nome: "DSC_0100.jpg",
+    sugestao: {
+      id: 2, destino: "Viagens/2024 - França", nivel: "media", status: "pendente",
+      evidencias: [
+        {
+          campo: "cidade", origem: "gps", valor: "Paris",
+          nivel: "alta", score: 0.9,
+          justificativa: "Coordenada GPS do próprio arquivo",
+        },
+      ],
+    },
+  };
+
+  it("evidência llm_pasta ganha a pastilha", async () => {
+    servirApi({
+      "/api/sugestoes": SUGESTOES,
+      "/api/sugestoes/grupos": GRUPOS,
+      "/api/midia/12": DETALHE_LLM_PASTA,
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupo(usuario, "Viagens/2024 - França");
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(
+      screen.getByTitle("Por que este destino para DSC_0100.jpg?"),
+    );
+
+    expect(await screen.findByText("IA · pasta")).toBeInTheDocument();
+  });
+
+  it("evidência de outra origem não ganha pastilha", async () => {
+    servirApi({
+      "/api/sugestoes": SUGESTOES,
+      "/api/sugestoes/grupos": GRUPOS,
+      "/api/midia/12": DETALHE_GPS,
+    });
+    const usuario = userEvent.setup();
+    montar(<Review job={jobParado()} />);
+
+    await abrirGrupo(usuario, "Viagens/2024 - França");
+    await screen.findByText("DSC_0100.jpg");
+    await usuario.click(
+      screen.getByTitle("Por que este destino para DSC_0100.jpg?"),
+    );
+
+    await screen.findByText(/Coordenada GPS do próprio arquivo/);
+    expect(screen.queryByText("IA · pasta")).not.toBeInTheDocument();
   });
 });

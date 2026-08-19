@@ -170,4 +170,34 @@ describe("Operações", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  it("Cancelar de cópia em andamento é neutro em repouso, vermelho só no hover (D-05, CONS-07)",
+    async () => {
+      servirApi(rotas("2026-07-26T10:00:00"));
+      const cancelar = vi.fn();
+      const usuario = userEvent.setup();
+      montar(
+        <Operations
+          job={jobParado({
+            rodando: true,
+            estado: { status: "rodando", tipo: "operacao" },
+            cancelar,
+          })}
+        />,
+      );
+
+      await usuario.click(await screen.findByText("Cópia para /destino"));
+      const botao = await screen.findByRole("button", { name: "Cancelar" });
+
+      // "hover:text-erro" contém a substring "text-erro" — não dá para
+      // testar ausência de "text-erro" puro (falso positivo). O que só o
+      // tom="erro" produz (cor em repouso) é "bg-erro/10"/"border-erro/40";
+      // é isso que a asserção negativa tem que casar.
+      expect(botao.className).toContain("hover:text-erro");
+      expect(botao.className).not.toContain("bg-erro/10");
+      expect(botao.className).not.toContain("border-erro/40");
+
+      await usuario.click(botao);
+      expect(cancelar).toHaveBeenCalledTimes(1);
+    });
 });

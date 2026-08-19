@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/CONFIANCA.md",
+  "type": "SPEC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Sistema de confiança",
+  "summary": "Especifica o modelo de evidências, tabela de scores por origem e a regra de agregação (elo mais fraco) para confiança de sugestões.",
+  "scope": ["evidence", "score de confiança", "níveis alta/média/baixa", "agregação de campos de destino", "geocodificação reversa", "reconhecimento facial", "correção manual do usuário", "versao_logica", "badges de UI"],
+  "cross_refs": ["docs/AGRUPAMENTO.md", "docs/DECISOES.md (D-030, D-034)"],
+  "locked": false,
+  "precedence": null,
+  "notes": "Sem frontmatter e sem convenção de nome; classificado SPEC por definir modelo de dados (evidence), tabela de scores e regra de agregação como contrato de implementação, não como requisito de produto ou decisão arquitetural única com status Accepted/Proposed."
+}

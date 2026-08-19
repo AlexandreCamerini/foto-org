@@ -54,7 +54,6 @@ export default function RetomarScan({ job }: { job: Job }) {
                 ? "Varre de novo; o que já foi indexado é pulado"
                 : "O volume desta fonte não está montado agora"
             }
-            className="border-acento text-acento hover:bg-cartao"
           >
             Retomar
           </Botao>

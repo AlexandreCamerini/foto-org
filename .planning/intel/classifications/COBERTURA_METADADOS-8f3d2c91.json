@@ -1,0 +1,13 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/COBERTURA_METADADOS.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": false,
+  "title": "Cobertura de metadados — o que os arquivos realmente têm",
+  "summary": "Measurement report on EXIF/metadata field coverage across a sampled photo set and what it implies for extraction and geolocation strategy.",
+  "scope": ["metadata extraction", "EXIF", "GPS coordinates", "RAW files (CR3, DNG)", "libraw", "exiftool", "lens/orientation fields", "correlation between sources", "reverse geocoding", "confidence model"],
+  "cross_refs": ["docs/CONFIANCA.md", "scripts/cobertura_metadados.py", "grouping/correlacao.py", "classification/"],
+  "locked": false,
+  "precedence": null,
+  "notes": ""
+}

@@ -1,0 +1,33 @@
+{
+  "source_path": "/Users/acamerini/Claude/Projects/foto-organizer/.claude/worktrees/gsd-map-codebase-e7b59c/docs/PLANO_METADADOS.md",
+  "type": "DOC",
+  "confidence": "medium",
+  "manifest_override": false,
+  "title": "Plano de metadados — fase 3",
+  "summary": "Relatório da fase 3 sobre leitura de EXIF/IPTC/XMP em Python puro, avaliação do exiftool e decisões pendentes de modelo de dados.",
+  "scope": [
+    "extração de metadados",
+    "EXIF",
+    "IPTC/IIM",
+    "XMP",
+    "exiftool",
+    "MetadataExtractor (Protocol)",
+    "metadata_entries",
+    "modelo de evidências e confiança",
+    "vocabulário canônico de autoria/direitos"
+  ],
+  "cross_refs": [
+    "docs/prompts/00-protocolo.md",
+    "docs/COBERTURA_METADADOS.md",
+    "docs/AUDITORIA_FUNCIONALIDADES.md",
+    "models/catalog.py:133",
+    "docs/ARQUITETURA.md:42",
+    "pyproject.toml",
+    "scripts/medir_exiftool.py",
+    "docs/CONFIANCA.md",
+    "docs/DECISOES.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Narrativa de fase (progress report) com tabela de requisitos e trade-offs, referenciando decisões já registradas em docs/DECISOES.md (D-019 a D-021) em vez de declará-las como locked aqui. Contém sinais de SPEC (tabela de mapeamento EXIF/IPTC/XMP, regra de precedência proposta em §7, índice composto recomendado) mas a estrutura dominante é prosa explicativa/relatório, não um contrato formal — classificado como DOC por predominância de conteúdo, com nota de ambiguidade DOC/SPEC."
+}

@@ -17,6 +17,12 @@ from fotoorganizer.models.duplicates import (
     DuplicateMember,
     DuplicateRole,
 )
+from fotoorganizer.models.exif_write import (
+    CampoStatus,
+    ExifWriteItem,
+    ExifWritePlan,
+    ExifWriteStatus,
+)
 from fotoorganizer.models.geo import Event, Location, Trip
 from fotoorganizer.models.inference import (
     ConfidenceLevel,
@@ -38,6 +44,7 @@ from fotoorganizer.models.people import (
     Person,
 )
 from fotoorganizer.models.lexico import NomeClassificado
+from fotoorganizer.models.pasta_classificacao import PastaClassificada
 from fotoorganizer.models.settings import ApplicationSetting
 from fotoorganizer.models.tagging import MediaTag, Tag
 
@@ -53,6 +60,8 @@ __all__ = [
     "suggestion_evidence",
     "DuplicateGroup", "DuplicateMember", "DuplicateLevel", "DuplicateRole",
     "OperationPlan", "OperationItem", "OperationStatus", "AuditLog",
+    "ExifWritePlan", "ExifWriteItem", "ExifWriteStatus", "CampoStatus",
     "ApplicationSetting",
     "NomeClassificado",
+    "PastaClassificada",
 ]
