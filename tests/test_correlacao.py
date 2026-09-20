@@ -70,15 +70,31 @@ def test_fora_da_janela_da_cidade_ainda_herda_o_pais():
     assert h.fator_de("pais") is not None
 
 
+def test_janela_de_pais_vai_alem_da_janela_de_regiao():
+    """13 h não dizem em que região você estava; ainda dizem em que país
+    (D-085, estende D-025: país passa de 12 h para 48 h)."""
+    h = _de(herdar_gps([_canon(1, 0), _iphone(2, 13 * 3600)]), 1)
+    assert h is not None
+    assert h.granularidade == "pais"
+    assert h.fator_de("regiao") is None
+    assert h.fator_de("pais") is not None
+
+
+def test_47h_ainda_herda_pais_49h_nao_herda_mais_nada():
+    h = _de(herdar_gps([_canon(1, 0), _iphone(2, 47 * 3600)]), 1)
+    assert h is not None and h.fator_de("pais") is not None
+    assert _de(herdar_gps([_canon(1, 0), _iphone(2, 49 * 3600)]), 1) is None
+
+
 def test_longe_demais_para_qualquer_campo():
-    assert _de(herdar_gps([_canon(1, 0), _iphone(2, 13 * 3600)]), 1) is None
+    assert _de(herdar_gps([_canon(1, 0), _iphone(2, 49 * 3600)]), 1) is None
 
 
 def test_confianca_decai_com_delta():
     fotos = [_canon(1, 0), _iphone(2, 6 * 60)]  # 6 min: meio da rampa
     h = _de(herdar_gps(fotos), 1)
     assert 0.7 < h.fator_de("cidade") < 0.9
-    # O país mal sente 6 minutos dentro da janela de 12 h.
+    # O país mal sente 6 minutos dentro da janela de 48 h (D-085).
     assert h.fator_de("pais") > 0.99
 
 
@@ -192,11 +208,11 @@ def test_procura_alem_dos_dois_vizinhos_imediatos():
 
 def test_a_busca_para_na_borda_da_janela():
     """Varrer além da janela maior seria trabalho jogado fora — nenhum campo
-    sobrevive a essa distância."""
+    sobrevive a essa distância (janela de país, a maior: 48 h, D-085)."""
     fotos = [_canon(1, 0)]
     # Irmãs com GPS da MESMA origem cercando a foto, para forçar a varredura.
-    fotos += [_canon(10 + i, 3600 * i, lat=1.0, lon=1.0) for i in range(1, 14)]
-    fotos.append(_iphone(99, 13 * 3600))   # doadora válida, mas a 13 h
+    fotos += [_canon(10 + i, 3600 * i, lat=1.0, lon=1.0) for i in range(1, 49)]
+    fotos.append(_iphone(99, 49 * 3600))   # doadora válida, mas a 49 h
     assert _de(herdar_gps(fotos), 1) is None
 
 
@@ -376,8 +392,10 @@ def test_raio_cresce_com_a_velocidade_plausivel():
 def test_raio_para_de_crescer_no_teto():
     """A distância à doadora satura no acervo medido; o raio satura junto.
 
-    Sem teto, as 12 h da janela de país virariam 259 km — um círculo que
-    cobre tudo e não informa nada.
+    Sem teto, 12 h de crescimento linear já dariam 259 km — um círculo
+    que cobre tudo e não informa nada. O teto não depende da largura da
+    janela de país (48 h, D-085): é função direta de Δt, e já satura bem
+    antes de qualquer janela de campo.
     """
     assert raio_incerteza(timedelta(hours=12)) == RAIO_TETO_M
     assert raio_incerteza(timedelta(hours=20)) == RAIO_TETO_M

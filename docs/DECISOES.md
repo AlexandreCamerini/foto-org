@@ -3515,3 +3515,168 @@ inteiro passa a ser contado numa passada só
 - Como reverter: `git revert` do commit desta fatia.
 - Status: decidido pelo dono, implementado e commitado nesta fatia.
 
+
+## D-085 — Janela de país da herança de GPS sobe de 12h para 48h
+
+- Fase: localização estimada, fatia 4 (2026-09-20) — opção 2 escolhida
+  pelo dono entre as opções medidas ao fechar a fatia 3, com pedido
+  explícito de testar 24h e 48h antes de decidir.
+- Classe: A — estende D-025 com medição contra o acervo real; cidade
+  (10 min) e região (2h) inalteradas.
+- Contexto: D-025 fixou 12h porque era a maior janela sustentada pelos
+  dados de então. 957 fotos de acervo continuavam sem lugar mesmo depois
+  de D-084 corrigir a base de tempo, todas a mais de 12h de qualquer
+  doadora.
+- Medição (`scripts/calibrar_janela_pais.py`, técnica de doadora
+  hipotética de D-032/D-074 — fotos com GPS nos dois lados, uma escondida,
+  país da doadora comparado ao país real por geocodificação offline; UM
+  par por candidata, a doadora ÚNICA que `herdar_gps` de fato escolheria —
+  **a primeira versão desta calibração contava os dois lados como pares
+  independentes, o que `herdar_gps` nunca faz para país; a revisão com
+  olhos frescos achou o erro antes do commit e os números abaixo já são
+  os corrigidos**, rodados de novo com a metodologia certa):
+
+  | janela | cobertura ATÉ esta janela | cobertura na FAIXA nova | acurácia por par NA FAIXA | acurácia por dia NA FAIXA |
+  |---|---|---|---|---|
+  | 12h (linha de base, nunca medida antes) | 13.373 fotos | — (0–12h) | 86,7% (2.551/2.942) | 97,2% (erro em 3/41 dias) |
+  | 24h | 15.796 fotos | +2.423 (12–24h) | 91,6% (596/651) | 97,5% (erro em 1/23 dias) |
+  | 48h | 18.196 fotos | +4.823 (24–48h) | 91,2% (478/524) | 90,5% (erro em 2/21 dias) |
+
+  **Cobertura é cumulativa** (cada linha soma sobre a anterior — o ganho
+  marginal de 48h sobre 24h é +2.400, não +4.823); **acurácia é marginal**,
+  só da faixa nova que aquela janela passa a aceitar (12h mede 0–12h; 24h
+  mede 12–24h; 48h mede 24–48h) — não misturar as duas leituras. Achado
+  que muda a leitura da fatia: **24h e 48h são mais precisas por par do
+  que a janela de 12h já em produção**, que nunca tinha sido medida por
+  doadora hipotética até agora. Os erros que sobram
+  concentram-se em viagens de fronteira reais — Patagônia/Tierra del
+  Fuego fev/2020 (Chile↔Argentina, a maior parte dos erros nas três
+  faixas), Brasil↔Bolívia jul/2023 (Pantanal) — não em erro de
+  geocodificação; é o limite estrutural que D-025 já registrou
+  (`raio_incerteza` não serve para escala de país, D-074).
+- Decisão: `JANELAS_POR_CAMPO["pais"]` de `grouping/correlacao.py` sobe
+  para 48h. O dono escolheu 48h antes da correção da metodologia (quando
+  os números pareciam mostrar um trade-off mais duro); a medição corrigida
+  sustenta a escolha com folga maior do que a informada na hora — 48h
+  erra menos por par do que a própria janela de 12h atual, ao custo de
+  acurácia por dia um pouco menor que 24h (90,5% vs 97,5%, 2 viagens com
+  erro em vez de 1).
+- **O que muda e não é aditivo** (achado da revisão, não previsto na
+  primeira versão desta decisão): o fator de confiança de
+  `campos_confiaveis` decai dentro da PRÓPRIA janela — alargá-la achata a
+  rampa e SOBE o fator de heranças que já existiam, mesmo Δt, mesma
+  doadora, sem evidência nova. Medido sobre o catálogo persistido: das
+  13.375 heranças de país já ativas com Δt ≤ 12h, 12.818 têm o fator
+  alterado; 249 sobem de badge BAIXA→MÉDIA (nenhuma desce, nenhuma sai de
+  ALTA — o fator vai de 0,6 a 1,0 dentro da rampa, e mesmo no **teto**
+  (fator 1,0) o score fica em `0,75×1,0=0,75`, abaixo do piso de ALTA
+  0,8; é isso que garante o limite, não o piso da rampa). Remedindo
+  direto de `herdar_gps` sobre as refs, em vez de ler o que está
+  persistido: 13.373/12.753/247 — 2 heranças e 65 fatores a menos que a
+  base persistida, não por arredondamento: são POPULAÇÕES diferentes (o
+  catálogo tem 13.375 linhas com `gps_estimado_delta_s`; a re-execução
+  filtra por `precisao == "segundo"`, D-084 — 2 fotos a menos entram no
+  cálculo desde a base, e o restante da diferença nos fatores vem de
+  arredondamento de ponto flutuante nas bordas exatas da rampa). Ordem de
+  grandeza igual nas duas bases. Nenhum doador, delta ou campo de
+  cidade/região muda — só a leitura de confiança do país, porque
+  a fórmula mede posição relativa dentro da janela, não posição absoluta
+  no tempo. Aceito como consequência do próprio desenho de D-025 ("decai
+  dentro da PRÓPRIA janela"), não como bug — mas precisa estar escrito
+  para quem revisar Revisão/Mapa não estranhar ~250 fotos "sem mudar
+  nada" mudando de cor.
+- **Guardas novas em `exif_write/planner.py`** (achado da revisão, em
+  três rodadas): herança só-país nunca mais entra como candidata a
+  **GPS exato** nem a **nome de cidade** gravável no arquivo original —
+  nem pela perna de GPS nem quando a linha entra pela perna de cidade/país
+  (a `Location` é resolvida do MESMO ponto herdado, sem olhar
+  granularidade, então uma herança fraca demais para GPS ou cidade ainda
+  podia aparecer com esses campos preenchidos: a tela já escondia essa
+  cidade — `_campos_do_lugar`, `server/app.py` — mas o plano de escrita
+  propunha gravá-la mesmo assim). Sem estas guardas, D-085 faria o plano
+  propor gravar no original o ponto exato ou o nome da cidade de uma
+  doadora a até 47h de distância — em escala de país isso pode ser
+  centenas de km do lugar real, violando o que EXIF-02/invariante 7
+  prometem (só campo vazio, valor confiável).
+  1. **Primeira versão** (rodada 1): janela fixa `_JANELA_ESCRITA_GPS_S`
+     = janela de "região" (2h) só para GPS; cidade sem guarda.
+  2. **Rodada 2**: achado que cidade vazava pela perna de cidade/país
+     (a `Location` tem cidade mesmo em herança só-país) — guarda de
+     cidade adicionada, com janela própria `_JANELA_ESCRITA_CIDADE_S`
+     (10 min).
+  3. **Rodada 2, mesmo commit**: `_JANELA_ESCRITA_GPS_S` redefinida para
+     `RAIO_TETO_M/VELOCIDADE_PLAUSIVEL_MS` (~2h19min, o domínio em que
+     `raio_incerteza` satura) em vez da janela de região (2h) — para
+     desacoplar do nome errado. **Isso abriu uma fresta de 19 minutos**
+     (Δt de 2h00 a 2h19) em que a herança já é só-país por
+     `campos_confiaveis`, mas a nova janela ainda a deixava passar como
+     GPS gravável — 566 mídias no acervo real. Achado pela revisão com
+     olhos frescos antes do commit.
+  4. **Correção final** (a que ficou): as duas janelas paralelas saem;
+     o planner chama `campos_confiaveis` DIRETO — o mesmo predicado que
+     `_campos_do_lugar` já usa na tela — e testa `"regiao" in campos` para
+     GPS, `"cidade" in campos` para cidade. Nenhuma constante para
+     divergir de novo. A candidatura em SQL (WHERE) volta a ser barata e
+     larga (qualquer `gps_lat_estimado`, qualquer Δt); a exigência real
+     é só em Python, uma vez, na função `_campos_da_heranca`. GPS PRÓPRIO
+     (não herdado) continua sustentando cidade sempre — a guarda é sobre
+     herança, nunca sobre GPS medido no próprio arquivo. País segue sem
+     guarda: D-025 o sustenta em qualquer Δt da própria janela, por
+     desenho. Lição registrada: uma janela paralela para a mesma pergunta
+     que o motor já responde ("este Δt ainda é preciso?") é o padrão que
+     abriu esta fresta — usar o predicado do motor direto, nunca
+     redeclarar um valor que já existe em outro lugar, é o que sobrou
+     como regra desta fatia.
+- `scripts/calibrar_raio_incerteza.py` (achado da revisão): importava
+  `JANELA_HERANCA` de `correlacao.py` para decidir até onde buscar par —
+  como essa constante agora é o máximo de `JANELAS_POR_CAMPO` (48h,
+  dominado por país), a calibração de `raio_incerteza`/`COBERTURA_MEDIDA`
+  passou a incluir pares de escala de país, que ela nunca foi calibrada
+  para medir (medido: cobertura por dia caía de 97,0% para 79,6% com essa
+  contaminação). Corrigido: janela própria e fixa (`_JANELA_MOVIMENTO =
+  12h`), independente da janela de país — `COBERTURA_MEDIDA = 0.936`
+  continua reproduzindo (93,5% medido de novo após a correção).
+- **A cobertura de 93,6% continua sem valer para os círculos de 12–48h**
+  (achado da revisão): desacoplar a calibração do raio da janela de país
+  resolveu a contaminação, mas não criou uma medição nova para a faixa
+  que D-085 passou a alcançar — ela simplesmente ficou fora, como sempre
+  esteve. Medido à parte: círculos de heranças de 12–48h cobrem 70,7%
+  bruto / 59,0% por dia (contra 94,9%/97,0% dos círculos ≤12h) — bem
+  abaixo da promessa impressa no mapa. Corrigido: `/api/mapa` passa a
+  detectar herança além de 12h no grupo e trocar `NOTA_DO_RAIO` por
+  `NOTA_DO_RAIO_ALEM_DA_MEDICAO`, que não cita o número — a legenda deixa
+  de prometer uma cobertura que não foi medida naquela escala.
+- O que NÃO muda: `RAIO_TETO_M` (50 km) — é função de `Δt` direto, não da
+  largura da janela, e já satura bem antes de 12h (D-032).
+- **Dívida registrada, não corrigida nesta fatia**: `_coords`
+  (`classification/engine.py`) devolve a coordenada da doadora sem
+  checar se o Δt sustenta "pais" antes de alimentar
+  `dist_mediana_casa_km` e `dividir_por_transicao_casa` — herança
+  só-país (2h–48h) participa da distância de casa e da divisão
+  casa/viagem com um ponto que a evidência engine só admite como país,
+  não como posição. Pré-existente (já valia para 2h–12h antes de D-085);
+  D-085 só estende o alcance. Fora do escopo desta fatia — anotado para
+  não ficar escondido.
+- Alternativas rejeitadas: 24h (ganho menor; com a metodologia corrigida,
+  a acurácia por par é quase idêntica à de 48h — não há janela "segura"
+  que evite viagem de fronteira, e 48h dobra a cobertura pelo mesmo
+  risco); teste de concordância (D-074) aplicado a país — já rejeitado em
+  D-025/D-074 por escala incompatível; deixar a escrita EXIF aceitar
+  qualquer granularidade (rejeitado pela guarda nova acima).
+- Limitação conhecida, não escondida: viagem por região de fronteira
+  (Patagônia, Pantanal, tríplice fronteira) continua sujeita a herdar o
+  país errado dentro de 48h — é o preço explícito desta escolha, medido,
+  não uma surpresa. Corrigir isso de verdade pede geocodificação nos dois
+  lados (como o teste de concordância faz para cidade/região), fora desta
+  fatia. Duas escalas de score de país convivem no catálogo até a próxima
+  geração de sugestões: mídia com sugestão já decidida (pula
+  `_evidencias_geo`) mantém o score da rampa de 12h até ser regerada.
+- Como reverter: `JANELAS_POR_CAMPO["pais"]` volta a `timedelta(hours=12)`
+  em `grouping/correlacao.py`; nada é persistido de forma irreversível —
+  regerar sugestões refaz. As guardas do planner EXIF (GPS e cidade) e a
+  nota condicional do mapa podem ficar mesmo assim, revertendo só a
+  janela de país.
+- Status: decidido pelo dono; a medição que embasou a escolha continha um
+  erro de metodologia, corrigido e reexecutado antes do commit — a
+  conclusão (48h) se sustenta, com margem melhor do que a informada
+  originalmente. Implementado e commitado nesta fatia.

@@ -47,7 +47,9 @@ from fotoorganizer.metadata.camera import nome_da_camera
 from fotoorganizer.geolocation.cidades import NOTA_RAIO_CIDADE, RAIO_CIDADE_M
 from fotoorganizer.grouping.correlacao import (
     NOTA_DO_RAIO,
+    NOTA_DO_RAIO_ALEM_DA_MEDICAO,
     RAIO_TETO_M,
+    JANELA_COBERTURA_MEDIDA_S,
     campos_confiaveis,
     frase_do_raio,
     raio_incerteza,
@@ -1048,6 +1050,20 @@ def create_app(
                 for media, coordenada, local_da_pasta in desenhaveis
             ]
 
+            # A cobertura de 93,6% só foi medida até 12h (D-085 alargou a
+            # herança de país até 48h, mas não a calibração do raio — as
+            # duas medem coisas diferentes). Um grupo com herdada além
+            # desse domínio leva a nota honesta, não a promessa que não
+            # foi medida para ela.
+            alem_da_medicao = any(
+                p["origem"] == "doadora" and p["delta_s"] is not None
+                and p["delta_s"] > JANELA_COBERTURA_MEDIDA_S
+                for p in pontos
+            )
+            nota_do_raio = (
+                NOTA_DO_RAIO_ALEM_DA_MEDICAO if alem_da_medicao else NOTA_DO_RAIO
+            )
+
         return {
             "grupo": {
                 "tipo": tipo,
@@ -1085,7 +1101,7 @@ def create_app(
                 for d in doadoras.values()
             ],
             **_enquadramento(pontos),
-            "nota_do_raio": NOTA_DO_RAIO,
+            "nota_do_raio": nota_do_raio,
         }
 
     # -- configurações: template de destino (fase 10) ------------------------

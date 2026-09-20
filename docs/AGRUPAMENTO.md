@@ -76,9 +76,10 @@ cruza as fontes (`grouping/correlacao.py`):
    de OUTRA origem (fonte ou câmera diferente) mais próxima na linha do
    tempo corrigida. Não é uma janela única: cada campo (cidade, região,
    país) tem sua própria janela aninhada (D-025 — cidade ≤10 min, região
-   ≤2 h, país ≤12 h), com fator decaindo de 1.0 (até Δt de 2 min) a 0.6 na
-   borda da PRÓPRIA janela — "país a 6 h" e "cidade a 6 min" não competem
-   na mesma escala. Evidência `vizinhanca_temporal` (0.75×fator).
+   ≤2 h; país ≤48 h desde D-085), com fator decaindo de 1.0 (até Δt de
+   2 min) a 0.6 na borda da PRÓPRIA janela — "país a 30 h" e "cidade a
+   6 min" não competem na mesma escala. Evidência `vizinhanca_temporal`
+   (0.75×fator).
 
    A busca já olha os dois lados da linha do tempo (antes e depois); desde
    D-074 o lado perdedor não é descartado — ele testemunha a favor ou

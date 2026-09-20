@@ -57,7 +57,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fotoorganizer.config import paths  # noqa: E402
 from fotoorganizer.grouping.correlacao import (  # noqa: E402
-    JANELA_HERANCA,
     RAIO_PISO_M,
     RAIO_TETO_M,
     VELOCIDADE_PLAUSIVEL_MS,
@@ -65,6 +64,17 @@ from fotoorganizer.grouping.correlacao import (  # noqa: E402
 )
 
 RAIO_TERRA_M = 6_371_008.8
+
+# A janela em que ESTA calibração busca par — deslocamento plausível de
+# pessoa (raio_incerteza/COBERTURA_MEDIDA), não a janela de herança de país
+# (`JANELA_HERANCA`, D-085), que existe para outra pergunta (até onde vale
+# afirmar um país) e hoje chega a 48h. As duas eram a mesma constante até
+# D-085 alargar só a de país — importar `JANELA_HERANCA` faria esta
+# calibração seguir crescendo sozinha toda vez que a janela de país mudar,
+# diluindo a amostra de deslocamento com pares de escala de país (medido:
+# por dia caía de 97,0% para 79,6% ao herdar cegamente os 48h). Fixa aqui,
+# de propósito, no teto que as BANDAS abaixo já assumiam.
+_JANELA_MOVIMENTO = timedelta(hours=12)
 
 # As bandas em que a medição é lida. Não são limiares de nada — só a régua
 # que deixa ver a forma da curva sem afogar o olho em 2 mil linhas.
@@ -117,6 +127,11 @@ def pesos_do_acervo(db: Path) -> dict[str, int]:
 
     Sem isto a média trataria a banda de 1 minuto (277 fotos) igual à de
     30 min–2 h (5.905) e a conta diria mais sobre a régua que sobre o acervo.
+
+    Só conta as bandas ≤12h — o domínio de `_JANELA_MOVIMENTO` (D-085): uma
+    herança real de 12–48h (país-só, fora do que esta calibração mede) não
+    entra em nenhuma banda e é ignorada aqui de propósito, não por acidente;
+    o total descartado é impresso para não desaparecer em silêncio.
     """
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
@@ -130,11 +145,17 @@ def pesos_do_acervo(db: Path) -> dict[str, int]:
     finally:
         con.close()
     pesos = {nome: 0 for nome, _, _ in BANDAS}
+    fora_do_alcance = 0
     for d in deltas:
         for nome, lo, hi in BANDAS:
             if (lo < d <= hi) or (lo == 0 and d <= hi):
                 pesos[nome] += 1
                 break
+        else:
+            fora_do_alcance += 1
+    if fora_do_alcance:
+        print(f"(heranças reais além de 12h, fora do peso desta calibração: "
+              f"{fora_do_alcance})")
     return pesos
 
 
@@ -447,7 +468,7 @@ def main() -> int:
 
     fotos = ler_fotos_com_gps(args.db)
     print(f"fotos com GPS próprio: {len(fotos)}")
-    pares = montar_pares(fotos, JANELA_HERANCA.total_seconds())
+    pares = montar_pares(fotos, _JANELA_MOVIMENTO.total_seconds())
     if not pares:
         print("nenhum par de origens diferentes dentro da janela — "
               "sem o que calibrar neste catálogo.", file=sys.stderr)
@@ -458,7 +479,7 @@ def main() -> int:
         grade(pares, pesos)
     if args.concordancia:
         relatorio_concordancia(montar_pares_duplo(
-            fotos, JANELA_HERANCA.total_seconds()
+            fotos, _JANELA_MOVIMENTO.total_seconds()
         ))
     return 0
 

@@ -55,6 +55,7 @@ def _media(
     extensao: str = "jpg",
     gps: tuple[float, float] | None = None,
     gps_estimado: tuple[float, float] | None = None,
+    gps_estimado_delta_s: int | None = None,
     location: Location | None = None,
     conteudo: bytes | None = b"conteudo sintetico",
 ) -> MediaFile:
@@ -80,12 +81,19 @@ def _media(
         session.flush()
         location_id = location.id
 
+    # Δt padrão de 5 min (herança forte, cidade) quando não especificado —
+    # só importa para quem tem gps_lat_estimado; os demais testes do módulo
+    # não olham para este campo.
+    if gps_estimado is not None and gps_estimado_delta_s is None:
+        gps_estimado_delta_s = 5 * 60
+
     media = MediaFile(
         source_id=fonte_id, caminho=str(caminho), pasta=str(caminho.parent),
         nome=caminho.name, extensao=extensao, tamanho=caminho.stat().st_size,
         data_capturada=datetime(2024, 1, 1),
         gps_lat=gps_lat, gps_lon=gps_lon,
         gps_lat_estimado=gps_lat_estimado, gps_lon_estimado=gps_lon_estimado,
+        gps_estimado_delta_s=gps_estimado_delta_s,
         location_id=location_id,
     )
     session.add(media)
@@ -346,3 +354,150 @@ def test_midia_ja_resolvida_nao_reentra(ambiente):
             )
         )
         assert novo_item is not None
+
+
+# -- D-085: herança só-país não vira coordenada exata gravável --------------
+
+def test_heranca_so_pais_nao_propoe_gps_exato(ambiente):
+    """Δt de 20h (país, D-085: janela até 48h) não sustenta cidade nem
+    região — o ponto exato da doadora não é candidato a virar GPS do
+    arquivo original, mesmo achando Location com país resolvido."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(pais="Argentina", fonte="test")
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps_estimado=(-54.68, -67.84), gps_estimado_delta_s=20 * 3600,
+            location=loc,
+        )
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None       # entra pela perna de país (Location)
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_gps_lat is None and item.valor_gps_lon is None
+        assert item.status_gps == CampoStatus.SEM_VALOR
+        assert item.valor_pais == "Argentina"   # país continua elegível
+
+
+def test_heranca_de_regiao_ainda_propoe_gps_exato(ambiente):
+    """Δt de 1h30 (região, ≤2h) continua sustentando o ponto exato —
+    comportamento anterior a D-085, inalterado."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(cidade="Ushuaia", pais="Argentina", fonte="test")
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps_estimado=(-54.68, -67.84), gps_estimado_delta_s=90 * 60,
+            location=loc,
+        )
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_gps_lat == pytest.approx(-54.68)
+        assert item.status_gps == CampoStatus.PENDENTE
+
+
+def test_so_gps_so_pais_sem_location_fica_sem_valor_nenhum(ambiente):
+    """Sem Location nenhuma e Δt de país: nem a perna de GPS nem a de
+    cidade/país têm o que oferecer — os 3 campos ficam SEM_VALOR.
+
+    A candidatura em SQL é barata e larga de propósito (qualquer
+    `gps_lat_estimado`, qualquer Δt); a linha é criada mesmo sem nada a
+    propor — cenário sem exposição real (produção sempre resolve
+    `Location` junto de qualquer coordenada, própria ou herdada,
+    `_resolver_locations`), então a linha aparece vazia em vez de
+    desaparecer, em troca de uma exigência de granularidade só em
+    Python, sem constante paralela para divergir (achado da revisão)."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps_estimado=(-54.68, -67.84), gps_estimado_delta_s=20 * 3600,
+        )
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_gps_lat is None and item.status_gps == CampoStatus.SEM_VALOR
+        assert item.valor_cidade is None and item.status_cidade == CampoStatus.SEM_VALOR
+        assert item.valor_pais is None and item.status_pais == CampoStatus.SEM_VALOR
+
+
+def test_heranca_so_pais_tambem_nao_propoe_cidade(ambiente):
+    """Achado da revisão: a guarda de GPS não bastava — a Location é
+    resolvida do MESMO ponto distante da doadora, então uma herança
+    só-país (Δt=20h) ainda tinha `Location.cidade` preenchido e o plano
+    propunha gravar o nome da cidade no original, mesmo a tela
+    (`_campos_do_lugar`) escondendo essa cidade por falta de precisão."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(cidade="Ushuaia", regiao="Tierra del Fuego",
+                       pais="Argentina", fonte="offline:reverse_geocode/2")
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps_estimado=(-54.68, -67.84), gps_estimado_delta_s=20 * 3600,
+            location=loc,
+        )
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_cidade is None
+        assert item.status_cidade == CampoStatus.SEM_VALOR
+        assert item.valor_gps_lat is None and item.status_gps == CampoStatus.SEM_VALOR
+        assert item.valor_pais == "Argentina"
+        assert item.status_pais == CampoStatus.PENDENTE
+
+
+def test_heranca_de_cidade_propoe_cidade_e_gps(ambiente):
+    """Δt de 5 min (cidade, ≤10 min): comportamento anterior a D-085,
+    inalterado — cidade e GPS exatos continuam propostos."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(cidade="Ushuaia", pais="Argentina", fonte="test")
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps_estimado=(-54.68, -67.84), gps_estimado_delta_s=5 * 60,
+            location=loc,
+        )
+        session.commit()
+
+    assert planner.criar_plano_exif() is not None
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_cidade == "Ushuaia"
+        assert item.valor_gps_lat == pytest.approx(-54.68)
+
+
+def test_gps_proprio_sempre_sustenta_cidade(ambiente):
+    """Foto com GPS PRÓPRIO (não herdado) sustenta cidade mesmo sem
+    `gps_estimado_delta_s` — a guarda é sobre herança, não sobre GPS."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(cidade="Rio de Janeiro", pais="Brasil", fonte="test")
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps=(-22.9, -43.2), location=loc,
+        )
+        session.commit()
+
+    assert planner.criar_plano_exif() is not None
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_cidade == "Rio de Janeiro"
+        assert item.status_gps == CampoStatus.PULADO   # já tem gps_lat

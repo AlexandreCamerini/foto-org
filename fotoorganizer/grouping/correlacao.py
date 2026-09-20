@@ -35,10 +35,18 @@ from statistics import median
 # se troca de cidade, não de país — uma janela única seria obrigada a adotar o
 # limite da cidade e jogaria fora a informação de país que é segura por muito
 # mais tempo. Do mais fino para o mais grosso.
+#
+# País em 48 h (D-085, estende D-025): medido por doadora hipotética contra
+# o acervo real — a 24-48h, 93,6% dos pares concordam de país (86,9% por
+# dia, cada viagem pesando igual); os discordantes se concentram em
+# travessia real de fronteira (Patagônia/Tierra del Fuego fev/2020,
+# Brasil-Bolívia jul/2023), não em erro de geocodificação. Decisão do
+# dono, informado do trade-off contra a janela de 24h (95,7%/dia, ganho
+# menor). `scripts/calibrar_janela_pais.py` refaz a medição.
 JANELAS_POR_CAMPO: tuple[tuple[str, timedelta], ...] = (
     ("cidade", timedelta(minutes=10)),
     ("regiao", timedelta(hours=2)),
-    ("pais", timedelta(hours=12)),
+    ("pais", timedelta(hours=48)),
 )
 # A busca pela doadora usa a maior das janelas; cada campo é filtrado depois.
 JANELA_HERANCA = max(janela for _, janela in JANELAS_POR_CAMPO)
@@ -73,8 +81,10 @@ RAIO_PISO_M = 15.0
 # Teto: a distância à doadora para de crescer. Medido, não suposto — o p90 da
 # banda de 6–12 h (25 km) é MENOR que o da banda de 30 min–2 h (39 km): quem
 # fotografa o dia inteiro passa o dia na mesma região. 50 km cobre o p90 de
-# todas as bandas de deslocamento real; continuar linear até as 12 h da janela
-# de país daria 259 km de raio e não informaria nada.
+# todas as bandas de deslocamento real; continuar linear até a janela de país
+# (48 h, D-085) daria mais de 1.000 km de raio e não informaria nada. Este
+# teto não muda com a janela de país — as duas coisas medem coisas diferentes
+# (deslocamento plausível de pessoa vs. até onde vale afirmar um país).
 RAIO_TETO_M = 50_000.0
 # Fração dos 2.083 pares medidos em que o lugar verdadeiro coube dentro do
 # raio proposto (ponderada pelas bandas de Δt do acervo). Mora aqui, ao lado
@@ -479,10 +489,28 @@ def _tempo_legivel(delta: timedelta) -> str:
 # A cobertura dita uma vez, para a legenda — e não repetida em cada um dos
 # milhares de pontos do mapa. É a mesma promessa de `COBERTURA_MEDIDA`, em
 # português.
+#
+# `COBERTURA_MEDIDA` só vale para o domínio que `calibrar_raio_incerteza.py`
+# mede: doadora dentro de `_JANELA_MOVIMENTO` (12h, D-085) — deslocamento de
+# pessoa, onde `raio_incerteza` já satura. Herança de país de 12h a 48h
+# (D-085) cai fora dessa medição por desenho (`raio_incerteza` não é
+# calibrado para escala de país, D-074/D-025); medido à parte para esta
+# nota (`scripts/calibrar_raio_incerteza.py` sobre pares de 12–48h): 70,7%
+# bruta / 59,0% por dia — bem abaixo da promessa de 12h. Repetir o mesmo
+# número para os dois casos mentiria sobre o círculo justamente onde D-085
+# alarga o alcance.
+JANELA_COBERTURA_MEDIDA_S = 12 * 3600
 NOTA_DO_RAIO = (
     f"O círculo é o tamanho da dúvida, não um erro de medição: em "
     f"{COBERTURA_MEDIDA * 100:.1f}".replace(".", ",")
     + "% dos pares medidos neste acervo, o lugar verdadeiro cabe dentro dele."
+)
+NOTA_DO_RAIO_ALEM_DA_MEDICAO = (
+    "O círculo é o tamanho da dúvida, não um erro de medição — mas alguma "
+    "foto deste grupo herdou de uma doadora a mais de 12 h de distância: a "
+    "fórmula do raio não foi medida nessa escala (ela mede deslocamento de "
+    "pessoa, não travessia de fronteira), e o lugar verdadeiro pode estar "
+    "fora do círculo."
 )
 
 

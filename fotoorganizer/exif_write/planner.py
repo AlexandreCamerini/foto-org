@@ -18,12 +18,14 @@ de `Source` aqui.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from fotoorganizer.exif_write import formatos, sync_detect
+from fotoorganizer.grouping.correlacao import campos_confiaveis
 from fotoorganizer.models import (
     AuditLog,
     CampoStatus,
@@ -36,6 +38,30 @@ from fotoorganizer.models import (
 )
 
 log = logging.getLogger(__name__)
+
+# Até onde faz sentido escrever o ponto EXATO da doadora como GPS do
+# arquivo original, ou o nome da cidade que a `Location` desse mesmo
+# ponto resolveu: nunca mais fundo do que a herança sustenta de verdade.
+# Usa o predicado REAL do motor (`campos_confiaveis`, a MESMA função que
+# `_campos_do_lugar` em `server/app.py` chama para decidir o que a tela
+# mostra) em vez de uma janela derivada — uma constante paralela já
+# divergiu uma vez nesta fatia (uma versão anterior usava
+# `RAIO_TETO_M/VELOCIDADE_PLAUSIVEL_MS` = 2h19, 19 min além da janela de
+# região real, e reabria a escrita de GPS exato para 566 mídias
+# só-país nessa fresta — achado da revisão com olhos frescos).
+#
+# GPS exato exige "regiao" (não precisa de "cidade": região já é a escala
+# de deslocamento de pessoa que `raio_incerteza` calibra). Cidade exige
+# "cidade" propriamente dita (D-025). Sem isto, uma herança só-país
+# (2h–48h, D-085) resolve `Location.cidade`/coordenada do MESMO ponto
+# distante da doadora — a tela esconde isso (`_campos_do_lugar`), o plano
+# de escrita não pode continuar propondo o que a tela se recusa a
+# mostrar. País segue sem guarda: D-025 o sustenta em qualquer Δt da
+# própria janela, por desenho.
+def _campos_da_heranca(delta_s: int | None) -> frozenset[str]:
+    if delta_s is None:
+        return frozenset()
+    return frozenset(c for c, _ in campos_confiaveis(timedelta(seconds=delta_s)))
 
 # Estados em que um campo não tem mais nada a fazer: já foi gravado, já
 # estava preenchido no arquivo (pulado) ou nunca teve valor inferido pelo
@@ -75,6 +101,12 @@ class ExifWritePlanner:
                         (
                             MediaFile.gps_lat.is_(None)
                             & MediaFile.gps_lat_estimado.is_not(None)
+                            # A candidatura aqui é barata e propositalmente
+                            # larga (qualquer herança, qualquer Δt); a
+                            # exigência de granularidade real é UMA SÓ,
+                            # em Python, no laço abaixo (`_campos_da_heranca`)
+                            # — repetir o predicado em SQL foi exatamente o
+                            # que divergiu nesta fatia (achado da revisão).
                         )
                         | (
                             (
@@ -146,13 +178,41 @@ class ExifWritePlanner:
             nao_suportados = 0
             sincronizados = 0
             for media, location in pendentes:
-                valor_gps_lat = media.gps_lat_estimado
-                valor_gps_lon = media.gps_lon_estimado
+                # O predicado REAL do motor (`campos_confiaveis`), não uma
+                # janela paralela: herança só-país (Δt fora de "regiao",
+                # D-085) nunca fornece o par lat/lon nem o nome da cidade —
+                # a linha pode ter entrado pela perna de cidade/país
+                # (`Location` resolvida do MESMO ponto herdado, sem olhar
+                # granularidade) mesmo com uma herança fraca demais para
+                # valer como coordenada exata ou nome de cidade gravável.
+                campos_herdados = _campos_da_heranca(media.gps_estimado_delta_s)
+                delta_sustenta_gps = "regiao" in campos_herdados
+                valor_gps_lat = media.gps_lat_estimado if delta_sustenta_gps else None
+                valor_gps_lon = media.gps_lon_estimado if delta_sustenta_gps else None
+                # GPS PRÓPRIO sustenta cidade sempre (é a coordenada exata
+                # da própria foto); herdado só sustenta cidade quando o
+                # próprio motor a sustentaria — a mesma exigência que a
+                # tela já aplica para MOSTRAR a cidade (`_campos_do_lugar`,
+                # `server/app.py`). Sem isto, herança só-país (2h–48h,
+                # D-085) resolvia `Location.cidade` do MESMO ponto distante
+                # da doadora e propunha gravá-la no original — a tela
+                # esconde essa cidade, o plano não podia continuar propondo
+                # o que a tela se recusa a mostrar.
+                delta_sustenta_cidade = (
+                    media.gps_lat is not None or "cidade" in campos_herdados
+                )
                 # Lugar pela cidade da pasta (D-083) nunca fornece valor,
                 # mesmo que a linha tenha entrado pela perna do GPS herdado
                 # — a guarda do WHERE só cobre a outra perna.
                 pela_pasta = location is not None and location.fonte.startswith("pasta:")
-                valor_cidade = location.cidade if location and not pela_pasta else None
+                valor_cidade = (
+                    location.cidade
+                    if location and not pela_pasta and delta_sustenta_cidade
+                    else None
+                )
+                # País continua sem guarda de granularidade: D-025 sustenta
+                # o campo país em qualquer Δt da própria janela de país —
+                # é o único campo desenhado para isso.
                 valor_pais = location.pais if location and not pela_pasta else None
 
                 if media.gps_lat is not None:

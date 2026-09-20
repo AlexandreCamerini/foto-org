@@ -34,7 +34,7 @@ O que ela diz nas três janelas de D-025:
 | 10 min (janela da cidade) | 3,6 km | um bairro |
 | 2 h (janela da região) | 43,2 km | uma região metropolitana |
 | 8 h 20 min em diante | 50 km | o teto — deixa de crescer |
-| 12 h (janela do país) | 50 km | idem |
+| 48 h (janela do país, D-085) | 50 km | idem — o teto não depende da largura da janela |
 
 **A frase para a tela**, quando o dono clicar no círculo e perguntar por quê:
 *"A foto que emprestou o lugar está a 2 h daqui. A 22 km/h — a velocidade de

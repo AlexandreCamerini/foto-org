@@ -81,6 +81,7 @@ def ambiente(migrated_engine, tmp_path):
             nome=limpa.name, extensao="jpg", tamanho=limpa.stat().st_size,
             data_capturada=datetime(2024, 1, 1),
             gps_lat_estimado=-22.95, gps_lon_estimado=-43.18,
+            gps_estimado_delta_s=300,  # herança de 5 min: sustenta cidade
             location_id=loc.id,
         ))
 
@@ -91,6 +92,7 @@ def ambiente(migrated_engine, tmp_path):
             data_capturada=datetime(2024, 1, 1),
             gps_lat=-22.95, gps_lon=-43.18,
             gps_lat_estimado=-22.95, gps_lon_estimado=-43.18,
+            gps_estimado_delta_s=300,
             location_id=loc.id,
         ))
         session.commit()
@@ -305,7 +307,8 @@ def test_backup_apagado_so_apos_sucesso_verificado(ambiente, monkeypatch):
             source_id=fonte_id, caminho=str(falha_foto), pasta=str(falha_foto.parent),
             nome=falha_foto.name, extensao="jpg", tamanho=falha_foto.stat().st_size,
             data_capturada=datetime(2024, 1, 1),
-            gps_lat_estimado=-12.97, gps_lon_estimado=-38.5, location_id=loc.id,
+            gps_lat_estimado=-12.97, gps_lon_estimado=-38.5,
+            gps_estimado_delta_s=300, location_id=loc.id,
         ))
         session.commit()
 
@@ -501,7 +504,8 @@ def test_executar_nao_regride_por_deslocamento_de_offset(ambiente):
             source_id=fonte_id, caminho=str(foto), pasta=str(foto.parent),
             nome=foto.name, extensao="jpg", tamanho=foto.stat().st_size,
             data_capturada=datetime(2024, 1, 1),
-            gps_lat_estimado=-22.95, gps_lon_estimado=-43.18, location_id=loc.id,
+            gps_lat_estimado=-22.95, gps_lon_estimado=-43.18,
+            gps_estimado_delta_s=300, location_id=loc.id,
         )
         session.add(media)
         session.flush()

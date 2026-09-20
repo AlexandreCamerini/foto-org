@@ -1910,3 +1910,29 @@ def test_lacuna_sem_coordenada_ignora_quem_tem_a_cidade_da_pasta(client, migrate
     assert lacunas["sem_gps"] == 3
     # Não é herança de outra câmera: a faceta da herança não a conta.
     assert lacunas["local_estimado"] == 0
+
+
+def test_mapa_avisa_quando_heranca_passa_da_medicao(client, evento_no_mapa, migrated_engine):
+    """D-085: COBERTURA_MEDIDA/NOTA_DO_RAIO só foram medidas até 12h
+    (`calibrar_raio_incerteza.py`). Herança de país pode chegar a 48h —
+    o grupo com uma herdada além de 12h leva a nota honesta, não a
+    promessa de 93,6% que nunca foi medida nessa escala."""
+    from fotoorganizer.grouping.correlacao import NOTA_DO_RAIO, NOTA_DO_RAIO_ALEM_DA_MEDICAO
+    from fotoorganizer.models import MediaFile
+
+    mapa_normal = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    assert mapa_normal["nota_do_raio"] == NOTA_DO_RAIO
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        herdeira = session.get(MediaFile, evento_no_mapa["herdeira"])
+        herdeira.gps_estimado_delta_s = 20 * 3600   # 20h: além da medição
+        session.commit()
+
+    mapa_alem = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    assert mapa_alem["nota_do_raio"] == NOTA_DO_RAIO_ALEM_DA_MEDICAO
+    assert "12 h" in mapa_alem["nota_do_raio"]
