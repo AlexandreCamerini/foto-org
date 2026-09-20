@@ -3437,3 +3437,81 @@ inteiro passa a ser contado numa passada só
 - Status: decidido pelo dono (fatia 2 de localização estimada),
   implementado e commitado nesta fatia.
 
+## D-084 — Uma resposta só para "quando a foto foi tirada": EXIF, senão o nome do arquivo, senão o mtime em hora de parede
+
+- Fase: localização estimada, fatia 3 (2026-09-20) — opção 3 escolhida
+  pelo dono entre as quatro medidas na fatia 1 ("fechar furos M1/M5").
+- Classe: A — medido antes e depois no catálogo real; nenhum limiar muda.
+- Contexto: a auditoria de 2026-09-19 (M1/M5 em
+  `docs/reconstrucao/08-ERROS_CONHECIDOS.md`) apontou que a linha do tempo
+  do motor fazia `data_capturada or mtime` em cinco lugares
+  (`engine.py`: correlação, sessões, acontecimentos, transição casa↔fora),
+  misturando hora de PAREDE (`data_capturada`, D-038) com UTC naive (o
+  `mtime` que o scanner grava com `_ts`); e que a evidência de data já
+  preferia a data escrita no nome do arquivo ao mtime, enquanto a linha do
+  tempo ignorava o nome — `IMG-20150420-WA0001.jpg` copiado em 2024 ganhava
+  `{ano}` 2015 e sessão de 2024.
+- Medição antes (catálogo real, 2026-09-20):
+  - 957 fotos de acervo só-mtime sem lugar. Convertendo o mtime para hora
+    de parede (com `tz_estimado` — só 23 têm — ou o fuso da máquina), a
+    doadora mais próxima continua a mais de 12 h em **todas**: o furo M1
+    não rende herança nenhuma neste acervo hoje. O "33% com delta exato de
+    hora" da auditoria é real, mas essas fotos têm `data_capturada` e o
+    mtime nem entra.
+  - As 205 fotos sem lugar com doadora a ≤ 12 h são **todas** "mesma fonte
+    e mesma câmera" (regra 1 da herança: câmera com receptor de GPS que
+    pega em uns quadros e não em outros). Não é tempo: é uma regra a
+    revisar como opção própria, fora desta fatia.
+  - M5 real e pequeno: no acervo inteiro, 1.072 fotos são só-mtime e 57
+    delas têm data no nome (54 com hora, 3 só dia) — 9 entre as sem lugar
+    (`IMG_20140706_111834.jpg` com mtime de 2014-11-19, capturas de tela
+    `iScreen Shoter - 20230622141938732.jpg`).
+  - Decisão do dono, informado desses números: seguir mesmo assim — o
+    defeito é de correção (duas bases de tempo na mesma comparação) e o
+    custo é baixo; o ganho hoje é a honestidade da linha do tempo e os
+    próximos lotes de WhatsApp/capturas, não as 957.
+- Decisão:
+  1. `grouping/datas.quando_da_foto(data_capturada, nome, mtime,
+     tz_padrao=...)` → `Quando(instante, origem, precisao)`: EXIF
+     (`exif`, segundo) > data no nome (`nome`; segundo quando o nome traz a
+     hora — `IMG_20140706_111834`, `2024-03-15 às 10.30.22`,
+     `20230622141938732` —, senão dia, posto ao meio-dia: erro máximo de
+     12 h, não 24) > mtime convertido de UTC para a hora de parede pelo
+     `tz_padrao` do motor — por omissão `fuso_da_maquina()`: a zona IANA
+     de `TZ` ou de `/etc/localtime`, com horário de verão histórico (o
+     offset de agora aplicado a janeiro de 2015 erraria uma hora) — `fs`,
+     segundo.
+  2. O motor usa `_quando(media)` nos cinco lugares. Na correlação só
+     entra quem tem precisão de segundo; `hora_do_arquivo` (penalidade 0,6
+     de D-025) vale para `fs` e para `nome`. Data só de dia agrupa por
+     sessão e acontecimento, mas não mede minutos até doadora nenhuma.
+  3. A evidência de data pelo mtime passa a mostrar a hora de parede, com
+     a justificativa dizendo que foi levada ao fuso desta máquina.
+  4. `DataDoNome` ganha `com_hora`; os padrões de nome reconhecem a hora
+     separada da data (`_`, `-`, espaço, "às", "at") e, colada, só com os
+     três dígitos de milissegundo da captura de tela do macOS — um número
+     corrido de 14 dígitos continua serial, não data. Hora inválida não
+     invalida o dia; com hora, `texto` cita o trecho inteiro.
+  5. O que NÃO muda: a linha do tempo dos álbuns externos
+     (`_IndiceDeAlbuns.__init__`, `data or mtime` em SELECT cru) e a
+     ordenação da grade (`repositories/media.py`: `data_capturada` com
+     `nulls_last()` — as 1.072 fotos só-mtime caem no fim da grade, sem
+     entrar na linha do tempo que o motor agora sabe calcular) — fora do
+     alcance de uma função Python por linha; registrados como dívida.
+- Alternativas rejeitadas: coluna nova para o instante unificado (é
+  derivável das três já existentes, e D-038 já proibiu o terceiro lugar
+  para a mesma verdade); converter o mtime pelo `tz_estimado` da foto —
+  parece mais honesto para foto tirada fora, mas o `tz_estimado` nasce da
+  própria rodada (país herdado): a primeira versão desta fatia fazia isso
+  e o teste mostrou a linha do tempo mudar de rodada para rodada (1ª herda
+  Avignon com o fuso da máquina, 2ª converte pelo fuso de Paris e perde a
+  cidade). Fuso único e determinístico, a premissa dita em voz alta: o
+  mtime de uma cópia feita nesta máquina está no fuso dela; tratar data só
+  de dia como segundo (mediria minutos que não existem).
+- Medição depois: mesma de antes para herança (0 fotos novas); 153 fotos
+  mudam de dia de calendário na linha do tempo (57 pelo nome, o resto
+  pela conversão do mtime), 0 mudam de ano, 0 perdem papel de doadora;
+  toda foto só-mtime passa a entrar na linha do tempo na hora de parede.
+- Como reverter: `git revert` do commit desta fatia.
+- Status: decidido pelo dono, implementado e commitado nesta fatia.
+

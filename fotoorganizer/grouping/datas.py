@@ -18,7 +18,9 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+import os
+from datetime import datetime, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Só "março" tem acento entre os nomes de mês. "marco" (sem acento) é grafia
 # alternativa de quem digitou sem cedilha — cobrimos as duas como chaves
@@ -220,24 +222,50 @@ class DataDoNome:
     data: datetime
     texto: str    # o trecho reconhecido, para a justificativa citar
     padrao: str   # que convenção denunciou a data
+    # A hora também estava no nome ("IMG_20140706_111834")? Sem ela, `data`
+    # é o dia às 00:00 e só serve para agrupar por dia — não para medir
+    # minutos até outra foto (D-084).
+    com_hora: bool = False
 
 
 # `(?<!\d)`/`(?!\d)` isolam o número: um serial de 13 dígitos que contém
 # "20240315" no meio não é uma data — é um serial.
 _RE_NOME_WHATSAPP = re.compile(r"^(?:IMG|VID|AUD|PTT)-(\d{8})-WA", re.I)
-_RE_NOME_ISO = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
+# Hora logo depois da data, como câmera e app escrevem: "_123456",
+# "-10-30-22", " às 10.30.22", " at 10.30.00". Milissegundos (PXL_) sobram.
+_HORA = r"(?:[ _-]|\s(?:às|at)\s)?([01]\d|2[0-3])[.:_-]?([0-5]\d)[.:_-]?([0-5]\d)"
+_RE_NOME_ISO = re.compile(
+    r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)(?:" + _HORA + r")?"
+)
+# Compacto: a hora vem separada ("IMG_20140706_111834", milissegundos
+# sobram) ou colada — e colada só com os três dígitos de milissegundo
+# ("20230622141938732", captura de tela do macOS): um número corrido de 14
+# dígitos é serial, não data e hora.
 _RE_NOME_COMPACTO = re.compile(
-    r"(?<!\d)((?:19|20)\d{2})(\d{2})(\d{2})(?!\d)"
+    r"(?<!\d)((?:19|20)\d{2})(\d{2})(\d{2})"
+    r"(?:(?:[ _-]([01]\d|2[0-3])([0-5]\d)([0-5]\d)\d{0,3})"
+    r"|(?:([01]\d|2[0-3])([0-5]\d)([0-5]\d)\d{3}))?(?!\d)"
 )
 
 
-def _data_valida(ano: int, mes: int, dia: int) -> datetime | None:
+def _data_valida(
+    ano: int, mes: int, dia: int, hora: int = 0, minuto: int = 0, segundo: int = 0
+) -> datetime | None:
     try:
-        quando = datetime(ano, mes, dia)
+        quando = datetime(ano, mes, dia, hora, minuto, segundo)
     except ValueError:
         return None
     # Mesmo teto do EXIF: foto não nasce no futuro (metadata.base).
     return quando if quando <= datetime.now() else None
+
+
+def _com_hora(m: re.Match[str]) -> tuple[int, int, int] | None:
+    """A hora, se algum dos grupos de hora do padrão casou."""
+    grupos = m.groups()[3:]
+    for i in range(0, len(grupos) - 2, 3):
+        if grupos[i] is not None:
+            return int(grupos[i]), int(grupos[i + 1]), int(grupos[i + 2])
+    return None
 
 
 def data_no_nome(nome: str) -> DataDoNome | None:
@@ -253,17 +281,103 @@ def data_no_nome(nome: str) -> DataDoNome | None:
             return DataDoNome(quando, bruto, "convenção do WhatsApp")
         return None
 
-    m = _RE_NOME_ISO.search(base)
-    if m:
-        quando = _data_valida(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    for padrao, rotulo in (
+        (_RE_NOME_ISO, "data escrita no nome"),
+        (_RE_NOME_COMPACTO, "padrão de câmera de celular"),
+    ):
+        m = padrao.search(base)
+        if not m:
+            continue
+        hora = _com_hora(m)
+        quando = _data_valida(
+            int(m.group(1)), int(m.group(2)), int(m.group(3)), *(hora or ())
+        )
+        if quando is None and hora is not None:
+            # Hora inválida não invalida o dia.
+            quando = _data_valida(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            hora = None
         if quando is not None:
-            return DataDoNome(quando, m.group(0), "data escrita no nome")
-
-    m = _RE_NOME_COMPACTO.search(base)
-    if m:
-        quando = _data_valida(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        if quando is not None:
-            return DataDoNome(
-                quando, m.group(0), "padrão de câmera de celular"
-            )
+            # `texto` é o que a justificativa cita: com hora, o trecho
+            # inteiro (é de lá que a hora do valor veio); sem, só a data.
+            texto = m.group(0) if hora is not None else base[m.start():m.start(3) + 2]
+            return DataDoNome(quando, texto, rotulo, com_hora=hora is not None)
     return None
+
+
+# -- quando a foto foi tirada: uma resposta só (D-084) ------------------------
+
+@dataclass(frozen=True, slots=True)
+class Quando:
+    """O instante de uma foto, na hora de PAREDE do lugar (como
+    `data_capturada`), com a origem e a precisão que essa hora tem."""
+
+    instante: datetime
+    origem: str    # "exif" | "nome" | "fs"
+    precisao: str  # "segundo" | "dia"
+
+    @property
+    def hora_incerta(self) -> bool:
+        """Hora que não veio do EXIF: do mtime ou do nome. É o que a herança
+        penaliza (`_PENALIDADE_HORA_DE_ARQUIVO`, D-025)."""
+        return self.origem != "exif"
+
+
+def fuso_da_maquina() -> tzinfo:
+    """A zona IANA desta máquina, com horário de verão histórico.
+
+    `datetime.now().astimezone().tzinfo` devolve só o OFFSET de agora
+    (`-03`), que aplicado a um mtime de janeiro de 2015 erra uma hora — o
+    Brasil tinha horário de verão. Por isso a zona nomeada vem de `TZ` ou
+    do alvo de `/etc/localtime`; o offset fixo é o último recurso.
+    """
+    nome = os.environ.get("TZ")
+    if not nome:
+        try:
+            alvo = os.readlink("/etc/localtime")
+            nome = alvo.split("zoneinfo/", 1)[1] if "zoneinfo/" in alvo else None
+        except OSError:
+            nome = None
+    if nome:
+        try:
+            return ZoneInfo(nome)
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return datetime.now().astimezone().tzinfo or timezone.utc
+
+
+def quando_da_foto(
+    data_capturada: datetime | None,
+    nome: str,
+    mtime: datetime | None,
+    *,
+    tz_padrao: tzinfo | None = None,
+) -> Quando | None:
+    """EXIF, senão a data escrita no nome, senão o mtime convertido para
+    hora de parede — a MESMA cascata da evidência de data, agora usada
+    também pela linha do tempo (herança, sessões, acontecimentos).
+
+    Antes a linha do tempo fazia `data_capturada or mtime`, misturando
+    hora de parede com UTC naive (o mtime é gravado em UTC pelo scanner):
+    uma foto só-mtime entrava deslocada pelo fuso, e o nome do arquivo —
+    que a evidência de data já preferia ao mtime — era ignorado
+    (`IMG-20150420-WA0001.jpg` copiado em 2024 ia parar em 2024).
+
+    O mtime é convertido com `tz_padrao` (por omissão `fuso_da_maquina()`
+    — é onde a cópia foi feita), e SÓ com ele: o `tz_estimado` da foto é
+    resultado da própria rodada (país herdado), e usá-lo aqui faria a
+    linha do tempo mudar de rodada para rodada. Data só de dia (WhatsApp)
+    vira meio-dia: erro máximo de 12 h, não 24, e a precisão "dia" diz a
+    quem mede minutos que não meça.
+    """
+    if data_capturada is not None:
+        return Quando(data_capturada, "exif", "segundo")
+    no_nome = data_no_nome(nome)
+    if no_nome is not None:
+        if no_nome.com_hora:
+            return Quando(no_nome.data, "nome", "segundo")
+        return Quando(no_nome.data.replace(hour=12), "nome", "dia")
+    if mtime is None:
+        return None
+    zona = tz_padrao or fuso_da_maquina()
+    parede = mtime.replace(tzinfo=timezone.utc).astimezone(zona).replace(tzinfo=None)
+    return Quando(parede, "fs", "segundo")

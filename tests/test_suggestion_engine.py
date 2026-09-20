@@ -1636,3 +1636,88 @@ def test_homonimas_no_mesmo_pais_ganham_locations_diferentes(migrated_engine):
         assert go.location_id != pe.location_id
         assert session.get(Location, go.location_id).regiao == "Goiás"
         assert session.get(Location, pe.location_id).regiao == "Pernambuco"
+
+
+# -- D-084: uma base de tempo só ------------------------------------------
+
+def test_foto_so_mtime_entra_na_linha_do_tempo_em_hora_de_parede(migrated_engine):
+    """mtime é UTC no catálogo; data_capturada é hora de parede. Antes, uma
+    foto só-mtime ficava 3 h deslocada da doadora (no Brasil) e perdia a
+    cidade (janela de 10 min). Agora o mtime chega em hora de parede."""
+    from zoneinfo import ZoneInfo
+
+    from fotoorganizer.models import Evidence
+
+    factory = create_session_factory(migrated_engine)
+    parede = datetime(2016, 10, 15, 10, 0)              # doadora, hora de parede
+    utc = datetime(2016, 10, 15, 13, 5)                  # 10:05 em São Paulo
+    with factory() as session:
+        camera, celular = Source(caminho="/canon"), Source(caminho="/iphone")
+        session.add_all([camera, celular])
+        session.flush()
+        session.add(_media(camera.id, "sem_exif.jpg", "/canon", mtime=utc,
+                           make="Canon", model="R6"))
+        session.add(_media(celular.id, "IMG_1.jpg", "/iphone", data=parede,
+                           gps=(43.95, 4.8083), make="Apple", model="iPhone"))
+        session.commit()
+
+    SuggestionEngine(
+        factory, LocationResolver(FakeGeocoder()),
+        tz_padrao=ZoneInfo("America/Sao_Paulo"),
+    ).gerar()
+
+    with factory() as session:
+        foto = session.scalar(select(MediaFile).where(MediaFile.nome == "sem_exif.jpg"))
+        assert foto.gps_estimado_de_id is not None
+        assert foto.gps_estimado_delta_s == 5 * 60             # não 3 h 05
+        cidade = session.scalar(select(Evidence).where(
+            Evidence.media_id == foto.id, Evidence.campo == "cidade"
+        ))
+        assert cidade is not None and cidade.origem == "vizinhanca_temporal"
+        assert "hora de uma delas é a do arquivo" in cidade.justificativa
+        data = session.scalar(select(Evidence).where(
+            Evidence.media_id == foto.id, Evidence.campo == "data"
+        ))
+        assert data.origem == "fs" and data.valor.startswith("2016-10-15T10:05")
+        assert "fuso desta máquina" in data.justificativa
+
+
+def test_data_no_nome_manda_na_linha_do_tempo_nao_o_mtime(migrated_engine):
+    """`IMG-20150420-WA0001.jpg` copiado em 2024: a evidência de data já
+    dizia 2015, mas a sessão ia parar em 2024 junto com a cópia. Agora as
+    duas contam a mesma história — e a data só de dia não mede minutos
+    até ninguém (fica fora da correlação)."""
+    from fotoorganizer.models import Evidence
+
+    factory = create_session_factory(migrated_engine)
+    copia = datetime(2024, 1, 1, 12, 0)
+    with factory() as session:
+        fonte, celular = Source(caminho="/fotos"), Source(caminho="/iphone")
+        session.add_all([fonte, celular])
+        session.flush()
+        session.add(_media(fonte.id, "IMG-20150420-WA0001.jpg", "/fotos/zap", mtime=copia))
+        session.add(_media(fonte.id, "IMG-20150421-WA0002.jpg", "/fotos/zap",
+                           mtime=copia + timedelta(minutes=1)))
+        # Foto de 2024 com GPS a minutos da CÓPIA: antes, as do WhatsApp
+        # herdavam dela; agora estão em 2015 e não herdam de ninguém.
+        session.add(_media(celular.id, "IMG_9.jpg", "/iphone", data=copia + timedelta(minutes=2),
+                           gps=(43.95, 4.8083), make="Apple", model="iPhone"))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+
+    with factory() as session:
+        zap = list(session.scalars(select(MediaFile).where(MediaFile.pasta == "/fotos/zap")))
+        assert all(m.gps_estimado_de_id is None for m in zap)
+        anos = {session.scalar(select(Evidence).where(
+            Evidence.media_id == m.id, Evidence.campo == "data")).valor[:4] for m in zap}
+        assert anos == {"2015"}
+        midias = list(session.scalars(select(MediaFile)))
+        sessoes, sessao_da_media = engine._montar_sessoes(session, midias, {})
+        de_2015 = {id(sessao_da_media[m.id]) for m in zap}
+        # A foto de 2024 pode nem formar sessão sozinha; o que importa é
+        # que as do WhatsApp não estão com ela.
+        de_2024 = sessao_da_media.get(next(m.id for m in midias if m.nome == "IMG_9.jpg"))
+        assert len(de_2015) == 1 and (de_2024 is None or id(de_2024) not in de_2015)
+        assert sessao_da_media[zap[0].id].draft.inicio.year == 2015

@@ -256,3 +256,84 @@ def test_numero_de_serie_nao_vira_data():
     """8 dígitos que por acaso parecem data válida mas estão colados em
     mais dígitos (número de série, hash) não casam."""
     assert _nome("P1020240315999.jpg") is None
+
+
+# -- D-084: hora no nome, e uma resposta só para "quando" ----------------------
+
+def test_hora_no_nome_vem_junto_com_a_data():
+    for nome, hora in [
+        ("IMG_20140706_111834.jpg", (11, 18, 34)),
+        ("PXL_20240315_123456789.jpg", (12, 34, 56)),      # milissegundos sobram
+        ("iScreen Shoter - 20230622141938732.jpg", (14, 19, 38)),  # colada
+        ("Captura de Tela 2024-03-15 às 10.30.22.png", (10, 30, 22)),
+        ("WhatsApp Image 2024-03-15 at 10.30.00.jpeg", (10, 30, 0)),
+    ]:
+        d = _nome(nome)
+        assert d is not None and d.com_hora, nome
+        assert (d.data.hour, d.data.minute, d.data.second) == hora, nome
+    # WhatsApp carimba só o dia.
+    d = _nome("IMG-20150420-WA0001.jpg")
+    assert d is not None and not d.com_hora and d.data.hour == 0
+
+
+def test_hora_invalida_no_nome_nao_invalida_o_dia():
+    d = _nome("IMG_20140706_251834.jpg")   # 25h não existe
+    assert d is not None and not d.com_hora
+    assert (d.data.year, d.data.month, d.data.day) == (2014, 7, 6)
+
+
+def test_quando_da_foto_uma_cascata_so():
+    """EXIF > nome > mtime — e o mtime (UTC no catálogo) chega em hora de
+    parede pelo fuso da foto; sem fuso, pelo fuso padrão."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from fotoorganizer.grouping.datas import quando_da_foto
+
+    exif = datetime(2016, 10, 15, 10, 0)
+    utc = datetime(2016, 10, 15, 12, 55)
+    q = quando_da_foto(exif, "IMG-20150420-WA0001.jpg", utc)
+    assert (q.instante, q.origem, q.precisao) == (exif, "exif", "segundo")
+
+    q = quando_da_foto(None, "IMG-20150420-WA0001.jpg", datetime(2024, 1, 1))
+    assert (q.instante, q.origem, q.precisao) == (datetime(2015, 4, 20, 12, 0), "nome", "dia")
+
+    q = quando_da_foto(None, "IMG_20140706_111834.jpg", datetime(2024, 1, 1))
+    assert (q.instante, q.precisao) == (datetime(2014, 7, 6, 11, 18, 34), "segundo")
+
+    q = quando_da_foto(None, "x.jpg", utc, tz_padrao=ZoneInfo("America/Sao_Paulo"))
+    assert (q.instante, q.origem, q.hora_incerta) == (datetime(2016, 10, 15, 9, 55), "fs", True)
+    q = quando_da_foto(None, "x.jpg", utc, tz_padrao=ZoneInfo("Europe/Amsterdam"))
+    assert q.instante == datetime(2016, 10, 15, 14, 55)
+    q = quando_da_foto(None, "x.jpg", utc, tz_padrao=ZoneInfo("UTC"))
+    assert q.instante == utc
+    assert quando_da_foto(None, "x.jpg", None) is None
+
+
+def test_serial_de_14_digitos_nao_vira_data_e_hora():
+    """"20240315123456" é serial; só a captura de tela do macOS cola a hora
+    à data, e ela vem com os três dígitos de milissegundo."""
+    assert _nome("20240315123456.jpg") is None
+    assert _nome("IMG_2024031512345678.jpg") is None
+    d = _nome("iScreen Shoter - 20230622141938732.jpg")
+    assert d is not None and d.com_hora and d.texto == "20230622141938732"
+    d = _nome("IMG_20140706_111834.jpg")
+    assert d.texto == "20140706_111834"          # a justificativa cita de onde veio a hora
+
+
+def test_fuso_da_maquina_e_zona_com_horario_de_verao(monkeypatch):
+    """O offset de agora aplicado a 2015 erra uma hora: o Brasil tinha
+    horário de verão. Zona nomeada aplica a regra histórica."""
+    from datetime import datetime
+
+    from fotoorganizer.grouping.datas import fuso_da_maquina, quando_da_foto
+
+    monkeypatch.setenv("TZ", "America/Sao_Paulo")
+    zona = fuso_da_maquina()
+    assert getattr(zona, "key", None) == "America/Sao_Paulo"
+    q = quando_da_foto(None, "x.jpg", datetime(2015, 1, 15, 15, 0), tz_padrao=zona)
+    assert q.instante == datetime(2015, 1, 15, 13, 0)   # -02 em janeiro de 2015
+    q = quando_da_foto(None, "x.jpg", datetime(2024, 1, 15, 15, 0), tz_padrao=zona)
+    assert q.instante == datetime(2024, 1, 15, 12, 0)   # -03, sem horário de verão
+    monkeypatch.setenv("TZ", "Fuso/Inexistente")
+    assert fuso_da_maquina() is not None                # cai no último recurso, não explode

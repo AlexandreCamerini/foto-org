@@ -8,6 +8,14 @@ evidências com origem e confiança próprias (docs/CONFIANCA.md).
 
 ## 1. Sessões (base temporal + transição casa↔fora)
 
+**Base de tempo (D-084):** toda comparação de tempo do motor — sessão,
+acontecimento, transição casa↔fora e herança de GPS — usa
+`grouping/datas.quando_da_foto`: EXIF (hora de parede), senão a data escrita
+no nome do arquivo, senão o mtime convertido de UTC para a hora de parede
+pelo fuso desta máquina (zona IANA, com horário de verão histórico — nunca o
+`tz_estimado` da foto, que nasce da própria rodada). Data só de dia (WhatsApp)
+entra ao meio-dia e não participa da herança.
+
 Fotos são agrupadas em *sessões* por lacuna temporal (> 3 dias sem fotos
 separa sessões — inalterado). Uma sessão ainda NÃO é uma viagem: é só um
 cluster que precisa ser classificado.

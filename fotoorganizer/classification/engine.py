@@ -14,7 +14,7 @@ import logging
 from bisect import bisect_left, bisect_right
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -42,6 +42,8 @@ from fotoorganizer.geolocation.cidades import (
 )
 from fotoorganizer.geolocation.resolver import cache_key as _chave_de_coordenada
 from fotoorganizer.grouping.datas import (
+    fuso_da_maquina,
+    quando_da_foto,
     data_no_caminho,
     data_no_nome,
     rotulo_mes,
@@ -258,12 +260,17 @@ class SuggestionEngine:
         config: ConfigClassificacao = ConfigClassificacao(),
         lexico: dict[str, str] | None = None,
         pastas_classificadas: dict[str, PropostaDePasta] | None = None,
+        tz_padrao: tzinfo | None = None,
     ) -> None:
         self._factory = session_factory
         # Cidade confirmada no dataset por pasta (D-083) — memo da rodada;
         # o caminho repete-se centenas de vezes por pasta.
         self._lugares_por_pasta: dict[str, LugarDaPasta | None] = {}
         self._resolver = resolver
+        # Fuso usado para levar o mtime (UTC) à hora de parede — por omissão
+        # o desta máquina, onde a cópia foi feita (D-084). Nunca o `tz_estimado`
+        # da foto: ele nasce da própria rodada e faria a linha do tempo oscilar.
+        self._tz_padrao = tz_padrao or fuso_da_maquina()
         self._template = template
         self._advisor = advisor
         self._config = config
@@ -538,26 +545,39 @@ class SuggestionEngine:
             media.tz_estimado = TZ_POR_PAIS.get(pais) if pais else None
 
     # -- correlação entre fontes ---------------------------------------------
-    @staticmethod
-    def _correlacionar(midias) -> dict[int, Heranca]:
-        refs = [
-            FotoRef(
+    def _correlacionar(self, midias) -> dict[int, Heranca]:
+        # Só quem tem hora com precisão de segundo entra na correlação:
+        # data só de dia (WhatsApp) não mede minutos até uma doadora.
+        refs = []
+        for m in midias:
+            q = quando_da_foto(
+                m.data_capturada, m.nome, m.mtime, tz_padrao=self._tz_padrao,
+            )
+            if q is None or q.precisao != "segundo":
+                continue
+            refs.append(FotoRef(
                 media_id=m.id, source_id=m.source_id,
-                quando=(m.data_capturada or m.mtime),
+                quando=q.instante,
                 camera=(m.make, m.model),
                 lat=m.gps_lat, lon=m.gps_lon,
                 hash_rapido=m.hash_rapido,
                 hash_perceptual=m.hash_perceptual,
-                hora_do_arquivo=m.data_capturada is None,
-            )
-            for m in midias
-            if (m.data_capturada or m.mtime) is not None
-        ]
+                hora_do_arquivo=q.hora_incerta,
+            ))
         offsets = estimar_offsets(refs)
         if offsets:
             log.info("correlação: deriva de relógio estimada para %d câmeras",
                      len(offsets))
         return {h.media_id: h for h in herdar_gps(refs, offsets)}
+
+    def _quando(self, media: MediaFile) -> datetime | None:
+        """Quando a foto foi tirada, em hora de parede (D-084). A mesma
+        resposta para herança, sessões e acontecimentos."""
+        q = quando_da_foto(
+            media.data_capturada, media.nome, media.mtime,
+            tz_padrao=self._tz_padrao,
+        )
+        return q.instante if q is not None else None
 
     @staticmethod
     def _coords(media, herancas: dict[int, Heranca]) -> tuple[float, float] | None:
@@ -575,9 +595,8 @@ class SuggestionEngine:
     ) -> tuple[list[_Sessao], dict[int, _Sessao]]:
         por_id = {m.id: m for m in midias}
         itens = [
-            (m.id, m.data_capturada or m.mtime)
-            for m in midias
-            if (m.data_capturada or m.mtime) is not None
+            (m.id, quando) for m in midias
+            if (quando := self._quando(m)) is not None
         ]
         # Casa: só GPS real — coordenadas herdadas repetem as dos doadores
         # e inflariam artificialmente a célula modal.
@@ -644,12 +663,9 @@ class SuggestionEngine:
         """A sessão, ou os acontecimentos dentro dela."""
         membros = [por_id[i] for i in sessao.draft.media_ids]
         momentos = [
-            Momento(
-                m.id, m.data_capturada or m.mtime,
-                *(self._coords(m, herancas) or (None, None)),
-            )
+            Momento(m.id, quando, *(self._coords(m, herancas) or (None, None)))
             for m in membros
-            if (m.data_capturada or m.mtime) is not None
+            if (quando := self._quando(m)) is not None
         ]
         blocos = dividir_sessao(momentos, e_viagem=sessao.tipo == "viagem")
         if len(blocos) <= 1:
@@ -659,8 +675,7 @@ class SuggestionEngine:
         for bloco in blocos:
             membros_do_bloco = [por_id[i] for i in bloco]
             quando = [
-                m.data_capturada or m.mtime for m in membros_do_bloco
-                if (m.data_capturada or m.mtime) is not None
+                q for m in membros_do_bloco if (q := self._quando(m)) is not None
             ]
             draft = ViagemDraft(inicio=min(quando), fim=max(quando))
             draft.media_ids.extend(bloco)
@@ -683,7 +698,7 @@ class SuggestionEngine:
                 estado = (
                     distancia_km(*coords, *casa) <= self._config.raio_casa_km
                 )
-            itens.append((media_id, media.data_capturada or media.mtime, estado))
+            itens.append((media_id, self._quando(media), estado))
 
         segmentos = dividir_por_transicao_casa(itens)
         if len(segmentos) <= 1:
@@ -916,8 +931,9 @@ class SuggestionEngine:
             ))
         elif media.mtime is not None:
             drafts.append(_Draft(
-                "data", "fs", media.mtime.isoformat(),
-                "sem EXIF; data de modificação do arquivo (pouco confiável)",
+                "data", "fs", self._quando(media).isoformat(),
+                "sem EXIF; data de modificação do arquivo, levada à hora de "
+                "parede pelo fuso desta máquina (pouco confiável)",
             ))
 
         # Data escrita no nome da pasta ("… - Abril 2015"): segunda
