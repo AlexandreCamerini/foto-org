@@ -219,6 +219,26 @@ def test_cross_source_vence_mesma_camera_em_lados_opostos():
     assert h.mesma_camera is False
 
 
+def test_desempate_vale_entre_lados_opostos_nao_so_dentro_do_mesmo_lado():
+    # Achado da 2ª rodada de revisão sobre D-087: reverter só o desempate
+    # CROSS-LADO (voltar a decidir por Δt cru entre os dois lados) deixava
+    # a suíte verde — faltava um teste cobrindo exatamente essa linha. É
+    # a forma geométrica exata de D-032: doadora de catálogo (não
+    # confiável) 5 min ANTES, doadora de pasta (confiável) 5 min DEPOIS —
+    # empatadas em Δt, mas em lados opostos da órfã.
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=(None, None), quando=T0),
+        FotoRef(media_id=2, source_id=2, camera=(None, None),
+                quando=T0 - timedelta(minutes=5), lat=1.0, lon=2.0,
+                gps_direto_do_arquivo=False),
+        FotoRef(media_id=3, source_id=3, camera=("Canon", "EOS R6"),
+                quando=T0 + timedelta(minutes=5), lat=9.0, lon=9.0,
+                gps_direto_do_arquivo=True),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 3   # pasta vence mesmo estando do outro lado
+
+
 def test_mesma_camera_so_entra_sem_doadora_de_outra_origem_no_lado():
     # Mesmo cenário, mas sem a doadora de outra fonte: aí o fallback vale.
     fotos = [
@@ -371,6 +391,115 @@ def test_o_mais_proximo_vence_mesmo_vindo_do_outro_lado():
     ]
     h = _de(herdar_gps(fotos), 1)
     assert h.doador_id == 4 and h.lat == 20.0
+
+
+# -- desempate em Δt igual (D-032: doadora suspeita, catálogo externo) -------
+def test_desempate_prefere_gps_direto_do_arquivo():
+    """Repro do caso real de D-032: duas doadoras no MESMO instante (Δt=0),
+    uma de catálogo externo (coordenada pode ter sido atribuída no app, não
+    medida) e outra de pasta (EXIF do próprio arquivo). A de pasta é
+    colocada DEPOIS na lista de propósito — sem o desempate, a ordem
+    incidental da consulta decidiria; com ele, pasta sempre vence."""
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=(None, None), quando=T0),
+        FotoRef(media_id=2, source_id=2, camera=(None, None), quando=T0,
+                lat=-22.9657, lon=-43.1892, gps_direto_do_arquivo=False),
+        FotoRef(media_id=3, source_id=3, camera=("Canon", "EOS R6"),
+                quando=T0, lat=-22.3301, lon=-44.6185,
+                gps_direto_do_arquivo=True),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 3
+    assert (h.lat, h.lon) == (-22.3301, -44.6185)
+
+
+def test_desempate_so_atua_quando_ha_desacordo_real():
+    """Sem desempate necessário (só uma candidata, ou candidatas de mesmo
+    tipo de fonte), o comportamento é o de sempre — o mais próximo vence,
+    sem preferência artificial por `gps_direto_do_arquivo`."""
+    fotos = [
+        _canon(1, 0),
+        _iphone(2, 5, lat=1.0, lon=1.0),   # só uma candidata neste lado
+    ]
+    h = _de(herdar_gps(fotos), 1)
+    assert h.doador_id == 2   # continua herdando normalmente
+
+
+def test_desempate_nao_muda_quando_as_duas_ja_concordam():
+    """Duas doadoras no mesmo instante que JÁ concordam geograficamente —
+    o desempate não tem o que resolver (não é o caso de D-032); qualquer
+    uma serve, e o resultado é determinístico pela mesma regra (primeira
+    com `gps_direto_do_arquivo`, se houver)."""
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=(None, None), quando=T0),
+        FotoRef(media_id=2, source_id=2, camera=(None, None), quando=T0,
+                lat=25.2000, lon=55.3000, gps_direto_do_arquivo=False),
+        FotoRef(media_id=3, source_id=3, camera=("Canon", "EOS R6"),
+                quando=T0, lat=25.2001, lon=55.3000,
+                gps_direto_do_arquivo=True),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 3   # a de pasta ainda é a escolhida, por desenho
+
+
+def test_desempate_prefere_hora_confiavel_sobre_fonte_confiavel():
+    """Achado da 1ª rodada de revisão: a versão inicial do desempate
+    olhava só `gps_direto_do_arquivo` e podia trocar uma doadora com hora
+    de EXIF por uma de pasta com hora de MTIME — pior troca que a que a
+    fatia existe para evitar, porque `hora_incerta` penaliza TODOS os
+    campos da herança, não só a origem do GPS. Hora confiável tem que
+    vencer fonte confiável quando os dois estão em jogo.
+
+    Coordenadas sintéticas de propósito (não as de D-032/Penedo): no
+    caso real as duas candidatas têm hora igualmente confiável e é
+    `gps_direto_do_arquivo` quem decide (ver teste de ponta a ponta em
+    test_suggestion_engine.py) — usar coordenadas reais aqui sugeriria
+    que este é o resultado do caso real, quando é só a demonstração
+    isolada do critério de hora. A 2ª rodada de revisão notou que, em
+    desacordo geográfico genuíno com hora em conflito, a fatia prefere
+    a doadora de hora confiável mesmo que fique geograficamente errada
+    (0 ocorrências no catálogo real — ver D-087, "Limitação conhecida")."""
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=(None, None), quando=T0),
+        FotoRef(media_id=2, source_id=2, camera=(None, None), quando=T0,
+                lat=1.0, lon=2.0, gps_direto_do_arquivo=False),
+        FotoRef(media_id=3, source_id=3, camera=("Canon", "EOS R6"),
+                quando=T0, lat=9.0, lon=9.0,
+                gps_direto_do_arquivo=True, hora_do_arquivo=True),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 2          # hora confiável vence, mesmo sendo catálogo
+    assert h.hora_incerta is False   # nada de penalidade de hora incerta aqui
+
+
+def test_desempate_ignora_hora_da_doadora_quando_a_orfa_ja_e_incerta():
+    """Achado da 2ª rodada de revisão: se a ÓRFÃ já tem hora incerta,
+    `hora_incerta` final é `True` de qualquer jeito (`foto.hora_do_arquivo
+    or doador.hora_do_arquivo`) — priorizar a hora da doadora não muda
+    esse resultado, só rebaixaria `gps_direto_do_arquivo` de graça.
+    Confiança de fonte volta a decidir.
+
+    Fixture invertida de propósito (achado da 3ª rodada de revisão: a
+    primeira versão deste teste não discriminava — a doadora de pasta já
+    vencia nos dois critérios, então passava com a chave antiga também).
+    Aqui é a de CATÁLOGO que tem hora confiável e a de PASTA que não —
+    só a chave nova (que ignora a hora da doadora quando a órfã já está
+    perdida) escolhe a de pasta; a antiga escolheria a de catálogo só
+    por causa da hora dela, mesmo sem ganho nenhum em `hora_incerta`."""
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=(None, None), quando=T0,
+                hora_do_arquivo=True),
+        FotoRef(media_id=2, source_id=2, camera=(None, None), quando=T0,
+                lat=1.0, lon=2.0, gps_direto_do_arquivo=False,
+                hora_do_arquivo=False),
+        FotoRef(media_id=3, source_id=3, camera=("Canon", "EOS R6"),
+                quando=T0, lat=9.0, lon=9.0, gps_direto_do_arquivo=True,
+                hora_do_arquivo=True),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 3          # fonte confiável decide, hora já era perdida
+    assert h.hora_incerta is True    # a órfã já garantia isso
+    assert h.hora_incerta is True    # a órfã já garantia isso, com ou sem a doadora
 
 
 # -- duas âncoras: concordância e discordância (D-074) -----------------------

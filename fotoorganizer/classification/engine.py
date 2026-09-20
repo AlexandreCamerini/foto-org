@@ -76,6 +76,8 @@ from fotoorganizer.models import (
     Evidence,
     MediaFile,
     MetadataEntry,
+    Source,
+    SourceType,
     Suggestion,
     SuggestionStatus,
     Trip,
@@ -299,7 +301,7 @@ class SuggestionEngine:
             # fotos de outra origem tiradas a minutos de distância. Entram
             # TODAS as mídias, inclusive as referências sem arquivo local —
             # são elas que trazem GPS de celular numa biblioteca em iCloud.
-            herancas = self._correlacionar(midias)
+            herancas = self._correlacionar(session, midias)
             self._persistir_herancas(midias, herancas)
 
             # Geocodifica TODAS as fotos com coordenada (própria ou
@@ -547,7 +549,16 @@ class SuggestionEngine:
             media.tz_estimado = TZ_POR_PAIS.get(pais) if pais else None
 
     # -- correlação entre fontes ---------------------------------------------
-    def _correlacionar(self, midias) -> dict[int, Heranca]:
+    def _correlacionar(self, session: Session, midias) -> dict[int, Heranca]:
+        # GPS de fonte tipo `pasta` só pode ter vindo do EXIF do próprio
+        # arquivo; catálogo externo (Apple Fotos/Takeout/Lightroom) pode
+        # ter vindo do app, sem distinguir captura real de localização
+        # atribuída manualmente (D-032) — usado só para desempate de Δt
+        # igual em `herdar_gps`, não para excluir doadora nenhuma.
+        pasta_por_source = {
+            sid: tipo == SourceType.PASTA
+            for sid, tipo in session.execute(select(Source.id, Source.tipo))
+        }
         # Só quem tem hora com precisão de segundo entra na correlação:
         # data só de dia (WhatsApp) não mede minutos até uma doadora.
         refs = []
@@ -565,6 +576,7 @@ class SuggestionEngine:
                 hash_rapido=m.hash_rapido,
                 hash_perceptual=m.hash_perceptual,
                 hora_do_arquivo=q.hora_incerta,
+                gps_direto_do_arquivo=pasta_por_source.get(m.source_id, True),
             ))
         offsets = estimar_offsets(refs)
         if offsets:

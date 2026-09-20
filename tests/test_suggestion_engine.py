@@ -20,6 +20,7 @@ from fotoorganizer.models import (
     MediaRole,
     MetadataEntry,
     Source,
+    SourceType,
     Suggestion,
     SuggestionStatus,
     Trip,
@@ -388,6 +389,57 @@ def test_gps_herdado_da_propria_camera_com_receptor_confirmado(migrated_engine):
     assert {e.campo for e in de_heranca} == {"pais"}
     assert "Avignon" not in (sugestao.destino_sugerido or "")
     assert "França" in (sugestao.destino_sugerido or "")
+
+
+def test_desempate_de_doadora_prefere_pasta_sobre_catalogo_externo(
+    migrated_engine,
+):
+    """Repro de ponta a ponta de D-032: no mesmo segundo, o catálogo Apple
+    Fotos grava 'casa' (coordenada que pode ter sido atribuída no app, não
+    medida) e a câmera real (pasta, EXIF) grava o lugar verdadeiro, longe
+    dali. Uma órfã sem GPS no mesmo instante tem que herdar da câmera, não
+    da 'casa' — sem o desempate, dependia da ordem incidental da consulta
+    ao banco."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2019, 4, 19, 13, 50, 12)
+
+    @dataclass
+    class GeocoderQualquerLugar:
+        def resolve(self, lat, lon):
+            if lat < -20:
+                return GeoResult("Brasil", "Rio de Janeiro", "Penedo", "fake")
+            return GeoResult("Brasil", "Rio de Janeiro", "Casa", "fake")
+
+    with factory() as session:
+        fonte_apple = Source(caminho="/apple", tipo=SourceType.APPLE_PHOTOS)
+        fonte_pasta = Source(caminho="/pasta", tipo=SourceType.PASTA)
+        fonte_organizada = Source(caminho="/organizada", tipo=SourceType.PASTA)
+        session.add_all([fonte_apple, fonte_pasta, fonte_organizada])
+        session.flush()
+        session.add(_media(
+            fonte_apple.id, "casa.jpg", "/apple", data=base,
+            gps=(-22.9657, -43.1892),
+        ))
+        session.add(_media(
+            fonte_pasta.id, "096A5942.CR2", "/pasta", data=base,
+            gps=(-22.3301, -44.6185), make="Canon", model="EOS R6",
+        ))
+        session.add(_media(
+            fonte_organizada.id, "orfa.jpg", "/organizada", data=base,
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(GeocoderQualquerLugar()))
+    engine.gerar()
+
+    sugestao, evidencias = _sugestao_de(factory, "orfa.jpg")
+    de_heranca = [e for e in evidencias if e.origem == "vizinhanca_temporal"]
+    assert de_heranca   # herdou algo
+    for e in de_heranca:
+        assert "096A5942.CR2" in e.justificativa
+        assert "casa.jpg" not in e.justificativa
+    cidade = next((e for e in de_heranca if e.campo == "cidade"), None)
+    assert cidade is not None and cidade.valor == "Penedo"
 
 
 def test_deriva_de_relogio_corrigida_pelas_ancoras(migrated_engine):

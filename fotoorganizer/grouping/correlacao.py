@@ -134,6 +134,16 @@ class FotoRef:
     # os dois como se valessem o mesmo põe a foto no ponto errado da linha
     # do tempo e produz vizinhança que nunca existiu.
     hora_do_arquivo: bool = False
+    # `gps_lat`/`gps_lon` veio do EXIF do PRÓPRIO arquivo (fonte tipo
+    # `pasta`), ou pode ter vindo de um catálogo externo (Apple Fotos/
+    # Google Takeout/Lightroom)? O catálogo Apple não distingue GPS real de
+    # captura de localização atribuída manualmente no app ("Assign a
+    # Location") — `photo.location` do osxphotos devolve as duas do mesmo
+    # jeito (achado de D-032: uma foto no Rio, "casa", no mesmo segundo em
+    # que a câmera real está a 163 km, em Penedo). Default `True` (o caso
+    # comum e o de qualquer teste que não define fonte real) — só fica
+    # `False` quando a fonte é confirmada como catálogo externo.
+    gps_direto_do_arquivo: bool = True
 
     @property
     def tem_gps(self) -> bool:
@@ -213,6 +223,33 @@ class Heranca:
         pediu.
         """
         return raio_incerteza(self.delta)
+
+
+def _prioridade_de_desempate(foto: FotoRef, candidata: FotoRef) -> tuple[bool, bool]:
+    """Chave de ordenação para escolher entre doadoras empatadas em Δt
+    (D-087). Hora confiável pesa MAIS que fonte confiável: uma doadora
+    com `gps_direto_do_arquivo=True` mas hora vinda do mtime (achado da
+    revisão com olhos frescos) derruba TODOS os fatores de confiança da
+    herança — `hora_incerta` penaliza o Δt inteiro, não só a origem do
+    GPS — a troca contrária exata do que este desempate existe para
+    evitar. `gps_direto_do_arquivo` só decide entre candidatas com hora
+    igualmente confiável. `min()` com esta chave preserva a primeira
+    encontrada quando os dois critérios empatam (comportamento de antes
+    desta fatia, inalterado nesse caso).
+
+    `hora_incerta` da herança final é `foto.hora_do_arquivo OR
+    doador.hora_do_arquivo` (ver corpo de `herdar_gps`) — quando a
+    PRÓPRIA órfã já tem hora incerta, a hora da doadora não muda esse
+    resultado (o `or` já é `True` de qualquer jeito), e priorizar hora
+    da doadora seria rebaixar `gps_direto_do_arquivo` de graça, sem
+    ganho nenhum (achado da 2ª rodada de revisão — 0 ocorrências no
+    catálogo real, mas o raciocínio vale mesmo sem incidente ativo).
+    """
+    hora_incerta_de_qualquer_jeito = foto.hora_do_arquivo
+    return (
+        not hora_incerta_de_qualquer_jeito and candidata.hora_do_arquivo,
+        not candidata.gps_direto_do_arquivo,
+    )
 
 
 def estimar_offsets(
@@ -351,19 +388,47 @@ def herdar_gps(
         OUTRO lado só por estar mais perto — a revisão que achou o bug
         original também achou esta segunda metade dele (media real
         perdendo uma oferta de região que tinha antes desta fatia).
+
+        Desempate em Δt igual (D-032, achado da fatia "doadora suspeita"):
+        duas candidatas cross-source podem empatar no mesmo Δt deste lado
+        — o caso raro mas real é duas fontes fotografando o MESMO instante
+        (Δt=0 entre si). `doadores` está ordenado por tempo, então um
+        empate real forma um bloco contíguo: continuar andando enquanto o
+        Δt não muda (em vez de devolver a primeira encontrada) descobre o
+        bloco inteiro antes de escolher. Sem isso, a escolha entre "casa"
+        (catálogo Apple, coordenada possivelmente atribuída no app, não
+        medida) e a câmera real (pasta, EXIF) dependia da ordem incidental
+        da consulta — funcionava por sorte, não por desenho. Escolhida:
+        `min(empatadas, key=_prioridade_de_desempate)` — hora confiável
+        primeiro, fonte confiável como critério secundário. Sem a hora
+        entrar na conta, o desempate corrigia a proveniência do GPS ao
+        custo de trocar uma doadora com hora de EXIF por uma com hora de
+        mtime — pior troca que a que esta fatia existe para evitar
+        (achado da revisão: 425 heranças reais perderiam confiança).
         """
         fallback = None
+        empatadas: list[FotoRef] = []
+        delta_do_bloco: timedelta | None = None
         j = inicio
         while 0 <= j < len(doadores):
             delta = abs(tempos[j] - alvo)
             if delta > janela:
                 break
+            if delta_do_bloco is not None and delta != delta_do_bloco:
+                break
             candidata = doadores[j]
             if foto.outra_origem(candidata):
-                return delta, candidata, True
-            if fallback is None and foto.mesma_camera_confiavel(candidata):
+                delta_do_bloco = delta
+                empatadas.append(candidata)
+            elif fallback is None and foto.mesma_camera_confiavel(candidata):
                 fallback = (delta, candidata, False)
             j += passo
+        if empatadas:
+            melhor = min(
+                empatadas, key=lambda c: _prioridade_de_desempate(foto, c)
+            )
+            assert delta_do_bloco is not None
+            return delta_do_bloco, melhor, True
         return fallback
 
     herancas: list[Heranca] = []
@@ -387,7 +452,16 @@ def herdar_gps(
         # fallback mais próximo é aceito.
         cross_achados = [a for a in achados if a[2]]
         candidatos = cross_achados or achados
-        delta, doador, cross = min(candidatos, key=lambda c: c[0])
+        # Δt é o critério principal (mais próximo vence); a prioridade de
+        # desempate (D-087) só decide quando os dois lados empatam em Δt
+        # entre si — sem isso, um empate cross-lado (a forma exata de
+        # D-032: "casa" 5 min antes, câmera real 5 min depois) seguiria
+        # decidido pela ordem incidental da lista, não pela mesma regra
+        # que já vale dentro de um lado só (achado da revisão).
+        delta, doador, cross = min(
+            candidatos,
+            key=lambda c: (c[0], *_prioridade_de_desempate(foto, c[1])),
+        )
         # O outro lado, quando existe (diferente do escolhido acima) — quem
         # testemunha a favor ou contra a proximidade encontrada. Comparado
         # por media_id, não pela tupla inteira: os dois lados nunca podem

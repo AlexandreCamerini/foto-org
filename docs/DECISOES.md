@@ -3873,3 +3873,149 @@ inteiro passa a ser contado numa passada só
   motivo na justificativa. Confirmado no catálogo real, na versão final:
   estritamente aditiva (0 heranças preexistentes tocadas, 162 novas).
   Implementado e commitado nesta fatia.
+
+---
+
+## D-087 — Desempate de doadora em Δt igual: prefere GPS direto do arquivo (EXIF) sobre catálogo externo
+
+- Fase: localização estimada, fatia 6 (2026-09-20) — opção "doadora
+  suspeita" do dono, entre as três alternativas apresentadas ao fechar a
+  fatia 5 (audit A1/A2, regerar sugestões — ação do dono, ou esta).
+- Classe: B — desempate pontual em `procurar` (`herdar_gps`), não muda
+  nenhuma janela nem introduz mecanismo novo de detecção/descarte de
+  doadora (ver "Alternativas rejeitadas").
+- Contexto: D-032 (2026-08-01) já tinha flagueado, sem corrigir, um caso
+  concreto — 2019-04-19, o catálogo Apple Fotos grava a foto em "casa" no
+  Rio no mesmo segundo em que a câmera real está a 163 km, em Penedo.
+  Registrado como "tarefa separada de qualidade da doadora", nunca
+  implementado. `herdar_gps` escolhe a doadora mais próxima no tempo; em
+  caso de empate exato, a ordem de desempate era incidental (a ordem da
+  consulta ao banco), não desenhada.
+- Medição (read-only contra o catálogo real, 101.122 mídias, 21.670 com
+  GPS próprio):
+  - O padrão de D-032 é raro, não sistêmico: só 92 fotos com GPS próprio
+    (0,4%) discordam de um vizinho temporal muito próximo (>5x o raio
+    esperado, >5 km, ≤15 min). A coordenada "casa" em si (-22,9657,
+    -43,1892) aparece 310 vezes em 84 dias — normal para quem mora lá;
+    o problema é só quando ela aparece num dia em que outra evidência
+    contradiz.
+  - Rodando `herdar_gps` de produção sobre o catálogo completo: só 4
+    heranças reais hoje estão perto de uma doadora suspeita — e nas 4, a
+    doadora correta (câmera, não "casa") já tinha sido escolhida. Empate
+    resolvido por sorte da ordem da consulta, não por desenho — a
+    garantia não existia, só o resultado tinha dado certo até agora.
+  - **Impacto medido: zero heranças erradas no catálogo hoje.** Avisado
+    disso, o dono escolheu ainda assim o fix cirúrgico (desempate
+    determinístico), como seguro contra a coincidência não se repetir a
+    favor no futuro — não como correção de bug ativo.
+- Decisão: `FotoRef` ganha `gps_direto_do_arquivo: bool = True`. Fonte
+  tipo `pasta` (scan de arquivo, GPS só pode ter vindo do EXIF) sempre é
+  `True`; fonte de catálogo externo (`Source.tipo` via
+  `_correlacionar`, uma consulta só, não por foto) é `True` apenas se
+  `tipo == SourceType.PASTA`. `photo.location` do osxphotos (Apple
+  Fotos) não distingue GPS real de captura de localização atribuída
+  manualmente no app ("Assign a Location") — não há como saber com
+  certeza qual dos dois gerou um valor específico sem reextrair o EXIF
+  do arquivo (fora de escopo desta fatia; ver "Limitação conhecida").
+  `procurar` (`grouping/correlacao.py`) agora, ao encontrar a primeira
+  doadora cross-source de um lado, continua andando enquanto o Δt não
+  mudar (doadores estão ordenados no tempo — um empate real forma um
+  bloco contíguo) e escolhe, dentro do bloco empatado, a melhor por
+  `_prioridade_de_desempate` — **hora confiável primeiro**,
+  `gps_direto_do_arquivo` como critério secundário só entre candidatas
+  com hora igualmente confiável; sem preferência aplicável, mantém a
+  primeira encontrada (comportamento de antes, inalterado). A mesma
+  prioridade decide também o empate ENTRE os dois lados (antes/depois),
+  não só dentro de cada lado — a forma exata do caso original de D-032
+  tem as duas doadoras em lados opostos. Generalizado para QUALQUER Δt
+  empatado, não só Δt=0 exato.
+- **Achado da revisão com olhos frescos, corrigido antes do commit**: a
+  primeira versão do desempate olhava só `gps_direto_do_arquivo`, sem
+  `hora_do_arquivo` — e podia trocar uma doadora com hora de EXIF
+  (`data_capturada` preenchida) por uma de pasta com hora vinda do
+  MTIME, mesmo que a fonte não fosse o problema daquele caso. Como
+  `hora_incerta` penaliza TODOS os fatores de confiança da herança (não
+  só o campo de GPS), essa troca era pior que a que a fatia existe para
+  evitar. Também a MINHA PRÓPRIA verificação inicial estava incompleta:
+  usava `data_capturada` bruta como `quando`, sem passar pelo cascade
+  real (`quando_da_foto`) nem popular `hora_do_arquivo` — por isso só
+  via 96 heranças "trocadas, todas cosméticas" quando a conta real
+  (com o cascade certo) era 549 trocas, 425 delas piorando o fator.
+  Corrigido: `_prioridade_de_desempate` ordena por
+  `(hora_do_arquivo, not gps_direto_do_arquivo)` — hora decide primeiro.
+  A mesma 2ª rodada achou uma variante: se a ÓRFÃ já tem hora incerta,
+  `hora_incerta` final (`foto.hora_do_arquivo or doador.hora_do_arquivo`)
+  é `True` de qualquer jeito — priorizar a hora da doadora nesse caso
+  rebaixava `gps_direto_do_arquivo` sem ganho nenhum. Corrigido:
+  `_prioridade_de_desempate(foto, candidata)` só prioriza hora da
+  doadora quando `not foto.hora_do_arquivo` (senão os dois empatam no
+  primeiro critério e o segundo, fonte, decide sozinho).
+- Verificação de regressão (catálogo real, 102.248 refs com precisão de
+  segundo, cascade `quando_da_foto` real, versão pré-fatia obtida via
+  `git show HEAD:` do commit de D-086 para comparação fiel): **0
+  heranças sumiram, 0 novas, 0 com fator PIOR** — 790 heranças com
+  `doador_id` trocado E fator MELHOR, 124 trocas cosméticas (fator
+  idêntico), 161 heranças ganharam `concordancia` que não tinham (0
+  perderam). Os 4 casos reais de D-032 continuam corretos.
+- Alternativas rejeitadas: mecanismo geral de "doadora suspeita"
+  (descartar do pool qualquer doadora cujo GPS discorde de um vizinho
+  próximo no tempo, não só em empate) — era a opção original oferecida,
+  mas o dono preferiu o escopo menor dado o achado de impacto zero hoje;
+  fica registrada como opção futura se o padrão voltar a aparecer com
+  impacto real. Reextrair EXIF de toda foto do catálogo Apple para
+  confirmar proveniência exata do GPS — caro (subprocesso por arquivo)
+  para resolver um caso que hoje não tem incidente ativo.
+- Limitação conhecida, não escondida: `gps_direto_do_arquivo` é um
+  proxy por TIPO DE FONTE (`pasta` vs. catálogo externo), não uma
+  proveniência exata por foto — uma foto de catálogo externo cujo EXIF
+  também tem GPS real (o caso comum: iPhone com GPS de verdade
+  sincronizado no Apple Fotos) é tratada como "não confiável" mesmo
+  sendo, na prática, tão boa quanto uma foto de pasta; o inverso também
+  vale — um JPEG exportado do Apple Fotos com localização atribuída no
+  app, salvo numa pasta e escaneado como fonte `pasta`, ganharia
+  `gps_direto_do_arquivo=True` e venceria sistematicamente uma doadora
+  Apple corretamente medida no mesmo Δt (o espelho exato de D-032, não
+  medido — nenhuma ocorrência encontrada no catálogo real, mas o proxy
+  por tipo de fonte não a impediria). O desempate só entra em jogo
+  quando há empate de Δt E desacordo geográfico E hora igualmente
+  confiável — nesse caso raro, errar a favor da fonte mais verificável
+  (pasta) é a escolha mais segura mesmo sabendo que ocasionalmente
+  descarta uma doadora Apple que também estava certa. Resolver com
+  precisão pediria marcar a proveniência por VALOR (não por fonte) no
+  momento da importação — fora de escopo desta fatia, registrado para o
+  futuro. `scripts/calibrar_janela_pais.py` e
+  `scripts/calibrar_raio_incerteza.py` continuam sem `gps_direto_do_arquivo`
+  (o segundo já reimplementa sua própria noção de "outra origem",
+  deliberadamente decoupled desde D-086) — decisão consistente com o
+  precedente: calibração mede deslocamento/janela, não a política de
+  desempate, e as duas perguntas são independentes.
+  **Achado da 2ª rodada de revisão, também registrado e não corrigido**:
+  em desacordo geográfico real E hora em conflito (uma doadora com hora
+  confiável mas geograficamente errada vs. uma com hora incerta mas
+  certa), `_prioridade_de_desempate` escolhe a de hora confiável —
+  prioriza a badge honesta (não afirmar mais do que a hora sustenta)
+  sobre o valor geograficamente certo. É a leitura consistente com D-025
+  ("sugestão errada com aparência de fundamentada é pior que nenhuma"):
+  a doadora de hora incerta já carrega a penalidade (`hora_incerta`,
+  badge cai, justificativa avisa "a proximidade pode ser coincidência"),
+  então o sistema nunca afirma o lugar errado com confiança que não tem
+  — mas também não escolhe ativamente o lugar certo quando ele exigiria
+  confiar numa hora que não é confiável. Zero ocorrências no catálogo
+  real (as 2.222 doadoras empatadas hoje concordam geograficamente em
+  100% dos casos). Um segundo efeito, também sem ocorrência real: o
+  desempate pode trocar a REPRESENTANTE do lado perdedor (a testemunha
+  do teste de concordância D-074), removendo `regiao`/`cidade` de uma
+  herança cuja doadora escolhida, Δt e `hora_incerta` não mudaram —
+  mecanismo latente achado por fuzz (80.000 cenários sintéticos, 616
+  com esse padrão), zero no catálogo real.
+- Como reverter: remover `gps_direto_do_arquivo` de `FotoRef`
+  (`grouping/correlacao.py`) e o parâmetro volta a `True` sempre,
+  equivalente a apagar o bloco de desempate em `procurar`; `_correlacionar`
+  perde a consulta a `Source.tipo`. Nada persistido depende disso — GPS
+  herdado nunca é gravado como se fosse próprio, e o EXIF do arquivo
+  original não é tocado por este mecanismo.
+- Status: decidido pelo dono; a primeira implementação tinha um bug de
+  prioridade (fonte antes de hora) achado pela revisão com olhos
+  frescos e corrigido antes do commit — a medição inicial que a
+  aprovou também estava incompleta e foi refeita com o cascade real.
+  Implementado e commitado nesta fatia.

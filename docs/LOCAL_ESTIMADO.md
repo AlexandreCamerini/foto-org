@@ -180,9 +180,17 @@ tipos diferentes.
    2019-09-06: 300 m reais contra 300 m de raio). O raio está certo em escala
    e erra na casa decimal.
 
-O tipo 1 é um problema de **qualidade da doadora**, não de raio, e merece
-tratamento próprio (uma doadora que contradiz suas vizinhas no mesmo instante
-é suspeita). Fica registrado aqui, sem correção nesta fatia.
+O tipo 1 é um problema de **qualidade da doadora**, não de raio. D-087
+(2026-09-20) trata a fatia estreita: quando duas doadoras empatam em Δt
+(o caso deste dia — "casa" e a câmera real no mesmo segundo),
+`procurar` (`grouping/correlacao.py`) prefere a de fonte tipo `pasta`
+(EXIF do próprio arquivo) sobre catálogo externo (Apple Fotos/Takeout/
+Lightroom, onde a coordenada pode ter sido atribuída no app, não
+medida) — `FotoRef.gps_direto_do_arquivo`. Não é um mecanismo geral de
+descarte de doadora suspeita (uma doadora "casa" errada que NUNCA
+empata exatamente com a câmera real, só chega perto, continua sem
+tratamento — registrado como opção futura em D-087, não implementado
+por impacto medido zero no catálogo real hoje).
 
 ## A tensão, dita em voz alta
 
