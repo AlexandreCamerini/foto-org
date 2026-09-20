@@ -67,6 +67,35 @@ CENARIOS = [
             _sessao(["/fotos/Viagens/Praia"], dias=1), "viagem"),
     Cenario("país na pasta, 2h",
             _sessao(["/fotos/Japão/Tóquio"], horas=2), "viagem"),
+    # D-082: pasta que lista destinos com hífen, ano ou conector — 8.690
+    # fotos reais em "Não classificadas" porque o reconhecedor exigia o
+    # segmento inteiro igual ao nome do país.
+    Cenario("pasta 'Peru-Bolivia-Chile', 20 dias",
+            _sessao(["/Volumes/photo/Portfolio/Viagens Antigas/Peru-Bolivia-Chile"],
+                    dias=20), "viagem"),
+    Cenario("pasta 'Italia e Franca 2013', 12 dias",
+            _sessao(["/Volumes/photo/Portfolio/Viagens Antigas/Italia e Franca 2013"],
+                    dias=12), "viagem"),
+    Cenario("pasta 'Chile e Atacama Abr.18', 7 dias",
+            _sessao(["/Volumes/photo/Portfolio/Chile e Atacama Abr.18/[Developed]"],
+                    dias=7), "viagem"),
+    Cenario("pasta 'Carnaval 2016 - Portugal e Espanha', 6 dias",
+            _sessao(["/Volumes/photo/Portfolio/Fotos Organizadas/Carnaval 2016 - Portugal e Espanha"],
+                    dias=6), "viagem"),
+    # Guardas: homônimo de país não vira viagem — bairro com sigla de
+    # estado, aniversário com nome de país, abreviação solta.
+    Cenario("estádio em Guadalupe, RJ (bairro homônimo de país), 3h",
+            _sessao(["/Volumes/photo/Portfolio/Fotos Organizadas/"
+                     "Estádio Nilton Santos - Guadalupe, RJ, 18 de agosto de 2016"],
+                    horas=3, pais="Brasil", dist=12.0), "evento"),
+    Cenario("pasta 'Guadalupe - RJ', 3h",
+            _sessao(["/fotos/Guadalupe - RJ"], horas=3, pais="Brasil", dist=12.0),
+            "evento"),
+    Cenario("aniversário 'Georgia 15 Anos', 5h",
+            _sessao(["/fotos/Georgia 15 Anos"], horas=5), "evento"),
+    Cenario("pasta 'Serra - ES' (abreviação de Serra Leoa), 4h",
+            _sessao(["/fotos/Serra - ES"], horas=4, pais="Brasil", dist=8.0),
+            "evento"),
     Cenario("GPS 450km de casa, 1 dia",
             _sessao(["/fotos/DCIM"], dias=1, pais="Brasil", dist=450.0),
             "viagem"),

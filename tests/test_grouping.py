@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta
 
 from fotoorganizer.grouping import agrupar_viagens, dividir_por_transicao_casa
@@ -76,6 +77,35 @@ def test_sessao_sem_gps_nenhum_fica_inteira():
     itens = [(1, _dias(0), SEM_GPS), (2, _dias(1), SEM_GPS)]
     segmentos = dividir_por_transicao_casa(itens)
     assert len(segmentos) == 1
+
+
+@pytest.mark.parametrize(
+    "segmento,n_destinos",
+    [
+        ("Peru-Bolivia-Chile", 3),           # 5.516 fotos reais
+        ("Italia e Franca 2013", 2),         # 1.649
+        ("Carnaval 2016 - Portugal e Espanha", 2),  # 754
+        ("Do Peru ao Chile", 2),
+    ],
+)
+def test_pasta_com_hifen_ano_ou_conector_ainda_lista_os_destinos(segmento, n_destinos):
+    """D-082: o reconhecedor exigia o segmento inteiro igual ao nome do
+    país; 8.690 fotos de viagens antigas caíam em "Não classificadas"."""
+    from datetime import timedelta
+
+    from fotoorganizer.grouping.classifier import DadosSessao, classificar_sessao
+
+    decisao = classificar_sessao(DadosSessao(
+        pastas=(f"/Volumes/photo/Portfolio/Viagens Antigas/{segmento}",),
+        duracao=timedelta(days=15),
+        pais_dominante=None,
+        dist_mediana_casa_km=None,
+        periodo_curto="Viagem de 01-07 a 15-07",
+        paises_no_tempo=(),
+    ))
+    assert decisao.tipo == "viagem"
+    assert decisao.rotulo == segmento
+    assert f"lista {n_destinos} destinos" in decisao.justificativa
 
 
 def test_pasta_que_lista_destinos_nomeia_a_viagem_inteira():

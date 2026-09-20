@@ -28,6 +28,37 @@ def test_hierarquia_da_pasta():
     assert (h.pais, h.regiao, h.cidade) == ("Japão", None, None)
 
 
+def test_hierarquia_tolera_o_que_vem_junto_no_segmento():
+    """Caso real: "Chile e Atacama Abr.18" (880 fotos) não dava país
+    nenhum. A sobra ("Atacama") NÃO vira cidade por enquanto — só quando
+    o dataset offline confirmar que é lugar (fatia 2 de D-082); e a
+    subpasta de workflow logo abaixo também não."""
+    h = extrair_hierarquia_da_pasta(
+        "/Volumes/photo/Portfolio/Chile e Atacama Abr.18/[Developed]"
+    )
+    assert (h.pais, h.regiao, h.cidade) == ("Chile", None, None)
+    assert h.segmento_pais == "Chile e Atacama Abr.18"
+
+
+def test_subpasta_tecnica_abaixo_do_pais_nao_e_cidade():
+    h = extrair_hierarquia_da_pasta("/fotos/Japão/Tóquio/Revelados")
+    assert (h.pais, h.regiao, h.cidade) == ("Japão", None, "Tóquio")
+    h = extrair_hierarquia_da_pasta("/fotos/Japão/2019")
+    assert (h.pais, h.regiao, h.cidade) == ("Japão", None, None)
+
+
+def test_pasta_multi_pais_nao_escolhe_e_continua_descendo():
+    """"Peru-Bolivia-Chile" (5.516 fotos): nenhum dos três é O país da
+    foto — o nome da viagem é que lista todos (regra 3 do classificador).
+    A pasta de cada país logo abaixo continua valendo."""
+    h = extrair_hierarquia_da_pasta(
+        "/Volumes/photo/Portfolio/Viagens Antigas/Peru-Bolivia-Chile"
+    )
+    assert (h.pais, h.regiao, h.cidade) == (None, None, None)
+    h = extrair_hierarquia_da_pasta("/Volumes/Viagens/Peru-Bolivia-Chile/Peru/Cusco")
+    assert (h.pais, h.regiao, h.cidade) == ("Peru", None, "Cusco")
+
+
 def test_sem_pais_nao_inventa():
     h = extrair_hierarquia_da_pasta("/fotos/Aniversários/2022")
     assert (h.pais, h.regiao, h.cidade) == (None, None, None)

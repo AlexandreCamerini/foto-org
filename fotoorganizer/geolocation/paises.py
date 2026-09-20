@@ -17,6 +17,11 @@ from __future__ import annotations
 import re
 import unicodedata
 
+# Vocabulário de evento vem do módulo folha `grouping/segmentos.py` — sentido
+# único geolocation → grouping.segmentos; `grouping/__init__` não importa
+# geolocation, então não há ciclo.
+from fotoorganizer.grouping.segmentos import keyword_de_evento
+
 # ISO 3166-1 alfa-2 → nome em português do Brasil.
 PAISES_PT: dict[str, str] = {
     "AD": "Andorra", "AE": "Emirados Árabes Unidos", "AF": "Afeganistão",
@@ -162,10 +167,6 @@ def canonizar_pais(nome: str | None) -> str | None:
     return _CANONICO.get(_normalizar(nome))
 
 
-# Como as pessoas listam destinos numa pasta só: "Dubai, Thai & Viet".
-# Hífen fica de fora de propósito — "Guiné-Bissau" e "Timor-Leste" o usam
-# dentro do próprio nome.
-_RE_LISTA = re.compile(r"\s*(?:,|&|\+|/|\se\s)\s*", re.IGNORECASE)
 # Abreviação só vale a partir daqui: "Viet" identifica, "Ma" não.
 _MIN_PREFIXO = 4
 
@@ -185,27 +186,148 @@ def _por_prefixo(chave: str) -> str | None:
     return achados.pop() if len(achados) == 1 else None
 
 
+# O que sobra numa parte depois de tirar data e conector: "Franca 2013" →
+# "franca", "Do Peru" → "peru", "Atacama Abr.18" → "atacama". Só ano e
+# mês abreviado/por extenso com número ao lado; "15 anos" não é data.
+_RE_DATA_SOLTA = re.compile(
+    r"\b(?:19|20)\d{2}\b"
+    r"|\b(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*\d{2,4}\b",
+    re.IGNORECASE,
+)
+_RE_CONECTOR_INICIAL = re.compile(
+    r"^(?:do|da|de|dos|das|ao|aos|a|para|pelo|pela)\s+", re.IGNORECASE
+)
+# Separadores de lista de destinos. " - " com espaços separa ("Carnaval
+# 2016 - Portugal e Espanha"); o hífen colado é outra história, tratada
+# em _paises_da_parte. Hífen colado fica de fora de propósito —
+# "Guiné-Bissau" e "Timor-Leste" o usam dentro do próprio nome.
+_RE_LISTA = re.compile(
+    r"\s*(?:,|&|\+|/|\se\s|\sao\s|\s-\s)\s*", re.IGNORECASE
+)
+_RE_HIFEN = re.compile(r"\s*-\s*")
+# Sigla de estado brasileiro numa das partes ("Guadalupe - RJ", "Franca -
+# SP"): endereço no Brasil, e o homônimo de país que estiver ali é bairro
+# ou cidade. Caso real do acervo: "Guadalupe, RJ" com GPS no Rio.
+_RE_UF = re.compile(
+    r"^(?:AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS"
+    r"|RO|RR|SC|SP|SE|TO)$"
+)
+
+
+def _chave_da_parte(parte: str) -> str:
+    return _normalizar(_RE_DATA_SOLTA.sub(" ", _RE_CONECTOR_INICIAL.sub("", parte)))
+
+
+def _pais_exato(parte: str) -> str | None:
+    """A parte, tirando data e conector, É um país: "Chile", "Franca 2013",
+    "Do Peru", "Guiné-Bissau"."""
+    chave = _chave_da_parte(parte)
+    return _CANONICO.get(chave) if chave else None
+
+
+def _pais_tolerante(parte: str) -> str | None:
+    """Abreviação ("Thai") ou país seguido de palavra ("Espanha Carnaval").
+
+    Só vale dentro de uma lista onde OUTRA parte já é país exato — solta,
+    esta tolerância inventa país: "Serra - ES" viraria Serra Leoa, "Cabo"
+    viraria Cabo Verde, "Georgia 15 Anos" viraria Geórgia.
+    """
+    chave = _chave_da_parte(parte)
+    if not chave:
+        return None
+    pais = _por_prefixo(chave)
+    if pais is not None:
+        return pais
+    palavras = chave.split()
+    for n in range(len(palavras) - 1, 0, -1):
+        pais = _CANONICO.get(" ".join(palavras[:n]))
+        if pais is not None:
+            return pais
+    return None
+
+
+def _paises_da_parte(parte: str, tolerante: bool) -> tuple[str, ...]:
+    """Parte → países: um, ou vários quando o hífen colado separa destinos
+    ("Peru-Bolivia-Chile"). Hífen só conta como separador se TODOS os
+    pedaços forem país — "Provence-Alpes-Côte d'Azur" continua sendo um
+    lugar só, e "Guiné-Bissau" resolve inteiro."""
+    reconhecer = (lambda x: _pais_exato(x) or _pais_tolerante(x)) if tolerante \
+        else _pais_exato
+    pedacos = [x for x in _RE_HIFEN.split(parte) if x.strip()]
+    if len(pedacos) >= 2:
+        achados = [reconhecer(x) for x in pedacos]
+        if all(a is not None for a in achados):
+            return tuple(dict.fromkeys(achados))
+    pais = reconhecer(parte)
+    return (pais,) if pais is not None else ()
+
+
+def paises_no_segmento(segmento: str | None) -> tuple[str, ...]:
+    """Países que um segmento de pasta nomeia, na ordem — ou () quando o
+    segmento não é sobre países.
+
+    Medido no acervo real (2026-09-20, D-082): 8.690 fotos em cinco pastas
+    como "Peru-Bolivia-Chile", "Italia e Franca 2013" e "Do Peru ao Chile",
+    mais 880 em "Chile e Atacama Abr.18", não ganhavam lugar nenhum porque
+    o reconhecedor exigia o segmento inteiro igual ao nome do país.
+
+    As regras, todas contra o palpite:
+    - Uma parte só conta como país se for país EXATO (tirando data e
+      conector). Abreviação e "país + palavra" só valem quando outra parte
+      do mesmo segmento já é país exato ("Dubai, Thai & Viet";
+      "Portugal e Espanha Carnaval").
+    - Dois ou mais países no segmento é sinal forte — valem onde
+      estiverem ("Carnaval 2016 - Portugal e Espanha").
+    - Um país só vale se for a PRIMEIRA parte ("Chile e Atacama" sim;
+      "Estádio Nilton Santos - Guadalupe, RJ" não), sem sigla de estado
+      brasileiro em nenhuma parte ("Guadalupe - RJ" — a sigla barra até
+      a lista) e sem palavra de evento no segmento ("Israel e Maria
+      Casamento", "Georgia 15 Anos").
+    Fica de fora, por enquanto: cidade homônima de país na primeira parte
+    ("Granada e Sevilha") e país + nome de pessoa sem palavra de festa
+    ("Israel e Maria 2019") — precisam do dataset de cidades para
+    desempatar (fatia 2 de D-082).
+    """
+    if not segmento:
+        return ()
+    partes = [x for x in _RE_LISTA.split(segmento) if x.strip()]
+    if not partes:
+        return ()
+    exatos = [_paises_da_parte(x, tolerante=False) for x in partes]
+    if not any(exatos):
+        return ()
+    if len(partes) >= 2:
+        por_parte = [
+            grupo or _paises_da_parte(parte, tolerante=True)
+            for parte, grupo in zip(partes, exatos)
+        ]
+    else:
+        por_parte = exatos
+    paises = tuple(dict.fromkeys(p for grupo in por_parte for p in grupo))
+    # Sigla de UF desqualifica o segmento inteiro, lista ou não: "Brasil e
+    # Portugal - RJ" é endereço, não roteiro.
+    if any(_RE_UF.match(x.strip().upper()) for x in partes):
+        return ()
+    if len(paises) >= 2:
+        return paises
+    if not exatos[0]:
+        return ()
+    # Palavra de evento só barra o país ÚNICO: "Portugal e Espanha - Natal
+    # 2015" continua sendo dois países.
+    if keyword_de_evento(segmento):
+        return ()
+    return paises
+
+
 def identificar_paises(texto: str | None) -> tuple[str, ...]:
     """Países listados num único segmento, na ordem em que aparecem.
 
     "Dubai, Thai & Viet" → ("Emirados Árabes Unidos", "Tailândia",
-    "Vietnã"). Devolve () quando nem toda parte é país: "Serena 15 Anos"
-    não é uma lista de destinos, e meia lista reconhecida é ruído.
+    "Vietnã"). Devolve () quando o segmento nomeia menos de dois países:
+    "França" sozinha não é lista, e "Serena 15 Anos" não é destino.
     """
-    if not texto:
-        return ()
-    partes = [p for p in _RE_LISTA.split(texto) if p.strip()]
-    if len(partes) < 2:
-        return ()
-    paises: list[str] = []
-    for parte in partes:
-        chave = _normalizar(parte)
-        pais = _CANONICO.get(chave) or _por_prefixo(chave)
-        if pais is None:
-            return ()
-        if pais not in paises:
-            paises.append(pais)
-    return tuple(paises)
+    paises = paises_no_segmento(texto)
+    return paises if len(paises) >= 2 else ()
 
 
 # Sufixos e prefixos administrativos em inglês que o GeoNames anexa à

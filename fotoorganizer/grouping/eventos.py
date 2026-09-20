@@ -8,37 +8,19 @@ from __future__ import annotations
 
 import re
 
-from fotoorganizer.geolocation.folder_names import _normalizar, identificar_pais
+from fotoorganizer.geolocation.folder_names import identificar_pais
 from fotoorganizer.grouping.albuns import album_nomeia
 # A lista de sufixos de pacote mora no discovery (módulo folha, sem
 # dependência do projeto) para não existir em duas versões que divergem.
 from fotoorganizer.scanner.discovery import SUFIXOS_DE_CODIGO
 from fotoorganizer.grouping.datas import separar_data
 
-# Palavras que indicam evento (comparadas sem acento/caixa).
-_KEYWORDS_EVENTO = {
-    "aniversario", "casamento", "formatura", "batizado", "cha de bebe",
-    "festa", "natal", "reveillon", "ano novo", "pascoa", "churrasco",
-    "show", "festival", "despedida", "confraternizacao", "bodas",
-}
-# "15 anos", "1 ano" — aniversários por idade.
-_RE_ANOS = re.compile(r"\b\d{1,3}\s*anos?\b")
-
-# Pastas técnicas: datas, contadores de câmera, subpastas de workflow.
-_RE_TECNICO = re.compile(
-    r"^\[?("
-    r"\d{4}([-_ .]\d{1,2}){0,2}"        # 2025, 2025_05, 2025-05-24
-    r"|\d{1,2}([-_ .]\d{1,2})?"          # 05, 05_24
-    r"|img[-_ ]?\d*|dsc[-_ ]?\d*|dcim"
-    r"|originals?|exports?|edits?|edicoes|raw|jpe?g|selecao|selects?"
-    # Etapas de workflow de revelação: dizem em que ponto do tratamento a
-    # foto está, não do que ela é. Vivem na folha, logo abaixo do nome de
-    # verdade ("Dubai, Thai & Viet/[Developed]").
-    r"|developed|revelad[ao]s?|tratad[ao]s?|finalizad[ao]s?|culling"
-    r"|picks?|rejects?|descartes?|lixo|previews?|thumbs?|cache|sidecars?"
-    r"|fotos?|photos?|imagens|camera|backup|nova pasta|sem titulo|untitled"
-    r"|pictures|users|home|volumes|desktop|documents|downloads|library"
-    r")\]?$"
+# Vocabulário de segmento (técnico, evento) mora no módulo folha para
+# `geolocation/` ler a mesma lista sem ciclo (D-082).
+from fotoorganizer.grouping.segmentos import (
+    RE_TECNICO as _RE_TECNICO,
+    keyword_de_evento,
+    normalizar as _normalizar,
 )
 
 # Nomes de álbum só fazem sentido perto da folha — subir demais na árvore
@@ -56,13 +38,6 @@ _PASTAS_CONTEINER = {
     "colecao", "colecoes", "arquivo", "arquivos", "diversos", "geral",
     "varios", "outros", "misc", "temp", "tmp", "novo", "novas",
 }
-
-
-def keyword_de_evento(segmento: str) -> bool:
-    norm = _normalizar(segmento)
-    return bool(_RE_ANOS.search(norm)) or any(
-        kw in norm for kw in _KEYWORDS_EVENTO
-    )
 
 
 def pasta_tecnica(segmento: str) -> bool:

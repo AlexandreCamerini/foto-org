@@ -3244,3 +3244,86 @@ inteiro passa a ser contado numa passada só
 - Status: decidido pelo dono, via `AskUserQuestion` apresentado pelo
   orquestrador com o relatório real da medição e a tabela de scores já
   travados como baliza.
+
+## D-082 — País no nome da pasta tolera hífen, ano e conector; a tolerância só vale ao lado de um país exato
+
+- Fase: localização estimada, fatia 1 (2026-09-20), primeira das
+  funcionalidades priorizadas pelo dono após o mapa de reconstrução
+  (`docs/reconstrucao/`).
+- Classe: A — regra de classificação medida antes e depois, sem mexer em
+  limiar; oito cenários novos no benchmark (quatro positivos, quatro
+  guardas): 19 → 27.
+- Contexto: 40.369 fotos de acervo (73,3%) não têm lugar nenhum — nem GPS
+  próprio nem herança. 26.505 delas estão a mais de 30 dias de qualquer
+  doadora com GPS: herança temporal nunca as alcança. O que elas têm é o
+  nome da pasta — e o reconhecedor de país (`identificar_paises`/
+  `identificar_pais`) exigia o segmento inteiro igual ao nome do país ou
+  uma lista em que TODA parte é país. "Peru-Bolivia-Chile" (5.516 fotos),
+  "Italia e Franca 2013" (1.649), "Chile e Atacama Abr.18" (880 sem
+  lugar), "Portugal e Espanha Carnaval Fev.16" / "Carnaval 2016 -
+  Portugal e Espanha" (754 + 754) e "Do Peru ao Chile" não produziam país
+  nenhum: no catálogo inteiro não existia uma evidência de `pais` com
+  origem `pasta`.
+- Medição antes (catálogo real, somente leitura): reconhecedor tolerante
+  alcança 8.690 fotos sem lugar em cinco pastas multi-país (candidatos na
+  justificativa da viagem, nenhum escolhido como país da foto) e 880 em
+  "Chile e Atacama Abr.18". A primeira versão da regra, revisada com
+  olhos frescos antes do commit, errava em "Estádio Nilton Santos -
+  Guadalupe, RJ" (bairro homônimo de país), "Serra - ES" (→ Serra Leoa,
+  por prefixo), "Cabo" (→ Cabo Verde), "Georgia 15 Anos" (aniversário →
+  viagem) e "Israel e Maria Casamento" (sobra "Maria Casamento" virava
+  cidade). As guardas abaixo vêm daí.
+- Medição depois (hierarquia velha × nova sobre as 555 pastas / 102.251
+  registros do catálogo): **1.927 fotos de acervo ganham país** — "Chile
+  e Atacama Abr.18" (1.515, das quais 880 não tinham lugar nenhum) e
+  "Chile Jun.15" (412) —, **0 trocam, 0 perdem**, 0 mudanças de cidade.
+  As 8.690 multi-país mudam no classificador (viagem nomeada pela lista),
+  não na hierarquia. Contra as pastas com país geocodificado do GPS
+  próprio: 3 de 3 concordantes.
+- Decisão:
+  1. Uma parte só conta como país se for país EXATO depois de tirar data
+     e conector ("Franca 2013", "Do Peru", "Guiné-Bissau"). Abreviação
+     ("Thai") e país seguido de palavra ("Espanha Carnaval") só valem
+     quando outra parte do mesmo segmento já é país exato.
+  2. Dois ou mais países no mesmo segmento é sinal forte — valem onde
+     estiverem (partes separadas por `, & + / " e " " ao " " - "`;
+     hífen colado separa só se todos os pedaços forem país). Palavra de
+     festa não desfaz a lista ("Portugal e Espanha - Natal 2015").
+  3. Sigla de estado brasileiro em qualquer parte desqualifica o
+     segmento inteiro, lista ou não ("Guadalupe - RJ", "Brasil e
+     Portugal - RJ"): é endereço, não roteiro.
+  4. Um país só vale se for a PRIMEIRA parte do segmento e não houver
+     palavra de evento no segmento ("Georgia 15 Anos", "Israel e Maria
+     Casamento"). Vocabulário de evento e de pasta técnica passa a morar
+     em `grouping/segmentos.py`, módulo folha, para `geolocation/` e
+     `grouping/eventos.py` lerem a mesma lista sem ciclo.
+  5. Pasta multi-país não escolhe `pais`; a varredura continua para
+     baixo (".../Peru-Bolivia-Chile/Peru/Cusco" → Peru/Cusco). A viagem é
+     nomeada com as palavras do dono e a justificativa lista os países
+     (regra 3 do classificador, já existente). O ramo de UM país continua
+     rotulando pelo país ("Chile"), como já fazia para o segmento exato —
+     o ano do template separa "2015 - Chile" de "2018 - Chile"; nomear
+     com as palavras do dono aqui carregaria "Abr.18"/"Jun.15", que
+     `separar_data` não reconhece.
+  6. A sobra do segmento do país ("Atacama") NÃO vira cidade nesta fatia:
+     sem o dataset offline confirmar que é lugar, seria inventar
+     localização. Subpasta técnica abaixo do país ("[Developed]", "2019")
+     também não é cidade — antes era.
+- Alternativas rejeitadas: aceitar país em qualquer posição (traz o
+  bairro Guadalupe); prefixo solto (196 palavras de 4 letras viram
+  país); exigir lista completa como antes (perde 8.690 fotos); listar os
+  países como valor de `pais` (duplicaria o segmento no destino).
+- Limitações conhecidas, todas para a fatia 2 (dataset de cidades):
+  cidade homônima de país na primeira parte ("Granada e Sevilha 2018" →
+  Granada; "Franca" sozinha → França, risco que já existia); país + nome
+  de pessoa sem palavra de festa ("Israel e Maria 2019" → viagem Israel,
+  onde antes era evento — zero ocorrências no acervo hoje); prefixo ao
+  lado de país exato aceita qualquer palavra de 4 letras que seja prefixo
+  único ("Espanha e Fran" → França); país único com palavra de festa fica
+  sem país ("Chile - Reveillon 2018"), como antes.
+- Como reverter: `git revert` do commit desta fatia; os cenários novos
+  do benchmark passam a falhar, que é o comportamento desejado de uma
+  reversão consciente.
+- Status: decidido pelo dono (fatia 1 de localização estimada escolhida
+  entre quatro opções medidas), implementado e commitado nesta fatia
+  (`feat: país no nome da pasta tolera hífen, ano e conector`).

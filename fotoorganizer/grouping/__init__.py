@@ -1,3 +1,6 @@
+# Este __init__ NÃO pode importar `geolocation/` nem `classification/`:
+# `geolocation/paises.py` e `folder_names.py` importam `grouping.segmentos`
+# (módulo folha) no topo, e qualquer import daqui para lá fecha um ciclo.
 from fotoorganizer.grouping.correlacao import (
     COBERTURA_MEDIDA,
     JANELA_HERANCA,

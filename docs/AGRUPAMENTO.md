@@ -26,7 +26,7 @@ real. Sem GPS ou sem casa conhecida, nada muda.
 |---|-------|-----------|--------------|
 | 1 | Caminho contém pasta de categoria "Viagens" | VIAGEM | pasta 0.60 |
 | 2 | Pasta com palavra-chave de evento (aniversário, "N anos", casamento, formatura, festa, natal, réveillon, batizado, show…) | EVENTO nomeado pela pasta | pasta 0.60 |
-| 3 | País reconhecido no nome das pastas | VIAGEM | pasta 0.60 |
+| 3 | País reconhecido no nome das pastas — lista de destinos com `, & + / e ao -` ou hífen colado ("Peru-Bolivia-Chile"), tolerando ano, mês e conector; um país só vale na primeira parte, sem sigla de UF nem palavra de evento no segmento (D-082) | VIAGEM | pasta 0.60 |
 | 4 | GPS: distância mediana até "casa" > 100 km | VIAGEM | gps 0.85 |
 | 5 | GPS geocodificado (país conhecido) E duração ≥ 3 dias E **casa desconhecida** | VIAGEM | geocoding 0.85 |
 | 6 | Pasta com nome de álbum (não técnico) E duração ≤ 2 dias | EVENTO nomeado pela pasta | pasta 0.60 |
