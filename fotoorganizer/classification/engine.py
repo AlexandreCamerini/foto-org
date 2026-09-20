@@ -390,11 +390,13 @@ class SuggestionEngine:
                 media.gps_lon_estimado = None
                 media.gps_estimado_de_id = None
                 media.gps_estimado_delta_s = None
+                media.gps_estimado_mesma_camera = False
                 continue
             media.gps_lat_estimado = heranca.lat
             media.gps_lon_estimado = heranca.lon
             media.gps_estimado_de_id = heranca.doador_id
             media.gps_estimado_delta_s = int(heranca.delta.total_seconds())
+            media.gps_estimado_mesma_camera = heranca.mesma_camera
 
     def _lugar_da_pasta(self, pasta: str) -> LugarDaPasta | None:
         if pasta not in self._lugares_por_pasta:
@@ -1028,7 +1030,22 @@ class SuggestionEngine:
                     f"{_camera_legivel(doador)} — tirada a "
                     f"{_delta_legivel(heranca.delta)} de distância"
                 )
-                if heranca.granularidade != "cidade":
+                if heranca.mesma_camera:
+                    # Regra 1 (D-086): o corte para só-país NÃO é por Δt
+                    # (aqui pode ser de minutos, sustentaria cidade em
+                    # condições normais) — é por falta de amostra medida
+                    # de acurácia. A frase genérica de granularidade
+                    # (abaixo) atribuiria o motivo errado ("a essa
+                    # distância..." quando a distância não é o problema):
+                    # esta cláusula substitui as duas de uma vez, sem
+                    # repetir "sem amostra" (achado da 4ª rodada de
+                    # revisão — a versão anterior dizia a razão errada).
+                    just += (
+                        "; a doadora é a própria câmera, com receptor de "
+                        "GPS embutido (D-029) — sem amostra medida de "
+                        "acurácia, por isso só o país é afirmado"
+                    )
+                elif heranca.granularidade != "cidade":
                     # A distância no tempo não sustenta a cidade. Dizer só
                     # "a 3h de distância" deixaria o usuário concluir sozinho
                     # que a cidade veio junto — ela não veio.
@@ -1056,16 +1073,29 @@ class SuggestionEngine:
                     ("pais", location.pais), ("regiao", location.regiao),
                     ("cidade", location.cidade),
                 ]:
+                    # Regra 1 (D-086): herança same-câmera só sustenta
+                    # país — `herdar_gps` já capa `Heranca.campos` nesse
+                    # caso (não uma segunda guarda aqui), então
+                    # `fator_de` devolve None sozinho para regiao/cidade
+                    # e o `continue` abaixo já resolve. Sem isso, o
+                    # destino sugerido (e a cópia que ele alimenta em
+                    # `operations/planner.py`) propunha uma cidade que o
+                    # resto do app já se recusa a mostrar ou gravar.
                     fator = heranca.fator_de(campo)
                     if not valor or fator is None:
                         continue
                     score = round(
                         SCORES_REFERENCIA["vizinhanca_temporal"] * fator, 3
                     )
-                    texto = (
-                        just_concordante if campo in heranca.concordancia
-                        else just
-                    )
+                    # Herança same-câmera nunca tem campo em
+                    # `heranca.concordancia` (regra 1, D-086): só "pais"
+                    # sobrevive ao cap acima, e "pais" nunca entra em
+                    # concordância por desenho (D-074, testado em
+                    # `_confrontar_com_outro_lado`) — não precisa checar
+                    # `mesma_camera` aqui de novo, seria um segundo lugar
+                    # afirmando a mesma garantia (achado da 4ª rodada de
+                    # revisão: a checagem antiga nunca disparava).
+                    texto = just_concordante if campo in heranca.concordancia else just
                     drafts.append(
                         _Draft(campo, "vizinhanca_temporal", valor, texto,
                                score_override=score)

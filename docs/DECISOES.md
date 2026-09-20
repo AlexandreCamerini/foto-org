@@ -3680,3 +3680,196 @@ inteiro passa a ser contado numa passada só
   erro de metodologia, corrigido e reexecutado antes do commit — a
   conclusão (48h) se sustenta, com margem melhor do que a informada
   originalmente. Implementado e commitado nesta fatia.
+
+---
+
+## D-086 — Regra 1 da herança: câmera com receptor GPS confirmado pode doar para si mesma, com confiança rebaixada por falta de amostra
+
+- Fase: localização estimada, fatia 5 (2026-09-20) — opção 1 do dono entre
+  três alternativas apresentadas ao fechar a fatia 4 (implementar com
+  janela pequena e confiança rebaixada / validar mecanismo contra uma
+  segunda câmera antes / abandonar), pulando deliberadamente a validação
+  intermediária.
+- Classe: B — abre uma exceção pontual em `FotoRef.outra_origem`
+  (`grouping/correlacao.py`), não muda nenhuma janela existente.
+- Contexto: D-029 (2026-07-31) registrou que a EOS 5D Mark IV tem receptor
+  de GPS embutido de verdade (2.878/3.633 fotos, 79% — confirmado no
+  catálogo do Lightroom) e ficou "aguardando o modelo de evento". Hoje
+  `outra_origem` proíbe qualquer doação dentro da mesma fonte+câmera —
+  regra pensada para câmera comum, que não tem por que "confiar em si
+  mesma" mais do que o relógio já confia. Para a 5D Mark IV isso descarta
+  doadoras válidas: a foto sem GPS ao lado, na mesma sessão, que também
+  veio do mesmo receptor.
+- Medição (read-only contra o catálogo real, mesma técnica de doadora
+  hipotética de D-032/074/085):
+  - Órfãs elegíveis (sem doadora de outra origem dentro da janela do
+    campo, mas com candidata same-câmera ≤48h): 205 fotos — 171 EOS 5D
+    Mark IV, 25 iPhone 6, 9 BlackBerry 9500. Só a 5D Mark IV tem a
+    justificativa de D-029 (receptor real); iPhone 6 e BlackBerry ficam
+    de fora da regra — GPS de celular não tem essa distinção de mecanismo.
+  - Distribuição de Δt das 171 órfãs da 5D Mark IV até a doadora
+    same-câmera mais próxima: ≤10min 59 · 10-30min 142 · 30min-2h 211 ·
+    2-6h 4 · 6h+ 0. **99% do ganho (412/416 pares candidatos) está em
+    ≤2h** — não há cauda longa que justifique uma janela dedicada maior
+    que as já existentes (`regiao`, 2h).
+  - **Calibração de acurácia não rendeu amostra útil**: testando doadora
+    hipotética nas 3.277 fotos da 5D Mark IV que já têm GPS próprio, a
+    doadora same-câmera mais próxima fica a ≤10min em 99,8% dos casos
+    (fotos em rajada/sessão contínua) — sobram só 5 pares nas faixas de
+    10min-2h, a faixa que a regra precisa justificar. Amostra pequena
+    demais para medir acurácia com confiança (diferente de D-082/083/085,
+    que tinham centenas a milhares de pares na faixa relevante).
+- Decisão: `FotoRef.outra_origem` **não muda** (continua exatamente como
+  antes — cross-source só). A exceção mora num método novo,
+  `mesma_camera_confiavel`, usado só como FALLBACK dentro de `procurar`:
+  o laço varre o lado inteiro da janela por uma doadora de outra origem
+  primeiro; só aceita a same-câmera quando não existe nenhuma. A câmera
+  elegível é `CAMERAS_RECEPTOR_GPS_CONFIAVEL` (hoje: só EOS 5D Mark IV —
+  lista medida, não "toda Canon"). A janela reaproveita `JANELAS_POR_CAMPO`
+  sem constante nova (mesmo motivo de D-085: nunca duplicar uma janela
+  que já existe). Como a acurácia não foi medida, a doação same-câmera
+  carrega uma penalidade de confiança dedicada
+  (`_PENALIDADE_MESMA_CAMERA = 0.6`, mesmo valor de
+  `_PENALIDADE_HORA_DE_ARQUIVO` por precedente, motivo diferente:
+  aqui o Δt é confiável, a acurácia da doação é que não tem amostra) —
+  aplicada em `campos_confiaveis(..., mesma_camera=True)`, dentro de
+  `herdar_gps`. Com o teto de `vizinhanca_temporal` já em 0.75 (nunca
+  chega a alta, D-085), a penalidade derruba TODO o intervalo (0-48h)
+  para baixo do piso de média (0,5) — confirmado por varredura, não só
+  no melhor caso — e a justificativa em `_evidencias_geo` diz
+  explicitamente que a doadora é a própria câmera e que não há amostra
+  medida.
+- Por quê a confiança rebaixada em vez de tratar como herança normal: o
+  modelo de evidências (docs/CONFIANCA.md) exige que a sugestão responda
+  "por quê" — aqui o "por quê" é um argumento de mecanismo (D-029), não
+  uma medição como todas as outras fatias desta sequência. Alegar o
+  mesmo patamar de confiança sem o mesmo tipo de evidência quebraria essa
+  regra. O dono foi avisado da lacuna de calibração antes de escolher
+  esta opção e decidiu prosseguir mesmo assim.
+- **Achados da revisão com olhos frescos, corrigidos antes do commit**
+  (dois deles reais e sérios — a primeira versão implementada nesta
+  fatia tinha um bug de deslocamento e um vazamento de segurança):
+  1. **Não-aditivo, de novo** (crítico do ponto de vista de qualidade,
+     mesma classe de erro que D-085 já tinha cometido uma vez): a
+     primeira versão deixava `outra_origem` aceitar same-câmera
+     incondicionalmente, então `procurar` retornava a primeira doadora
+     válida — e a same-câmera, quase sempre mais perto no tempo (rajada),
+     **deslocava** uma doadora de outra origem que já era válida e
+     medida. Medido no catálogo real antes da correção: 298 heranças
+     trocadas de doadora, 296 com a badge rebaixada de média para baixa
+     SEM motivo — a doadora medida ainda existia, só não era mais
+     escolhida. Corrigido reestruturando `procurar`: cross-source sempre
+     vence; same-câmera só entra quando não há nenhuma de outra origem
+     no mesmo lado dentro da janela (fallback de verdade, não
+     concorrente). `outra_origem` voltou a ser exatamente o método
+     original — a exceção não vive mais nele.
+  2. **Vazamento para a escrita EXIF** (o achado mais sério): a alegação
+     original desta decisão — "não muda o plano de escrita EXIF, a
+     penalidade só afeta a badge" — **era falsa**. `exif_write/planner.py`
+     decide o que é seguro escrever pelo Δt (`campos_confiaveis`), não
+     pelo fator de confiança; como a doadora same-câmera costuma estar
+     mais perto no tempo que a cross-source que existia antes, o MESMO
+     Δt encolhido passava a sustentar `regiao`/`cidade` no predicado de
+     Δt, sem o planner saber que a origem daquele Δt não tinha amostra
+     nenhuma. Medido no catálogo real antes da correção: 437 fotos
+     passariam a ter GPS exato/cidade oferecidos para escrita no arquivo
+     ORIGINAL a partir de uma doação sem amostra de acurácia. Corrigido
+     com uma coluna nova, `gps_estimado_mesma_camera` (migração 0021),
+     persistida em `_persistir_herancas`; o planner (`_campos_da_heranca`
+     + guarda nova) e a tela de detalhe (`_campos_do_lugar`, que o
+     próprio comentário do planner já dizia usar "a MESMA função") agora
+     recusam GPS exato e cidade quando a flag é `True` — só país
+     continua sem guarda (D-025, ungated por desenho, mecanismo-agnóstico).
+  3. `calibrar_janela_pais.py` (a calibração de D-085) usa
+     `FotoRef.outra_origem` ao vivo — a primeira versão desta fatia
+     contaminava essa medição sem avisar (a faixa de 24-48h caía de 524
+     para 201 pares, -62%). Resolvido de graça pela correção do achado 1:
+     como `outra_origem` voltou ao comportamento original, a calibração
+     de D-085 nunca mais vê a exceção. Confirmado, não só deduzido.
+  4. A frase de concordância (D-074, "confirmada por outra foto do lado
+     oposto") podia empilhar com a frase de mecanismo ("sem amostra
+     medida") na mesma justificativa — duas afirmações que se
+     contradizem lendo em sequência. A corroboração geométrica de D-074
+     foi calibrada para doadora de outra origem, não para este caso;
+     corrigido suprimindo a frase de concordância quando `mesma_camera`
+     é verdadeiro (o score não muda — concordância nunca somou score,
+     só texto).
+  5. O teste `test_campos_confiaveis_mesma_camera_penaliza_todos_os_campos`
+     comparava `round(fator*0.6, 3)` contra o fator JÁ arredondado —
+     passava só em Δt onde o fator é exatamente 1.0 (dupla rolagem de
+     arredondamento diverge do valor real no resto da rampa). Reescrito
+     com tolerância sobre vários Δt. Faltava também um teste que
+     exercitasse o cenário do achado 1 (doadora same-câmera mais perto E
+     cross-source mais longe presentes ao mesmo tempo) — adicionado.
+- **Rodada 3, sobre o diff da rodada 2**: a correção do achado 1 preferia
+  cross-source só DENTRO do mesmo lado (antes/depois) — o `min()` final
+  ainda comparava os dois lados só por Δt cru, então uma same-câmera de
+  um lado ainda podia deslocar uma cross-source do OUTRO lado. Medido:
+  298 deslocamentos caíram para 43 (grande melhora, não zero) e **1
+  caso real perdeu uma oferta de escrita de `regiao` que tinha antes da
+  fatia** (regressão, não só badge injusta). `_evidencias_geo` também
+  continuava oferecendo região/cidade para o destino sugerido — 201/205
+  heranças same-câmera propunham copiar para uma pasta de cidade que a
+  tela e o planner já recusavam. Corrigido: `procurar` agora devolve
+  `(delta, candidata, cross: bool)`; a escolha final roda sobre os
+  achados `cross=True` de QUALQUER lado quando existe pelo menos um, e
+  só cai para o fallback quando nenhum dos dois lados tem cross-source.
+  `_evidencias_geo` ganhou `if heranca.mesma_camera and campo != "pais": continue`
+  (depois substituído, ver rodada 4). Reconfirmado no catálogo real após
+  a correção: **0 deslocamentos, 0 heranças preexistentes afetadas**, as
+  162 órfãs recuperadas continuam com 0 novas ofertas de GPS exato/cidade
+  — a fatia é estritamente aditiva.
+- **Rodada 4, sobre o diff da rodada 3**: dois achados novos, nenhum
+  bloqueante. (a) A justificativa dizia "a essa distância dá para
+  afirmar o país, não a cidade" para heranças same-câmera de Δt curto —
+  motivo ERRADO: o corte não é por Δt (2min sustentaria cidade em
+  condições normais), é por falta de amostra medida; o texto contradizia
+  a si mesmo ("tirada a 2min" seguido de "a essa distância..."). (b) uma
+  testemunha same-câmera (o lado que NÃO foi escolhido como doadora)
+  ainda podia conceder o selo "confirmada" (D-074) a uma herança
+  cross-source medida — 1 ocorrência real (a mesma media do achado da
+  rodada 3). Corrigido: `Heranca.campos` agora é capado em `[("pais", fator)]`
+  na origem (`herdar_gps`, logo após `_confrontar_com_outro_lado`), não
+  mais filtrado em `_evidencias_geo` — isso fez `Heranca.granularidade`
+  virar `"pais"` sozinho e consertou de quebra uma terceira superfície
+  não sinalizada antes (`engine.py`, nome de viagem/sessão a partir da
+  coordenada herdada, que também lia a cidade indevidamente). A cláusula
+  de justificativa ganhou um caso dedicado para `mesma_camera` com o
+  motivo certo ("sem amostra medida de acurácia, por isso só o país é
+  afirmado"), substituindo a genérica. `_confrontar_com_outro_lado`
+  passou a receber a tupla `(delta, candidata, cross)` inteira e trata
+  testemunha `cross=False` como base não confiável — mesmo tratamento
+  que já dava a `hora_do_arquivo`. Reconfirmado no catálogo real: 0
+  heranças com concordância alterada (era 1), fatia continua
+  estritamente aditiva. Duas guardas que ficaram inalcançáveis por
+  construção (`concordancia` sempre vazia para same-câmera) foram
+  removidas em vez de mantidas como defesa-em-profundidade morta.
+- Alternativas rejeitadas: validar o mecanismo contra a DJI FC8482 (100%
+  de cobertura própria) antes de decidir — o dono pulou essa etapa
+  intermediária explicitamente; abandonar a regra 1 por falta de amostra
+  — rejeitada pelo dono, que aceitou o argumento de mecanismo como
+  suficiente com a confiança rebaixada.
+- Limitação conhecida, não escondida: os números de acurácia de D-082 a
+  D-085 vieram de medição; esta fatia não tem equivalente — é a primeira
+  decisão da sequência de localização estimada sustentada só por
+  mecanismo. Se o padrão de disparo do receptor da 5D Mark IV mudar
+  (câmera trocada, firmware, uso diferente), a premissa "gaps longos são
+  raros" pode deixar de valer sem que nada aqui detecte a mudança. A
+  exiftool `metadata/exiftool.py` não faz `.strip()` no make/model lido
+  (diferente do extrator puro-Python, que faz) — risco latente de a
+  tupla de câmera não bater com `CAMERAS_RECEPTOR_GPS_CONFIAVEL` por
+  espaço sobrando; hoje os valores do catálogo real estão limpos
+  (confirmado), então não é falha ativa — anotado, não corrigido nesta
+  fatia (pré-existente, mais largo que esta regra).
+- Como reverter: remover o fallback em `procurar` (a chamada a
+  `foto.mesma_camera_confiavel`) e a coluna `gps_estimado_mesma_camera`
+  fica inofensiva mas sempre `False`; nada é persistido de forma
+  irreversível — regerar sugestões refaz.
+- Status: decidido pelo dono; quatro rodadas de revisão com olhos frescos
+  (mesmo agente, contexto mantido) — a primeira implementação tinha um
+  bug de deslocamento e um vazamento para a escrita EXIF, a segunda
+  correção só resolveu metade do deslocamento e vazava para o destino
+  sugerido, a terceira correção acertou a conclusão mas errava o
+  motivo na justificativa. Confirmado no catálogo real, na versão final:
+  estritamente aditiva (0 heranças preexistentes tocadas, 162 novas).
+  Implementado e commitado nesta fatia.

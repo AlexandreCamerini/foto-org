@@ -83,8 +83,14 @@ entre as duas é medida, não estimada — e dá para perguntar se o raio propos
 a conteria.
 
 Isso rendeu **2.083 pares em 45 dias de fotografia**. Todos cruzam origem,
-como a herança real cruza: no acervo, 100% das heranças vêm de outra fonte
-(Apple Fotos → Lightroom e pastas; Lightroom → Apple Fotos).
+como a herança real cruzava até aqui: no acervo, as heranças vinham de
+outra fonte (Apple Fotos → Lightroom e pastas; Lightroom → Apple Fotos).
+D-086 abre uma exceção pontual — câmera com receptor GPS confirmado
+(`CAMERAS_RECEPTOR_GPS_CONFIAVEL`) pode doar para si mesma, com confiança
+rebaixada por falta de amostra — sem mudar esta calibração: o script usa
+sua própria definição de "outra origem" (só fonte, sem câmera), decoupled
+de `FotoRef.outra_origem` de propósito, e continua medindo só o caso
+cross-source.
 
 A cobertura é lida de três formas porque uma só esconderia as outras duas:
 

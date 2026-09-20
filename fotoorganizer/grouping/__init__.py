@@ -2,6 +2,7 @@
 # `geolocation/paises.py` e `folder_names.py` importam `grouping.segmentos`
 # (módulo folha) no topo, e qualquer import daqui para lá fecha um ciclo.
 from fotoorganizer.grouping.correlacao import (
+    CAMERAS_RECEPTOR_GPS_CONFIAVEL,
     COBERTURA_MEDIDA,
     JANELA_HERANCA,
     NOTA_DO_RAIO,
@@ -32,6 +33,7 @@ __all__ = [
     "FotoRef",
     "Heranca",
     "ViagemDraft",
+    "CAMERAS_RECEPTOR_GPS_CONFIAVEL",
     "COBERTURA_MEDIDA",
     "GAP_NOVA_VIAGEM",
     "JANELA_HERANCA",

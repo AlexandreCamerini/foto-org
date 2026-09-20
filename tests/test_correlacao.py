@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from fotoorganizer.grouping import (
     RAIO_PISO_M,
     RAIO_TETO_M,
@@ -118,6 +120,150 @@ def test_doadora_de_outra_fonte_mesmo_sem_camera():
     ]
     (h,) = herdar_gps(fotos)
     assert h.doador_id == 2
+
+
+# -- regra 1: câmera com receptor GPS confirmado (D-029/D-086) ---------------
+_5D_IV = ("Canon", "Canon EOS 5D Mark IV")
+
+
+def test_mesma_camera_doa_quando_tem_receptor_confirmado():
+    # Mesma câmera/fonte, mas a 5D Mark IV tem receptor GPS embutido
+    # confirmado (D-029) — a exceção da regra 1 se aplica só a ela.
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=2, source_id=1, camera=_5D_IV,
+                quando=T0 + timedelta(minutes=30), lat=1.0, lon=2.0),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 2
+    assert h.mesma_camera is True
+
+
+def test_mesma_camera_confiavel_nao_muda_camera_sem_receptor_confirmado():
+    # A exceção não vira "toda Canon doa pra si mesma" — só a câmera medida.
+    outra_canon = ("Canon", "Canon EOS R6m2")
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=outra_canon, quando=T0),
+        FotoRef(media_id=2, source_id=1, camera=outra_canon,
+                quando=T0 + timedelta(minutes=30), lat=1.0, lon=2.0),
+    ]
+    assert herdar_gps(fotos) == []
+
+
+def test_doacao_same_camera_cai_para_confianca_baixa():
+    # Δt curto (2min, dentro da janela curta) normalmente dá fator 1.0; a
+    # penalidade de mecanismo (D-086) derruba mesmo esse caso melhor para
+    # baixo do piso de média (score 0.75*fator < 0.5 — ver
+    # classification/confidence.py). `Heranca.campos` é capado em país
+    # (achado da 3ª rodada de revisão: sem isso, `granularidade` mentia
+    # "cidade" mesmo quando só país é oferecido).
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=2, source_id=1, camera=_5D_IV,
+                quando=T0 + timedelta(minutes=2), lat=1.0, lon=2.0),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.granularidade == "pais"
+    assert h.fator_de("cidade") is None
+    assert h.fator_de("regiao") is None
+    assert h.fator_de("pais") == 0.6  # 1.0 (janela curta) × 0.6 (mecanismo)
+
+
+def test_doacao_de_outra_fonte_nao_leva_a_penalidade_de_mesma_camera():
+    # A penalidade só se aplica à doação same-câmera; a mesma câmera
+    # recebendo de OUTRA fonte segue com a confiança normal.
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=2, source_id=2, camera=_5D_IV,
+                quando=T0 + timedelta(minutes=2), lat=1.0, lon=2.0),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.mesma_camera is False
+    assert h.fator_de("cidade") == 1.0
+
+
+def test_cross_source_vence_mesma_camera_mesmo_mais_longe():
+    # Doadora same-câmera a 2min (mais perto) E doadora de outra fonte a
+    # 5min (mais longe, mas medida) — a de outra fonte tem que vencer:
+    # mecanismo sem amostra é fallback, nunca desloca uma doadora válida.
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=2, source_id=1, camera=_5D_IV,
+                quando=T0 + timedelta(minutes=2), lat=1.0, lon=2.0),
+        FotoRef(media_id=3, source_id=2, camera=IPHONE,
+                quando=T0 + timedelta(minutes=5), lat=9.0, lon=9.0),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 3
+    assert h.mesma_camera is False
+    # Fator normal da rampa a 5min (sem a penalidade de mecanismo).
+    assert h.fator_de("cidade") == pytest.approx(0.85, abs=0.005)
+
+
+def test_cross_source_vence_mesma_camera_em_lados_opostos():
+    # Mesmo problema do teste acima, mas com as duas doadoras em lados
+    # OPOSTOS do tempo (same-câmera antes, cross-source depois) — achado
+    # da segunda rodada de revisão: preferir cross-source só DENTRO do
+    # mesmo lado não bastava, porque a escolha final comparava os dois
+    # lados só por Δt cru. Repro real: media 98028 perdia uma oferta de
+    # região que tinha antes desta fatia.
+    fotos = [
+        FotoRef(media_id=2, source_id=1, camera=_5D_IV,
+                quando=T0 - timedelta(minutes=2), lat=1.0, lon=2.0),
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=3, source_id=2, camera=IPHONE,
+                quando=T0 + timedelta(minutes=5), lat=9.0, lon=9.0),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 3
+    assert h.mesma_camera is False
+
+
+def test_mesma_camera_so_entra_sem_doadora_de_outra_origem_no_lado():
+    # Mesmo cenário, mas sem a doadora de outra fonte: aí o fallback vale.
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=2, source_id=1, camera=_5D_IV,
+                quando=T0 + timedelta(minutes=2), lat=1.0, lon=2.0),
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 2
+    assert h.mesma_camera is True
+
+
+def test_testemunha_same_camera_nao_concede_confirmada():
+    # Achado da 3ª rodada de revisão: doadora cross-source (medida) de um
+    # lado, testemunha same-câmera (sem amostra) do outro lado, as duas
+    # geometricamente próximas — a testemunha NÃO pode conceder
+    # "confirmada" a uma herança medida. A corroboração de D-074 foi
+    # calibrada para doadora de outra origem, não para mecanismo.
+    fotos = [
+        FotoRef(media_id=1, source_id=1, camera=_5D_IV, quando=T0),
+        FotoRef(media_id=2, source_id=2, camera=IPHONE,
+                quando=T0 - timedelta(minutes=3),
+                lat=25.2000, lon=55.3000),
+        FotoRef(media_id=3, source_id=1, camera=_5D_IV,
+                quando=T0 + timedelta(minutes=4),
+                lat=25.2020, lon=55.3000),   # perto — concordaria, se testado
+    ]
+    (h,) = herdar_gps(fotos)
+    assert h.doador_id == 2          # cross-source vence, como sempre
+    assert h.mesma_camera is False
+    assert h.concordancia == ()      # testemunha same-câmera não conta
+    assert h.doador_concordante_id is None
+
+
+def test_campos_confiaveis_mesma_camera_penaliza_todos_os_campos():
+    # Comparado com tolerância (não `round(f*0.6,3)` sobre o fator já
+    # arredondado — a dupla rolagem de arredondamento diverge do valor
+    # real em boa parte da rampa, dando falso positivo de invariante).
+    for minutos in (2, 6, 30, 90, 300, 1000, 2000):
+        delta = timedelta(minutes=minutos)
+        normal = dict(campos_confiaveis(delta))
+        mesma_cam = dict(campos_confiaveis(delta, mesma_camera=True))
+        assert set(normal) == set(mesma_cam)
+        for campo, fator in normal.items():
+            assert mesma_cam[campo] == pytest.approx(fator * 0.6, abs=0.002)
 
 
 # -- deriva de relógio --------------------------------------------------------

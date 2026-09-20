@@ -56,6 +56,7 @@ def _media(
     gps: tuple[float, float] | None = None,
     gps_estimado: tuple[float, float] | None = None,
     gps_estimado_delta_s: int | None = None,
+    gps_estimado_mesma_camera: bool = False,
     location: Location | None = None,
     conteudo: bytes | None = b"conteudo sintetico",
 ) -> MediaFile:
@@ -94,6 +95,7 @@ def _media(
         gps_lat=gps_lat, gps_lon=gps_lon,
         gps_lat_estimado=gps_lat_estimado, gps_lon_estimado=gps_lon_estimado,
         gps_estimado_delta_s=gps_estimado_delta_s,
+        gps_estimado_mesma_camera=gps_estimado_mesma_camera,
         location_id=location_id,
     )
     session.add(media)
@@ -402,6 +404,35 @@ def test_heranca_de_regiao_ainda_propoe_gps_exato(ambiente):
         item = session.scalar(select(ExifWriteItem))
         assert item.valor_gps_lat == pytest.approx(-54.68)
         assert item.status_gps == CampoStatus.PENDENTE
+
+
+def test_heranca_same_camera_nao_propoe_gps_exato_nem_cidade(ambiente):
+    """D-086: Δt de 20 min (dentro da janela de região, sustentaria GPS
+    exato e cidade em condições normais) mas `gps_estimado_mesma_camera`
+    marca que a doadora é a própria câmera, sem amostra medida de
+    acurácia — achado da revisão adversarial: sem esta guarda, um Δt mais
+    curto (doadora do mesmo rolo) habilitava escrita que uma doação
+    medida no Δt equivalente também habilitaria, sem ter a mesma base."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(cidade="Ushuaia", pais="Argentina", fonte="test")
+        _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            gps_estimado=(-54.68, -67.84), gps_estimado_delta_s=20 * 60,
+            gps_estimado_mesma_camera=True,
+            location=loc,
+        )
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem))
+        assert item.valor_gps_lat is None and item.status_gps == CampoStatus.SEM_VALOR
+        assert item.valor_cidade is None and item.status_cidade == CampoStatus.SEM_VALOR
+        assert item.valor_pais == "Argentina"   # país segue sem guarda (D-025)
+        assert item.status_pais == CampoStatus.PENDENTE
 
 
 def test_so_gps_so_pais_sem_location_fica_sem_valor_nenhum(ambiente):

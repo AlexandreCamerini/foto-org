@@ -1936,3 +1936,58 @@ def test_mapa_avisa_quando_heranca_passa_da_medicao(client, evento_no_mapa, migr
     ).json()
     assert mapa_alem["nota_do_raio"] == NOTA_DO_RAIO_ALEM_DA_MEDICAO
     assert "12 h" in mapa_alem["nota_do_raio"]
+
+
+def test_mapa_avisa_quando_heranca_e_da_propria_camera(
+    client, evento_no_mapa, migrated_engine
+):
+    """D-086 (regra 1): herança same-câmera não tem amostra medida — a
+    nota do grupo precisa dizer isso, não a promessa dos 93,6% medidos
+    para doadora de outra origem. O ponto carrega `mesma_camera` para a
+    UI distinguir sem adivinhar pelo Δt."""
+    from fotoorganizer.grouping.correlacao import (
+        NOTA_DO_RAIO_MESMA_CAMERA,
+    )
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        herdeira = session.get(MediaFile, evento_no_mapa["herdeira"])
+        herdeira.gps_estimado_mesma_camera = True
+        session.commit()
+
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    assert mapa["nota_do_raio"] == NOTA_DO_RAIO_MESMA_CAMERA
+
+    ponto = next(
+        p for p in mapa["pontos"] if p["media_id"] == evento_no_mapa["herdeira"]
+    )
+    assert ponto["mesma_camera"] is True
+    assert "receptor de GPS embutido" in ponto["porque"]
+
+
+def test_mapa_combina_as_duas_notas_quando_os_dois_casos_coexistem(
+    client, evento_no_mapa, migrated_engine
+):
+    """Achado da 2ª rodada de revisão: `mesma_camera` e `alem_da_medicao`
+    respondem perguntas diferentes — um grupo com os dois não pode perder
+    um deles por "a outra nota venceu"."""
+    from fotoorganizer.grouping.correlacao import (
+        NOTA_DO_RAIO_MESMA_CAMERA_E_ALEM_DA_MEDICAO,
+    )
+    from fotoorganizer.models import MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        herdeira = session.get(MediaFile, evento_no_mapa["herdeira"])
+        herdeira.gps_estimado_mesma_camera = True
+        longe = session.get(MediaFile, evento_no_mapa["longe"])
+        longe.gps_estimado_delta_s = 20 * 3600
+        session.commit()
+
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    assert mapa["nota_do_raio"] == NOTA_DO_RAIO_MESMA_CAMERA_E_ALEM_DA_MEDICAO

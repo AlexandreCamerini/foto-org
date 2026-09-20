@@ -343,6 +343,53 @@ def test_gps_herdado_de_outra_fonte_gera_evidencia_e_destino(migrated_engine):
     assert "Avignon" in sugestao.destino_sugerido
 
 
+def test_gps_herdado_da_propria_camera_com_receptor_confirmado(migrated_engine):
+    """Regra 1 (D-086): a EOS 5D Mark IV tem receptor GPS embutido
+    confirmado (D-029) — quando falha numa foto, a foto vizinha do MESMO
+    rolo pode doar. A confiança cai para baixa (mecanismo, não amostra
+    medida) e a justificativa explica o motivo."""
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2024, 5, 4, 10, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos/raw")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "5d_0.jpg", "/fotos/raw", data=base,
+            make="Canon", model="Canon EOS 5D Mark IV",
+        ))
+        session.add(_media(
+            fonte.id, "5d_1.jpg", "/fotos/raw",
+            data=base + timedelta(minutes=2), gps=(43.95, 4.8083),
+            make="Canon", model="Canon EOS 5D Mark IV",
+        ))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    resultado = engine.gerar()
+    assert resultado["herancas_gps"] == 1
+
+    sugestao, evidencias = _sugestao_de(factory, "5d_0.jpg")
+    de_heranca = [e for e in evidencias if e.origem == "vizinhanca_temporal"]
+    heranca = de_heranca[0]
+    assert "receptor de GPS embutido" in heranca.justificativa
+    # Achado da 3ª e 4ª rodadas de revisão: "a 2min de distância" sozinho
+    # implicava precisão de cidade — a frase precisa dizer que só o país
+    # foi afirmado, E dizer o motivo certo (falta de amostra, não o Δt,
+    # que aqui é curto o bastante para sustentar cidade em condições
+    # normais).
+    assert "só o país é afirmado" in heranca.justificativa
+    assert "sem amostra medida de acurácia" in heranca.justificativa
+    assert heranca.nivel == ConfidenceLevel.BAIXA
+    # Achado da 2ª rodada de revisão: sem amostra medida, só país pode
+    # sustentar o destino sugerido — cidade/região vazavam para a cópia
+    # (`operations/planner.py` lê `destino_sugerido`) mesmo depois do
+    # planner EXIF e da tela de detalhe já recusarem a mesma cidade.
+    assert {e.campo for e in de_heranca} == {"pais"}
+    assert "Avignon" not in (sugestao.destino_sugerido or "")
+    assert "França" in (sugestao.destino_sugerido or "")
+
+
 def test_deriva_de_relogio_corrigida_pelas_ancoras(migrated_engine):
     """Câmera 3h atrasada: as cópias no 'takeout' (mesmo phash, hora
     certa) ancoram o offset e a herança volta a funcionar."""

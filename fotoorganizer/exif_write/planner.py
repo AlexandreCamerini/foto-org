@@ -186,7 +186,18 @@ class ExifWritePlanner:
                 # granularidade) mesmo com uma herança fraca demais para
                 # valer como coordenada exata ou nome de cidade gravável.
                 campos_herdados = _campos_da_heranca(media.gps_estimado_delta_s)
-                delta_sustenta_gps = "regiao" in campos_herdados
+                # Herança same-câmera (regra 1, D-086) tem o mesmo Δt
+                # confiável de qualquer outra, mas NENHUMA amostra medida
+                # de acurácia — só o mecanismo do receptor (D-029)
+                # sustenta. `campos_confiaveis` não sabe disso (é o
+                # predicado de Δt, compartilhado com a tela); a guarda
+                # aqui é ADICIONAL: escrita no arquivo original exige o
+                # mesmo padrão de D-025/D-085 (janela medida), que esta
+                # herança não tem. País segue sem guarda (mesmo motivo de
+                # sempre: D-025 sustenta país em qualquer Δt da própria
+                # janela) — só o par exato e a cidade exigem medição.
+                sem_amostra = media.gps_estimado_mesma_camera
+                delta_sustenta_gps = "regiao" in campos_herdados and not sem_amostra
                 valor_gps_lat = media.gps_lat_estimado if delta_sustenta_gps else None
                 valor_gps_lon = media.gps_lon_estimado if delta_sustenta_gps else None
                 # GPS PRÓPRIO sustenta cidade sempre (é a coordenada exata
@@ -198,8 +209,8 @@ class ExifWritePlanner:
                 # da doadora e propunha gravá-la no original — a tela
                 # esconde essa cidade, o plano não podia continuar propondo
                 # o que a tela se recusa a mostrar.
-                delta_sustenta_cidade = (
-                    media.gps_lat is not None or "cidade" in campos_herdados
+                delta_sustenta_cidade = media.gps_lat is not None or (
+                    "cidade" in campos_herdados and not sem_amostra
                 )
                 # Lugar pela cidade da pasta (D-083) nunca fornece valor,
                 # mesmo que a linha tenha entrado pela perna do GPS herdado

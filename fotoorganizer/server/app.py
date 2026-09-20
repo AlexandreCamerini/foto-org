@@ -48,6 +48,8 @@ from fotoorganizer.geolocation.cidades import NOTA_RAIO_CIDADE, RAIO_CIDADE_M
 from fotoorganizer.grouping.correlacao import (
     NOTA_DO_RAIO,
     NOTA_DO_RAIO_ALEM_DA_MEDICAO,
+    NOTA_DO_RAIO_MESMA_CAMERA,
+    NOTA_DO_RAIO_MESMA_CAMERA_E_ALEM_DA_MEDICAO,
     RAIO_TETO_M,
     JANELA_COBERTURA_MEDIDA_S,
     campos_confiaveis,
@@ -276,12 +278,19 @@ def _campos_do_lugar(m: MediaFile) -> tuple[str, ...]:
     GPS lido no arquivo entrega tudo. Lugar herdado entrega só o que o Δt
     até a doadora sustenta — a mesma regra que o motor usou para montar a
     evidência (D-025), aplicada aqui para a tela não afirmar mais que ela.
+
+    Regra 1 da herança (D-086): doadora same-câmera tem Δt confiável mas
+    nenhuma amostra medida — mesma guarda de `exif_write/planner.py`
+    (`_campos_da_heranca`), para a tela e o plano de escrita nunca
+    divergirem sobre o que esta herança sustenta.
     """
     if not m.coordenada_estimada:
         return ("pais", "regiao", "cidade")
     if m.gps_estimado_delta_s is None:
         return ("pais",)
     campos = campos_confiaveis(timedelta(seconds=m.gps_estimado_delta_s))
+    if m.gps_estimado_mesma_camera:
+        campos = tuple((c, f) for c, f in campos if c == "pais")
     return tuple(campo for campo, _ in campos)
 
 
@@ -381,6 +390,9 @@ def _ponto_do_mapa(
         "doadora_id": None,
         "doadora_nome": None,
         "porque": None,
+        # Regra 1 da herança (D-086): doadora é a própria câmera, sem
+        # amostra medida de acurácia — a nota do grupo precisa saber.
+        "mesma_camera": False,
     }
     if local_da_pasta is not None:
         # A foto não tem coordenada nenhuma; o ponto é o centroide da cidade
@@ -399,6 +411,7 @@ def _ponto_do_mapa(
         return ponto
 
     ponto["origem"] = "doadora"
+    ponto["mesma_camera"] = m.gps_estimado_mesma_camera
     doadora = doadoras.get(m.gps_estimado_de_id or -1)
     # Δt ausente não é Δt zero: sem ele não dá para afirmar tamanho nenhum,
     # e o raio vai ao teto — a dúvida máxima é a resposta honesta para
@@ -418,7 +431,8 @@ def _ponto_do_mapa(
     else:
         ponto["raio_m"] = raio_incerteza(delta)
         ponto["porque"] = frase_do_raio(
-            delta, doadora.nome if doadora else None
+            delta, doadora.nome if doadora else None,
+            mesma_camera=m.gps_estimado_mesma_camera,
         )
     return ponto
 
@@ -1060,9 +1074,24 @@ def create_app(
                 and p["delta_s"] > JANELA_COBERTURA_MEDIDA_S
                 for p in pontos
             )
-            nota_do_raio = (
-                NOTA_DO_RAIO_ALEM_DA_MEDICAO if alem_da_medicao else NOTA_DO_RAIO
+            # Regra 1 da herança (D-086): doadora é a própria câmera, sem
+            # amostra medida — motivo diferente de `alem_da_medicao`
+            # (aquele é sobre escala de tempo; este é sobre não ter
+            # medição nenhuma, mesmo dentro da janela normal). Os dois
+            # podem coexistir no mesmo grupo — nota combinada, não
+            # competição (achado da 2ª rodada de revisão).
+            mesma_camera_no_grupo = any(
+                p["origem"] == "doadora" and p["mesma_camera"]
+                for p in pontos
             )
+            if mesma_camera_no_grupo and alem_da_medicao:
+                nota_do_raio = NOTA_DO_RAIO_MESMA_CAMERA_E_ALEM_DA_MEDICAO
+            elif mesma_camera_no_grupo:
+                nota_do_raio = NOTA_DO_RAIO_MESMA_CAMERA
+            elif alem_da_medicao:
+                nota_do_raio = NOTA_DO_RAIO_ALEM_DA_MEDICAO
+            else:
+                nota_do_raio = NOTA_DO_RAIO
 
         return {
             "grupo": {

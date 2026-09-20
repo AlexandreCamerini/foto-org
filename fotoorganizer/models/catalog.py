@@ -250,6 +250,11 @@ class MediaFile(Base):
     # Δt até a foto doadora, JÁ corrigido de deriva de relógio. Em coluna, e
     # não só dentro da justificativa, para poder filtrar por ele.
     gps_estimado_delta_s: Mapped[int | None]
+    # A doadora é a própria câmera/fonte (regra 1, D-086) — Δt confiável,
+    # mas SEM amostra medida de acurácia, só o mecanismo do receptor
+    # (D-029). Distinto de `gps_estimado_delta_s`: dois Δt iguais podem
+    # significar coisas diferentes para o plano de escrita EXIF.
+    gps_estimado_mesma_camera: Mapped[bool] = mapped_column(default=False)
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"))

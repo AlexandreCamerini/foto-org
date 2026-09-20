@@ -64,6 +64,29 @@ _MIN_ANCORAS = 2
 # aparecer na badge, não só na justificativa.
 _PENALIDADE_HORA_DE_ARQUIVO = 0.6
 
+# Câmeras cujo GPS vem de um receptor embutido de verdade, não de pareamento
+# com celular (D-029, D-086): confirmado no catálogo, a EOS 5D Mark IV grava
+# coordenada própria em 2.878/3.633 fotos (79%) e as origens ficam
+# coerentes entre si; a R6m2 (3%, 248/8.366) e as demais câmeras do acervo
+# derivam de pareamento ou não gravam nada. Só entra aqui quem tem essa
+# confirmação — não é "toda Canon", é a que foi medida.
+CAMERAS_RECEPTOR_GPS_CONFIAVEL: frozenset[tuple[str | None, str | None]] = (
+    frozenset({("Canon", "Canon EOS 5D Mark IV")})
+)
+# Penalidade da doação same-câmera (D-086): mesmo mecanismo de
+# `_PENALIDADE_HORA_DE_ARQUIVO` (mesma constante, motivo diferente) — aqui
+# o Δt é confiável, mas a ACURÁCIA da doação em si não foi medida. A
+# calibração por doadora hipotética (mesma técnica de D-032/074/085) não
+# rendeu amostra: das 3.277 fotos da 5D Mark IV com GPS próprio, 99,8% têm
+# a doadora same-câmera mais próxima a ≤10 min (fotos em rajada/sessão) —
+# sobram só 5 pares na faixa de 10min-2h, a faixa que a regra precisa
+# justificar. Sem amostra, a confiança não pode alegar o mesmo patamar de
+# uma herança medida (`vizinhanca_temporal`, teto 0.75 já nunca chega a
+# alta) — este fator derruba o teto para 0.45, abaixo do piso de média
+# (0.5): o motivo é mecanismo (D-029), não medição, e a badge tem de
+# mostrar isso.
+_PENALIDADE_MESMA_CAMERA = 0.6
+
 # — raio de incerteza do lugar herdado (docs/LOCAL_ESTIMADO.md) —
 # A coordenada herdada é a da DOADORA, não a da foto. Desenhá-la como ponto
 # afirma uma precisão que o dado não tem; o raio é o tamanho honesto dessa
@@ -122,6 +145,19 @@ class FotoRef:
         return (self.source_id != outra.source_id
                 or self.camera != outra.camera)
 
+    def mesma_camera_confiavel(self, outra: "FotoRef") -> bool:
+        """Mesma fonte e câmera, mas com receptor de GPS embutido
+        confirmado (`CAMERAS_RECEPTOR_GPS_CONFIAVEL`, D-029/D-086): uma
+        foto sem coordenada (falha pontual do receptor) pode herdar de
+        outra do MESMO rolo, porque a informação não veio do relógio de
+        outra fonte — veio do próprio receptor, que sabe onde a câmera
+        estava. Fallback de `procurar` (regra 1): só entra quando não há
+        doadora de outra origem no mesmo lado dentro da janela — nunca
+        desloca uma doadora medida por uma sem amostra (D-086)."""
+        return (self.source_id == outra.source_id
+                and self.camera == outra.camera
+                and self.camera in CAMERAS_RECEPTOR_GPS_CONFIAVEL)
+
 
 @dataclass(frozen=True, slots=True)
 class Heranca:
@@ -148,6 +184,11 @@ class Heranca:
     # Id da doadora do outro lado, só quando ela participou de ao menos uma
     # concordância acima. None no caso comum de âncora única.
     doador_concordante_id: int | None = None
+    # True quando a doadora é a mesma câmera/fonte (regra 1, D-086) — só
+    # possível para `CAMERAS_RECEPTOR_GPS_CONFIAVEL`. O Δt é confiável (não
+    # é o mesmo problema de `hora_incerta`), mas a acurácia da doação não
+    # foi medida — só o mecanismo (D-029) sustenta a herança.
+    mesma_camera: bool = False
 
     def fator_de(self, campo: str) -> float | None:
         """O fator do campo, ou None quando o Δt não permite afirmá-lo."""
@@ -292,16 +333,38 @@ def herdar_gps(
         os dois vizinhos imediatos e desistia quando ambos eram da mesma
         origem, sem nunca alcançar o terceiro: num acervo real isso barrou
         27.117 candidatos que tinham doador válido logo atrás deles.
+
+        Regra 1 (D-086): uma doadora da MESMA câmera com receptor
+        confirmado nunca vence uma doadora de outra origem — só serve como
+        fallback quando não existe nenhuma de outra origem deste lado
+        dentro da janela. Por isso o laço não pode parar no primeiro
+        candidato de mecanismo: precisa varrer o lado inteiro à procura de
+        uma cross-source antes de aceitar o fallback (medido: sem isso,
+        296 heranças cross-source existentes eram deslocadas por uma
+        same-câmera mais próxima, sem amostra, rebaixando a badge de
+        média para baixa sem motivo).
+
+        Devolve `(delta, candidata, cross)` — `cross=False` marca o
+        fallback. O terceiro elemento existe porque preferir cross-source
+        é uma decisão de DOIS lados, não de um: `min(achados)` por Δt cru
+        deixaria uma same-câmera de um lado vencer uma cross-source do
+        OUTRO lado só por estar mais perto — a revisão que achou o bug
+        original também achou esta segunda metade dele (media real
+        perdendo uma oferta de região que tinha antes desta fatia).
         """
+        fallback = None
         j = inicio
         while 0 <= j < len(doadores):
             delta = abs(tempos[j] - alvo)
             if delta > janela:
-                return None
-            if foto.outra_origem(doadores[j]):
-                return delta, doadores[j]
+                break
+            candidata = doadores[j]
+            if foto.outra_origem(candidata):
+                return delta, candidata, True
+            if fallback is None and foto.mesma_camera_confiavel(candidata):
+                fallback = (delta, candidata, False)
             j += passo
-        return None
+        return fallback
 
     herancas: list[Heranca] = []
     for foto in fotos:
@@ -318,7 +381,13 @@ def herdar_gps(
         ]
         if not achados:
             continue
-        delta, doador = min(achados, key=lambda c: c[0])
+        # Cross-source de QUALQUER lado vence same-câmera de QUALQUER lado,
+        # não só dentro do mesmo lado — só quando os dois lados são
+        # fallback (nenhuma cross-source em nenhum dos dois) é que o
+        # fallback mais próximo é aceito.
+        cross_achados = [a for a in achados if a[2]]
+        candidatos = cross_achados or achados
+        delta, doador, cross = min(candidatos, key=lambda c: c[0])
         # O outro lado, quando existe (diferente do escolhido acima) — quem
         # testemunha a favor ou contra a proximidade encontrada. Comparado
         # por media_id, não pela tupla inteira: os dois lados nunca podem
@@ -332,7 +401,10 @@ def herdar_gps(
         # forem de captura. Vale menos, não vale zero — num acervo onde a
         # câmera não gravou data, é a única pista que sobra.
         incerta = foto.hora_do_arquivo or doador.hora_do_arquivo
-        campos_base = campos_confiaveis(delta, incerta)
+        # Regra 1 (D-086): a doadora escolhida é a própria câmera/fonte —
+        # só possível quando `cross` é False (fallback de mecanismo).
+        mesma_cam = not cross
+        campos_base = campos_confiaveis(delta, incerta, mesma_cam)
         if not campos_base:
             continue
         campos, concordancia = _confrontar_com_outro_lado(
@@ -340,11 +412,24 @@ def herdar_gps(
         )
         if not campos:
             continue
+        # Regra 1 (D-086): herança same-câmera só sustenta país — capar
+        # aqui (não só filtrar drafts em `_evidencias_geo`) faz
+        # `Heranca.granularidade` refletir a verdade, então a cláusula
+        # existente de "essa distância não sustenta a cidade" dispara
+        # sozinha na justificativa, sem precisar de uma segunda guarda
+        # duplicada (achado da 3ª rodada de revisão). "pais" nunca falta
+        # aqui (sempre dentro da própria janela, D-025) e nunca entra em
+        # `concordancia` (excluído do teste geométrico, ver acima) — sem
+        # `if not campos` nem filtro de concordância: os dois seriam
+        # ramos inalcançáveis (achado da 4ª rodada de revisão).
+        if mesma_cam:
+            campos = tuple((c, f) for c, f in campos if c == "pais")
         herancas.append(Heranca(
             media_id=foto.media_id, doador_id=doador.media_id,
             lat=doador.lat, lon=doador.lon, delta=delta,
             campos=campos, hora_incerta=incerta,
             concordancia=concordancia,
+            mesma_camera=mesma_cam,
             doador_concordante_id=(
                 outro[1].media_id if outro is not None and concordancia
                 else None
@@ -357,7 +442,7 @@ def _confrontar_com_outro_lado(
     campos_base: tuple[tuple[str, float], ...],
     delta: timedelta,
     doador: FotoRef,
-    outro: tuple[timedelta, FotoRef] | None,
+    outro: tuple[timedelta, FotoRef, bool] | None,
     incerta: bool,
 ) -> tuple[tuple[tuple[str, float], ...], tuple[str, ...]]:
     """Testa cada campo (exceto país) contra a doadora do outro lado.
@@ -377,11 +462,17 @@ def _confrontar_com_outro_lado(
     testado (fica como se só houvesse um lado) — e por construção nunca
     entra em `concordancia`, então a justificativa nunca pode dizer
     "confirmada" na mesma frase em que já avisa que a hora é incerta.
+
+    Testemunha same-câmera (regra 1, D-086, `outro[2] is False`) entra na
+    mesma categoria: a corroboração geométrica foi calibrada para doadora
+    de OUTRA origem (D-074), não para este caso — sem isso, uma
+    testemunha sem amostra podia conceder "confirmada" a uma herança
+    cross-source medida (achado da 3ª rodada de revisão).
     """
     if outro is None:
         return campos_base, ()
-    delta_outro, doador_outro = outro
-    if incerta or doador_outro.hora_do_arquivo:
+    delta_outro, doador_outro, cross_outro = outro
+    if incerta or doador_outro.hora_do_arquivo or not cross_outro:
         return campos_base, ()
 
     resultado: list[tuple[str, float]] = []
@@ -422,7 +513,7 @@ def _distancia_m(
 
 
 def campos_confiaveis(
-    delta: timedelta, hora_incerta: bool = False
+    delta: timedelta, hora_incerta: bool = False, mesma_camera: bool = False
 ) -> tuple[tuple[str, float], ...]:
     """O que dá para afirmar com este Δt, do mais grosso ao mais fino.
 
@@ -430,6 +521,10 @@ def campos_confiaveis(
     a 0.6 na borda dele. Assim "país a 6 h" e "cidade a 6 min" não competem
     na mesma escala — cada um é medido contra o que a sua granularidade
     aguenta.
+
+    `mesma_camera` (regra 1, D-086) é independente de `hora_incerta`: o Δt
+    continua confiável, mas a doação em si (mesmo rolo, mesma câmera) não
+    tem amostra medida de acurácia — só o mecanismo do receptor (D-029).
     """
     resultado: list[tuple[str, float]] = []
     for campo, janela in sorted(JANELAS_POR_CAMPO, key=lambda cj: -cj[1]):
@@ -442,6 +537,8 @@ def campos_confiaveis(
             fator = 1.0 - 0.4 * resto
         if hora_incerta:
             fator *= _PENALIDADE_HORA_DE_ARQUIVO
+        if mesma_camera:
+            fator *= _PENALIDADE_MESMA_CAMERA
         resultado.append((campo, round(fator, 3)))
     return tuple(resultado)
 
@@ -512,9 +609,35 @@ NOTA_DO_RAIO_ALEM_DA_MEDICAO = (
     "pessoa, não travessia de fronteira), e o lugar verdadeiro pode estar "
     "fora do círculo."
 )
+# Regra 1 da herança (D-086): a doadora é a própria câmera, com receptor
+# GPS confirmado (D-029) — Δt confiável, mas SEM amostra medida de
+# acurácia (a diferença de `NOTA_DO_RAIO_ALEM_DA_MEDICAO`: aqui não é
+# escala de tempo, é falta de medição mesmo dentro da janela normal).
+NOTA_DO_RAIO_MESMA_CAMERA = (
+    "O círculo é o tamanho da dúvida, não um erro de medição — mas alguma "
+    "foto deste grupo herdou da própria câmera (receptor de GPS embutido "
+    "confirmado, sem doadora de outra fonte por perto): a fórmula do raio "
+    "não foi calibrada para este caso, só o mecanismo do receptor "
+    "sustenta a herança."
+)
+# As duas ressalvas acima respondem perguntas diferentes (escala de tempo
+# vs. falta de medição) e podem coexistir no mesmo grupo — perder uma
+# delas por "a outra venceu" escondia um risco real (achado da 2ª rodada
+# de revisão).
+NOTA_DO_RAIO_MESMA_CAMERA_E_ALEM_DA_MEDICAO = (
+    "O círculo é o tamanho da dúvida, não um erro de medição — mas este "
+    "grupo tem DUAS heranças fora do que foi medido: alguma foto herdou "
+    "da própria câmera (receptor de GPS embutido, sem amostra de "
+    "acurácia) e alguma foto herdou de uma doadora a mais de 12 h de "
+    "distância (fora da escala de deslocamento que a fórmula mede). O lugar "
+    "verdadeiro pode estar fora do círculo nos dois casos, por motivos "
+    "diferentes."
+)
 
 
-def frase_do_raio(delta: timedelta, doadora: str | None = None) -> str:
+def frase_do_raio(
+    delta: timedelta, doadora: str | None = None, mesma_camera: bool = False,
+) -> str:
     """Por que este círculo tem este tamanho, em uma frase para a tela.
 
     Nasce aqui, e não em TypeScript, pelo mesmo motivo que `raio_incerteza`:
@@ -525,25 +648,38 @@ def frase_do_raio(delta: timedelta, doadora: str | None = None) -> str:
     Três formas, porque a fórmula tem três regimes e cada um explica o
     tamanho por um motivo diferente: no piso o círculo é o erro do receptor,
     no teto ele parou de crescer, no meio ele é velocidade × tempo.
+
+    `mesma_camera` (regra 1, D-086) acrescenta uma ressalva: o raio usa a
+    MESMA fórmula (não há uma calibrada só para este caso), mas a doadora é
+    a própria câmera, sem amostra medida de acurácia.
     """
     raio = raio_incerteza(delta)
     quem = f"de {doadora}" if doadora else "de outra foto"
     if raio <= RAIO_PISO_M:
-        return (
+        frase = (
             f"Lugar herdado {quem}, no mesmo instante — o raio de "
             f"{_metros_legiveis(raio)} é só a imprecisão do receptor de GPS "
             "que emprestou a coordenada."
         )
-    quando = _tempo_legivel(delta)
-    if raio >= RAIO_TETO_M:
-        return (
-            f"Lugar herdado {quem}, a {quando} de distância — o raio para de "
-            f"crescer em {_metros_legiveis(raio)}: neste acervo, quem "
-            "fotografa o dia inteiro passa o dia na mesma região."
+    else:
+        quando = _tempo_legivel(delta)
+        if raio >= RAIO_TETO_M:
+            frase = (
+                f"Lugar herdado {quem}, a {quando} de distância — o raio "
+                f"para de crescer em {_metros_legiveis(raio)}: neste "
+                "acervo, quem fotografa o dia inteiro passa o dia na "
+                "mesma região."
+            )
+        else:
+            frase = (
+                f"Lugar herdado {quem}, a {quando} de distância — a "
+                f"{round(VELOCIDADE_PLAUSIVEL_MS * 3.6)} km/h, a "
+                "velocidade de quem anda por uma cidade contando as "
+                f"paradas, isso dá {_metros_legiveis(raio)} de dúvida."
+            )
+    if mesma_camera:
+        frase += (
+            "; a doadora é a própria câmera (receptor de GPS embutido) — "
+            "sem amostra medida de acurácia para este caso"
         )
-    return (
-        f"Lugar herdado {quem}, a {quando} de distância — a "
-        f"{round(VELOCIDADE_PLAUSIVEL_MS * 3.6)} km/h, a velocidade de quem "
-        f"anda por uma cidade contando as paradas, isso dá "
-        f"{_metros_legiveis(raio)} de dúvida."
-    )
+    return frase
