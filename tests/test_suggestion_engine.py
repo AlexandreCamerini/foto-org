@@ -261,8 +261,12 @@ def test_pasta_da_pais_com_media_confianca(ambiente):
     pais = next(e for e in evidencias if e.campo == "pais")
     assert (pais.origem, pais.valor) == ("pasta", "Japão")
     cidade = next(e for e in evidencias if e.campo == "cidade")
-    assert cidade.valor == "Tóquio"
-    assert "Japão/Tóquio" in sugestao.destino_sugerido
+    # D-083: "Tóquio" é confirmada no dataset offline e sai com a grafia
+    # dele ("Tokyo") — a mesma que o geocoding reverso dá às fotos com GPS,
+    # senão a mesma cidade viraria duas pastas no destino.
+    assert cidade.valor == "Tokyo"
+    assert "confirmada no dataset offline" in cidade.justificativa
+    assert "Japão/Tokyo" in sugestao.destino_sugerido
 
 
 def test_sem_evidencia_fica_baixa_e_nao_inventa(ambiente):
@@ -1482,3 +1486,153 @@ def test_heranca_concordante_diz_que_foi_confirmada(migrated_engine):
     assert heranca.score == round(0.75 * campos_confiaveis(
         timedelta(minutes=3)
     )[-1][1], 3)
+
+
+# -- D-083: cidade da pasta confirmada no dataset vira lugar --------------
+
+def _acervo(migrated_engine):
+    return create_session_factory(migrated_engine)
+
+
+def test_cidade_da_pasta_confirmada_vira_lugar_sem_coordenada_estimada(migrated_engine):
+    """"Amsterdam 2016" sem GPS e sem doadora: a foto ganha um Location de
+    fonte "pasta:" com o centroide, evidência de país/cidade com origem
+    `pasta` e fuso — mas NADA em `gps_*_estimado`: esses campos alimentam
+    o plano de escrita EXIF no original e um ponto com 15 km de dúvida
+    não pode ir parar lá."""
+    from fotoorganizer.geolocation.cidades import FONTE_PASTA
+    from fotoorganizer.models import Evidence, Location
+
+    factory = _acervo(migrated_engine)
+    base = datetime(2016, 10, 15, 12, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(
+            fonte.id, "canal.jpg", "/fotos/Amsterdam 2016/15 de outubro de 2016",
+            data=base,
+        ))
+        # A subpasta nomeia outro lugar: a cidade da pasta-mãe não vale.
+        session.add(_media(
+            fonte.id, "quai.jpg",
+            "/fotos/Paris 2016/Aquitânia - Quai Salvette, 7 de outubro de 2016",
+            data=base - timedelta(days=8),
+        ))
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    with factory() as session:
+        canal = session.scalar(select(MediaFile).where(MediaFile.nome == "canal.jpg"))
+        assert canal.coordenada is None and not canal.coordenada_estimada
+        assert canal.gps_lat_estimado is None and canal.gps_estimado_de_id is None
+        local = session.get(Location, canal.location_id)
+        assert local.fonte == FONTE_PASTA
+        assert (local.cidade, local.pais) == ("Amsterdam", "Países Baixos")
+        assert abs(local.lat - 52.37) < 0.05 and abs(local.lon - 4.89) < 0.05
+        assert canal.tz_estimado == "Europe/Amsterdam"
+        evidencias = {
+            e.campo: e for e in session.scalars(
+                select(Evidence).where(Evidence.media_id == canal.id)
+            )
+        }
+        assert evidencias["cidade"].origem == "pasta"
+        assert evidencias["cidade"].valor == "Amsterdam"
+        assert "confirmada no dataset offline" in evidencias["cidade"].justificativa
+        assert evidencias["pais"].valor == "Países Baixos"
+
+        quai = session.scalar(select(MediaFile).where(MediaFile.nome == "quai.jpg"))
+        assert quai.coordenada is None and quai.location_id is None
+
+
+def test_doadora_real_vale_mais_que_a_cidade_da_pasta(migrated_engine):
+    """Rodada 1 sem doadora: lugar pela pasta. Rodada 2 com uma foto de
+    outra fonte a minutos de distância: a herança decide, e o Location de
+    pasta não sobrevive em quem ganhou doadora."""
+    from fotoorganizer.geolocation.cidades import FONTE_PASTA
+    from fotoorganizer.models import Location
+
+    factory = _acervo(migrated_engine)
+    base = datetime(2016, 10, 15, 12, 0)
+    with factory() as session:
+        pasta, celular = Source(caminho="/fotos"), Source(caminho="/iphone")
+        session.add_all([pasta, celular])
+        session.flush()
+        session.add(_media(
+            pasta.id, "canal.jpg", "/fotos/Amsterdam 2016", data=base,
+            make="Canon", model="R6",
+        ))
+        session.commit()
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        canal = session.scalar(select(MediaFile).where(MediaFile.nome == "canal.jpg"))
+        assert session.get(Location, canal.location_id).fonte == FONTE_PASTA
+        celular = session.scalar(select(Source).where(Source.caminho == "/iphone"))
+        session.add(_media(
+            celular.id, "IMG_1.jpg", "/iphone", data=base + timedelta(minutes=3),
+            gps=(43.95, 4.8083), make="Apple", model="iPhone",
+        ))
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        canal = session.scalar(select(MediaFile).where(MediaFile.nome == "canal.jpg"))
+        assert canal.gps_estimado_de_id is not None       # herdou da doadora
+        assert abs(canal.gps_lat_estimado - 43.95) < 0.01  # não é Amsterdam
+        assert session.get(Location, canal.location_id).fonte == "fake"
+
+
+def test_pasta_que_deixa_de_confirmar_cidade_perde_o_lugar(migrated_engine):
+    """Renomeada a pasta para um lugar que o dataset não conhece, a rodada
+    seguinte tira o `location_id` — sem isso a foto ficaria apontando para
+    Amsterdam sem coordenada nenhuma (achado da revisão)."""
+    factory = _acervo(migrated_engine)
+    base = datetime(2016, 10, 15, 12, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(fonte.id, "canal.jpg", "/fotos/Amsterdam 2016", data=base))
+        session.commit()
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        canal = session.scalar(select(MediaFile).where(MediaFile.nome == "canal.jpg"))
+        assert canal.location_id is not None
+        canal.pasta = "/fotos/Aquitânia - Quai Salvette"
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        canal = session.scalar(select(MediaFile).where(MediaFile.nome == "canal.jpg"))
+        assert canal.location_id is None
+
+
+def test_homonimas_no_mesmo_pais_ganham_locations_diferentes(migrated_engine):
+    """"Trindade - GO" e "Trindade - PE" são duas cidades: a chave de cache
+    leva o estado, senão a segunda pasta reusava o Location da primeira."""
+    from fotoorganizer.models import Location
+
+    factory = _acervo(migrated_engine)
+    base = datetime(2019, 6, 1, 12, 0)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(fonte.id, "go.jpg", "/fotos/Trindade - GO", data=base))
+        session.add(_media(fonte.id, "pe.jpg", "/fotos/Trindade - PE",
+                           data=base + timedelta(days=40)))
+        session.commit()
+
+    SuggestionEngine(factory, LocationResolver(FakeGeocoder())).gerar()
+
+    with factory() as session:
+        go = session.scalar(select(MediaFile).where(MediaFile.nome == "go.jpg"))
+        pe = session.scalar(select(MediaFile).where(MediaFile.nome == "pe.jpg"))
+        assert go.location_id != pe.location_id
+        assert session.get(Location, go.location_id).regiao == "Goiás"
+        assert session.get(Location, pe.location_id).regiao == "Pernambuco"

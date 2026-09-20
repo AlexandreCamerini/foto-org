@@ -278,6 +278,32 @@ describe("Inspector", () => {
 });
 
 
+describe("lugar pela cidade da pasta (D-083)", () => {
+  it("rotula a origem e mostra a cidade inteira", async () => {
+    servirApi({
+      "/api/midia/7": {
+        ...DETALHE_HERDADO,
+        sugestao: null,
+        gps_estimado: false,
+        estimativa: undefined,
+        local: {
+          pais: "Países Baixos",
+          regiao: "North Holland",
+          cidade: "Amsterdam",
+          fonte: "pasta:cidades/1",
+          estimado: true,
+          origem: "pasta",
+          granularidade: "cidade",
+        },
+      },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("Lugar · pela pasta")).toBeInTheDocument();
+    expect(screen.getByText(/Amsterdam/)).toBeInTheDocument();
+  });
+});
+
 describe("granularidade do lugar herdado", () => {
   it("herança de horas anuncia o país, não a cidade", async () => {
     // A API já devolve regiao/cidade nulas nesse caso (D-025); o que se

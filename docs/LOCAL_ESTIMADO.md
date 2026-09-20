@@ -196,6 +196,32 @@ mostra exatamente onde:
   concentram a fotografia numa região por dia. Alguém que fotografe em voos
   diários teria outro teto. Recalibrar é rodar o script.
 
+## O terceiro jeito de saber o lugar: a cidade escrita na pasta (D-083)
+
+Quando não há GPS nem doadora, sobra o nome da pasta. "Amsterdam 2016" só
+vira lugar se o dataset offline (o mesmo GeoNames do geocoding reverso)
+confirmar a cidade — nome exato e um piso de população que depende do
+contexto: ≥ 500 mil para nome solto, ≥ 50 mil com o país no caminho ou
+grafia em português da tabela, ≥ 10 mil com sigla de UF e estado batendo; e
+só quando a cidade é o segmento nomeador
+mais fundo, porque "Paris 2016/Aquitânia - Quai Salvette" está a 500 km
+de Paris. A foto ganha o centroide da cidade como **lugar** — um `Location` de
+fonte `pasta:` apontado por `location_id` —, nunca em `gps_*_estimado`:
+esses campos são a herança de doadora real e alimentam o plano de escrita
+EXIF no arquivo original, onde um ponto com 15 km de dúvida não pode entrar.
+
+O raio não é o da herança. Ele não mede "quanto ela pode ter andado" — mede
+o tamanho da cidade que a pasta nomeia:
+
+| constante | valor | onde | como foi medida |
+|---|---|---|---|
+| `RAIO_CIDADE_M` | `15.000` m | `geolocation/cidades.py` | `scripts/calibrar_raio_cidade.py`: 10 pastas / 58 fotos com GPS próprio cujo nome é cidade confirmada; erro máximo 4,2 km (Paris), mediana 1,4 km; Niterói (só com contexto) a 12 km; 15 km cobre 100% |
+
+No mapa o ponto sai com `origem = "pasta"` e a frase própria: *"Lugar pelo
+nome da pasta: 'Amsterdam' (Países Baixos), cidade confirmada no dataset
+offline. Só o nome da pasta diz o lugar: a foto está em algum ponto da
+cidade…"*. Recalibrar é rodar o script.
+
 ## Concordância de duas âncoras (D-074)
 
 A busca por doadora já olhava os dois lados da linha do tempo (antes e

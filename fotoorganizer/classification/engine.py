@@ -35,6 +35,11 @@ from fotoorganizer.classification.templates import (
     render_destino,
 )
 from fotoorganizer.geolocation import LocationResolver, extrair_hierarquia_da_pasta
+from fotoorganizer.geolocation.cidades import (
+    FONTE_PASTA,
+    LugarDaPasta,
+    lugar_da_pasta,
+)
 from fotoorganizer.geolocation.resolver import cache_key as _chave_de_coordenada
 from fotoorganizer.grouping.datas import (
     data_no_caminho,
@@ -64,6 +69,7 @@ from fotoorganizer.grouping.classifier import (
 )
 from fotoorganizer.grouping.temporal import ViagemDraft
 from fotoorganizer.models import (
+    Location,
     Event,
     Evidence,
     MediaFile,
@@ -254,6 +260,9 @@ class SuggestionEngine:
         pastas_classificadas: dict[str, PropostaDePasta] | None = None,
     ) -> None:
         self._factory = session_factory
+        # Cidade confirmada no dataset por pasta (D-083) — memo da rodada;
+        # o caminho repete-se centenas de vezes por pasta.
+        self._lugares_por_pasta: dict[str, LugarDaPasta | None] = {}
         self._resolver = resolver
         self._template = template
         self._advisor = advisor
@@ -297,6 +306,15 @@ class SuggestionEngine:
             # `_evidencias_geo` (que só roda para quem ainda vai ganhar
             # sugestão nesta rodada).
             self._resolver_locations(session, midias)
+
+            # Quem ficou sem coordenada — nem GPS, nem doadora — ganha o
+            # centroide da cidade escrita no nome da pasta, se o dataset
+            # offline a confirmar (fatia 2 de localização estimada, D-083).
+            # Depois da herança de propósito: uma doadora real vale mais que
+            # o nome da pasta. Depois de `_resolver_locations` para o
+            # geocoder reverso não reescrever um lugar que veio da pasta.
+            self._lugares_por_pasta = {}
+            self._estimar_por_pasta(session, midias)
 
             # Daqui em diante só o que o usuário pode ver e organizar. Uma
             # referência não tem arquivo para copiar; uma miniatura de cache
@@ -371,6 +389,61 @@ class SuggestionEngine:
             media.gps_estimado_de_id = heranca.doador_id
             media.gps_estimado_delta_s = int(heranca.delta.total_seconds())
 
+    def _lugar_da_pasta(self, pasta: str) -> LugarDaPasta | None:
+        if pasta not in self._lugares_por_pasta:
+            self._lugares_por_pasta[pasta] = lugar_da_pasta(pasta)
+        return self._lugares_por_pasta[pasta]
+
+    def _estimar_por_pasta(self, session: Session, midias) -> None:
+        """Lugar pela cidade escrita na pasta — só para quem não tem nenhuma
+        coordenada (D-083).
+
+        Grava SÓ `location_id`, apontando para um `Location` de fonte
+        `pasta:` com o centroide da cidade. Nunca em `gps_*_estimado`: esses
+        campos são a herança de doadora real e alimentam o plano de escrita
+        EXIF no arquivo original — um ponto com 15 km de dúvida não pode ir
+        parar lá. Mapa e Inspector leem o centroide do `Location`.
+
+        Reescrito a cada rodada como a herança: quem ganhou doadora ou GPS
+        já saiu daqui pelo `coordenada`; quem ficou sem coordenada e sem
+        cidade confirmada perde o `location_id` — sem isso uma foto cuja
+        pasta mudou de nome continuaria apontando para a cidade antiga.
+        """
+        locations: dict[str, Location] = {}
+        for media in midias:
+            if media.coordenada is not None:
+                continue
+            lugar = self._lugar_da_pasta(media.pasta)
+            if lugar is None:
+                media.location_id = None
+                continue
+            cidade = lugar.cidade
+            chave = cidade.chave_de_cache
+            location = locations.get(chave)
+            if location is None:
+                location = session.scalar(
+                    select(Location).where(Location.cache_key == chave)
+                )
+                if location is None:
+                    location = Location(
+                        pais=cidade.pais, regiao=cidade.regiao,
+                        cidade=cidade.nome, lat=cidade.lat, lon=cidade.lon,
+                        fonte=FONTE_PASTA, cache_key=chave,
+                    )
+                    session.add(location)
+                    session.flush()
+                elif location.fonte != FONTE_PASTA:
+                    # Regra nova para a mesma chave: reescreve no lugar para
+                    # as fotos já apontadas acompanharem (como o resolver).
+                    location.pais, location.regiao = cidade.pais, cidade.regiao
+                    location.cidade, location.lat, location.lon = (
+                        cidade.nome, cidade.lat, cidade.lon
+                    )
+                    location.fonte = FONTE_PASTA
+                    session.flush()
+                locations[chave] = location
+            media.location_id = location.id
+
     def _resolver_locations(self, session: Session, midias) -> None:
         """Resolve e grava `location_id` para toda foto com coordenada
         efetiva (própria ou herdada — `MediaFile.coordenada`), chamado
@@ -413,7 +486,7 @@ class SuggestionEngine:
                       herancas: dict[int, Heranca],
                       por_id: dict[int, MediaFile]) -> str | None:
         """País efetivo desta mídia, pela MESMA cascata de `_evidencias_geo`
-        (GPS próprio > GPS herdado > pasta > vizinhança da sessão), mas sem
+        (GPS próprio > GPS herdado > cidade da pasta > pasta > vizinhança da sessão), mas sem
         gravar Evidence/Suggestion — usado por `_atualizar_tz_estimado`
         (CR-01) para recalcular `tz_estimado` incondicionalmente, inclusive
         para mídia com sugestão já decidida (que nunca chama
@@ -434,6 +507,10 @@ class SuggestionEngine:
             location = self._resolver.resolve(session, heranca.lat, heranca.lon)
             if location is not None and heranca.fator_de("pais") is not None:
                 return location.pais
+
+        lugar = self._lugar_da_pasta(media.pasta) if media.coordenada is None else None
+        if lugar is not None:
+            return lugar.cidade.pais
 
         hierarquia = extrair_hierarquia_da_pasta(media.pasta)
         if hierarquia.pais:
@@ -979,6 +1056,29 @@ class SuggestionEngine:
                     )
                 if drafts:
                     return drafts
+
+        # 2a) Cidade escrita na pasta e confirmada no dataset offline
+        # (D-083): o lugar mais específico que o caminho nomeia, com
+        # coordenada. Vem antes da hierarquia por texto porque tem
+        # confirmação; o nome sai como o dataset grava ("Tokyo"), a mesma
+        # grafia que o geocoding reverso dá às fotos com GPS — senão
+        # "Tóquio" e "Tokyo" viravam duas pastas no destino.
+        lugar = self._lugar_da_pasta(media.pasta) if media.coordenada is None else None
+        if lugar is not None:
+            cidade = lugar.cidade
+            just = (
+                f"'{lugar.texto}' no nome da pasta ('{lugar.segmento}'), "
+                f"cidade confirmada no dataset offline "
+                f"({cidade.nome}, {cidade.pais})"
+            )
+            return [
+                _Draft(campo, "pasta", valor, just)
+                for campo, valor in [
+                    ("pais", cidade.pais), ("regiao", cidade.regiao),
+                    ("cidade", cidade.nome),
+                ]
+                if valor
+            ]
 
         # 2) Nome das pastas.
         hierarquia = extrair_hierarquia_da_pasta(media.pasta)

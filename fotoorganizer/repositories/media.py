@@ -120,12 +120,15 @@ def _condicao_lacuna(chave: str):
 
     condicoes = {
         "sem_data": MediaFile.data_capturada.is_(None),
-        # Sem coordenada NENHUMA — nem lida, nem herdada de outra câmera.
+        # Sem coordenada NENHUMA — nem lida, nem herdada de outra câmera,
+        # nem a cidade da pasta confirmada no dataset (D-083: vive só em
+        # `location_id`; sem coordenada, `location_id` preenchido é isso).
         # Contar a estimada aqui mandaria o usuário procurar GPS numa foto
         # cujo lugar o sistema já sabe.
         "sem_gps": and_(
             or_(MediaFile.gps_lat.is_(None), MediaFile.gps_lon.is_(None)),
             MediaFile.gps_lat_estimado.is_(None),
+            MediaFile.location_id.is_(None),
         ),
         # Não é falta: é uma inferência que vale conferir antes de organizar.
         "local_estimado": MediaFile.gps_lat_estimado.is_not(None),

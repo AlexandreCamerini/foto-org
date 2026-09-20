@@ -14,7 +14,7 @@ foi descartado por isso).
 | Geocodificação reversa de GPS (offline)      | Alta   | 0.85 |
 | Geocodificação reversa de GPS (serviço ext.) | Média  | 0.75 |
 | GPS herdado de foto de outra fonte a minutos de distância (correlação temporal; score cai com o Δt) | Média | 0.75×fator |
-| País/cidade extraído do nome da pasta        | Média  | 0.60 |
+| País/cidade extraído do nome da pasta (país por texto, D-082; cidade só confirmada no dataset offline, com coordenada, D-083) | Média  | 0.60 |
 | Nome de álbum de catálogo externo que cobre o período (Apple Fotos, Lightroom) | Média | 0.55 |
 | Local inferido de fotos vizinhas no tempo    | Média  | 0.55 |
 | Categoria/evento sugerido por LLM (metadados, opt-in) | Média | 0.55 |

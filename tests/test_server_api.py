@@ -73,6 +73,7 @@ def test_detalhe_expoe_o_lugar_resolvido(client, migrated_engine):
         "fonte": "offline:reverse_geocode",
         # Esta foto tem GPS próprio (img_0 do fixture): o lugar é medido.
         "estimado": False,
+        "origem": "arquivo",
         "granularidade": "cidade",
     }
 
@@ -1832,3 +1833,80 @@ def test_raiz_da_arvore_lista_os_volumes(migrated_engine):
     # O caminho devolvido tem de ser absoluto, senão o nível seguinte não casa.
     assert por_nome["Volumes"]["caminho"] == "/Volumes"
     assert por_nome["Volumes"]["total"] == 5
+
+
+def test_mapa_desenha_a_cidade_da_pasta_como_circulo_de_cidade(
+    client, evento_no_mapa, migrated_engine
+):
+    """D-083: foto sem coordenada nenhuma, mas com Location de fonte
+    "pasta:" — o mapa desenha o centroide como círculo do tamanho da
+    cidade, sem doadora nem Δt, e a frase diz de onde veio."""
+    from fotoorganizer.geolocation.cidades import FONTE_PASTA, RAIO_CIDADE_M
+    from fotoorganizer.models import Location, MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        local = Location(
+            pais="Países Baixos", regiao="North Holland", cidade="Amsterdam",
+            lat=52.37, lon=4.89, fonte=FONTE_PASTA,
+            cache_key="pasta:NL:north holland:amsterdam",
+        )
+        session.add(local)
+        session.flush()
+        foto = session.get(MediaFile, evento_no_mapa["sem_coord"])
+        assert foto.coordenada is None
+        foto.location_id = local.id
+        session.commit()
+
+    mapa = client.get(
+        "/api/mapa", params={"event_id": evento_no_mapa["evento_id"]}
+    ).json()
+    pontos = {p["media_id"]: p for p in mapa["pontos"]}
+    ponto = pontos[evento_no_mapa["sem_coord"]]
+    assert (ponto["lat"], ponto["lon"]) == (52.37, 4.89)
+    assert ponto["estimado"] is True
+    assert ponto["origem"] == "pasta"
+    assert ponto["raio_m"] == RAIO_CIDADE_M
+    assert ponto["doadora_id"] is None and ponto["delta_s"] is None
+    assert "nome da pasta" in ponto["porque"] and "Amsterdam" in ponto["porque"]
+    # Os outros continuam como eram.
+    assert pontos[evento_no_mapa["herdeira"]]["origem"] == "doadora"
+    assert pontos[evento_no_mapa["propria"]]["origem"] == "arquivo"
+    assert mapa["contagens"]["sem_coordenada"] == 0
+
+    # No Inspector o lugar vem inteiro (cidade), rotulado pela origem.
+    detalhe = client.get(f"/api/midia/{evento_no_mapa['sem_coord']}").json()
+    assert detalhe["gps_estimado"] is False
+    assert detalhe["local"]["cidade"] == "Amsterdam"
+    assert detalhe["local"]["origem"] == "pasta"
+    assert detalhe["local"]["estimado"] is True
+
+
+def test_lacuna_sem_coordenada_ignora_quem_tem_a_cidade_da_pasta(client, migrated_engine):
+    """D-083: o lugar pela cidade da pasta vive só em `location_id`, sem
+    coordenada. A grade não pode dizer "sem coordenada" para a mesma foto
+    que o mapa desenha e o Inspector rotula "Lugar · pela pasta"."""
+    from fotoorganizer.geolocation.cidades import FONTE_PASTA
+    from fotoorganizer.models import Location, MediaFile
+
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        local = Location(
+            pais="Países Baixos", regiao="North Holland", cidade="Amsterdam",
+            lat=52.37, lon=4.89, fonte=FONTE_PASTA,
+            cache_key="pasta:NL:north holland:amsterdam",
+        )
+        session.add(local)
+        session.flush()
+        foto = session.scalars(
+            select(MediaFile).where(MediaFile.gps_lat.is_(None))
+        ).first()
+        foto.location_id = local.id
+        session.commit()
+
+    lacunas = {l["chave"]: l["quantidade"]
+               for l in client.get("/api/panorama").json()["lacunas"]}
+    # 5 fotos, 1 com GPS próprio, 1 com a cidade da pasta → 3 sem nada.
+    assert lacunas["sem_gps"] == 3
+    # Não é herança de outra câmera: a faceta da herança não a conta.
+    assert lacunas["local_estimado"] == 0

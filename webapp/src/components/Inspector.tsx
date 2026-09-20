@@ -265,6 +265,9 @@ function MetadadosDoArquivo({ mediaId }: { mediaId: number }) {
  *  como se a cidade estivesse ali (D-025). */
 function rotuloDoLugar(local?: MediaDetalhe["local"]): string {
   if (!local?.estimado) return "Lugar";
+  // Cidade escrita no nome da pasta e confirmada no dataset (D-083): a
+  // cidade inteira é afirmável, mas o dono precisa saber de onde veio.
+  if (local.origem === "pasta") return "Lugar · pela pasta";
   if (local.granularidade === "regiao") return "Lugar · região estimada";
   if (local.granularidade === "pais") return "Lugar · país estimado";
   return "Lugar · estimado";

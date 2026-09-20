@@ -3327,3 +3327,113 @@ inteiro passa a ser contado numa passada só
 - Status: decidido pelo dono (fatia 1 de localização estimada escolhida
   entre quatro opções medidas), implementado e commitado nesta fatia
   (`feat: país no nome da pasta tolera hífen, ano e conector`).
+
+## D-083 — Cidade no nome da pasta vale quando o dataset offline a confirma; vira lugar (não coordenada herdada) com raio de 15 km
+
+- Fase: localização estimada, fatia 2 (2026-09-20), continuação de D-082.
+- Classe: A — regra medida antes e depois no acervo real; nenhum dado sai
+  da máquina (o dataset é o mesmo GeoNames do geocoding reverso, já no
+  `.venv`).
+- Contexto: depois de D-082, 40.369 fotos de acervo seguiam sem lugar; 895
+  delas — sem GPS e sem doadora — estão em pastas que nomeiam uma cidade:
+  "Maracatu Rural - Nazare da Mata - PE" (260), "madrid" (230), "Amsterdam
+  2016" (201), "Paris 2016" (79), "Festa do Papangu - Bezerros - PE" (63),
+  "Rio de Janeiro" (62, em duas pastas). Dizer
+  "cidade = Amsterdam" só pelo texto seria inventar lugar: "3 Picos" não é
+  Picos (PI), "Guadalupe - RJ" não é a ilha, "Lapa" e "Grajaú" são bairros
+  do Rio e cidades de São Paulo, "Centro" e "Panorama" são cidades
+  pequenas em algum país.
+- Medição antes (pastas cujas fotos têm GPS próprio): cidade exata acerta
+  sempre que a pasta É a cidade — Rio 1 km, Paris 2 km, Amsterdam 2 km,
+  Bordeaux 1 km, Nova Friburgo 0 km, Niterói 12 km; erra por 450–600 km
+  quando a cidade é só pasta-mãe e a subpasta nomeia outro lugar ("Paris
+  2016/Aquitânia - Quai Salvette"). Homônimos menores ("Paris" TX 25 mil,
+  "Centro" IT 43 mil, "Panorama" GR 17 mil) ficam abaixo do piso.
+- Calibração do raio (`scripts/calibrar_raio_cidade.py`, com os pisos da
+  decisão): 10 pastas / 58 fotos com GPS próprio cujo nome é cidade
+  confirmada — erro máximo 4,2 km (Paris), mediana 1,4 km. Niterói, que
+  só entra com contexto (país no caminho), fica a 12 km do centro. **15 km
+  cobre todos os casos medidos** e ainda é "uma cidade", não "uma região"
+  — o teto de 50 km da herança (D-032) seria dúvida demais para quem sabe
+  a cidade. Piso mais baixo que 500 mil sem contexto traria Niterói de
+  volta, mas também Grajaú (384 mil, distrito de SP), Santos, Olinda,
+  Vitória e Aurora (EUA): a régua ficou do lado de não inventar.
+- A primeira versão desta fatia gravava o centroide em `gps_*_estimado`,
+  os mesmos campos da herança. A revisão com olhos frescos mostrou o
+  furo: o planner de escrita EXIF seleciona por `gps_lat_estimado IS NOT
+  NULL` e gravaria no arquivo ORIGINAL um ponto com 15 km de dúvida como
+  GPS (895 arquivos); e o Inspector, que só afirma o país quando não há
+  Δt, esconderia a cidade que a fatia foi buscar. Daí o desenho abaixo.
+- Decisão:
+  1. `geolocation/cidades.py`: a cidade só vale confirmada no dataset —
+     nome exato (tabela de apelidos PT → GeoNames: "Tóquio" → Tokyo,
+     "Genebra" → Genève…), e piso de população por contexto: nome solto
+     exige ≥ 500 mil (Amsterdam, Madrid, Paris, Rio); país escrito no
+     caminho ou grafia da tabela baixa para ≥ 50 mil; sigla de UF no
+     segmento baixa para ≥ 10 mil com o estado obrigatório ("Nazaré da
+     Mata - PE"). Homônimo é desempatado pelo país do caminho, pela UF e
+     por último pela população ("Paris" é a da França).
+  2. Só vale a cidade do **segmento nomeador mais fundo**: pasta técnica
+     e pasta só-data são puladas; se a subpasta nomeia algo que o dataset
+     não conhece, nenhum ancestral vale — a foto está onde a subpasta
+     diz. Parte que é país, UF ou palavra de evento não é candidata.
+  3. O centroide vive **só em `locations`** (`Location` de fonte
+     `pasta:cidades/1`, chave de cache com país + estado + nome — "Trindade"
+     em GO e em PE são duas), apontado por `media_files.location_id`.
+     **Nunca em `gps_*_estimado`**: por construção fica fora do plano de
+     escrita EXIF, da detecção de casa, da distância de casa das sessões e
+     da correlação (que só leem GPS próprio e herança). O planner EXIF
+     também exclui cidade/país de `Location` de fonte `pasta:` — é a origem
+     mais fraca (0,60) e a escrita no original é a operação mais
+     irreversível do app; incluí-la é decisão explícita do dono, não desta
+     fatia. Roda em
+     `_estimar_por_pasta`, depois da herança e do geocoding, só para quem
+     não tem coordenada nenhuma; quem não tem coordenada nem cidade
+     confirmada perde o `location_id` (pasta renomeada não deixa lugar
+     órfão). Doadora real continua valendo mais que a pasta.
+  4. Evidência de `pais`/`regiao`/`cidade` com origem `pasta` (0,60,
+     `docs/CONFIANCA.md`), justificativa "'Amsterdam' no nome da pasta
+     ('Amsterdam 2016'), cidade confirmada no dataset offline". O nome sai
+     como o dataset grava ("Tokyo"), a mesma grafia que o geocoding
+     reverso dá às fotos com GPS — senão "Tóquio" e "Tokyo" viravam duas
+     pastas no destino (mesma razão de `canonizar_pais`).
+  5. Mapa e Inspector leem o centroide do `Location`: ponto com
+     `origem = "pasta"`, círculo de `RAIO_CIDADE_M` = 15 km e frase
+     própria; o painel "Por que este lugar" diz "N fotos estão aqui pelo
+     nome da pasta" em vez de "herdaram de ?"; o Inspector rotula "Lugar ·
+     pela pasta" e mostra a cidade inteira. `origem` (`arquivo | doadora |
+     pasta`) passa a sair em todo ponto do mapa e no `local` do detalhe.
+  6. `tz_estimado` usa o país da cidade confirmada antes do país por
+     texto, só para quem não tem coordenada.
+  7. O índice de cidades guarda só tuplas curtas das cidades ≥ 10 mil
+     hab., com lock — não os 155 mil dicionários do arquivo.
+- Alternativas rejeitadas: reaproveitar `gps_*_estimado` (vaza para a
+  escrita EXIF); coluna nova de proveniência (migração para um fato que
+  `locations.fonte` já carrega); piso de população único e baixo (traz
+  "Centro"/"Lapa"/"Aurora"); aceitar cidade de pasta-mãe (450 km de erro
+  medido); raio por população (Niterói, 456 mil hab., fica a 12 km do
+  centroide — a fórmula dava 7 km); reaproveitar o raio da herança (50 km).
+- Limitações conhecidas: cidade média sem contexto ("Niterói 2016",
+  "Petrópolis", "Cabo Frio", "Bordeaux") não vale — o dono escreve o
+  país no caminho ou a UF no segmento e ela passa a valer; nome de
+  pessoa que é cidade grande ("Sofia", "Salvador", "Victoria",
+  "Santiago", "Lima") passa pelo piso — zero ocorrências nas 555 pastas
+  do catálogo, mas é a classe de falso positivo que sobra, e só o país
+  no caminho a desfaz; a grade não tem faceta própria para "lugar pela
+  pasta" (só `sem_gps`, que passa a excluí-las, e `local_estimado`, que
+  é da herança) — candidata a fatia de UI; o rodapé do mapa mostra a nota
+  do raio da herança mesmo quando o grupo só tem círculos de cidade, e a
+  lista "Fotos aqui" rotula os dois como "estimado"; cidade homônima de país como país da pasta ("Granada e Sevilha
+  2018" → o país "Granada" de D-082 filtra Sevilha para fora; zero
+  ocorrências no acervo); cidade escrita de forma que o dataset não
+  conhece ("Atacama", "Pantanal", "3 Picos") continua sem lugar — é a
+  fronteira da fatia 2, candidata ao GenAI de pasta.
+- Medição depois: 895 fotos de acervo sem GPS e sem doadora passam a ter
+  cidade e centroide (1.492 sem GPS nessas pastas, as demais já tinham
+  doadora); em pastas com GPS próprio, 58/58 fotos dentro do raio.
+- Como reverter: `git revert` do commit desta fatia; os `Location` de
+  fonte `pasta:` ficam órfãos e inofensivos (a rodada seguinte de
+  `gerar()` refaz `location_id`).
+- Status: decidido pelo dono (fatia 2 de localização estimada),
+  implementado e commitado nesta fatia.
+

@@ -70,6 +70,9 @@ export interface Media {
     cidade: string | null;
     fonte: string;
     estimado: boolean;
+    /** De onde veio o lugar: lido do arquivo, herdado de uma doadora ou
+     *  pela cidade escrita no nome da pasta (D-083). */
+    origem?: "arquivo" | "doadora" | "pasta";
     /** Até onde o lugar pode ser afirmado: "cidade" | "regiao" | "pais".
      *  Lugar herdado de horas atrás diz o país, não a cidade (D-025). */
     granularidade: string | null;
@@ -216,6 +219,9 @@ export interface PontoMapa {
    *  válida — o ponto é desenhado, só não tem miniatura. */
   motivo_indisponivel: string | null;
   estimado: boolean;
+  /** "arquivo" (lida), "doadora" (herdada) ou "pasta" (centroide da
+   *  cidade escrita no nome da pasta, D-083 — sem doadora nem Δt). */
+  origem: "arquivo" | "doadora" | "pasta";
   raio_m: number | null;
   delta_s: number | null;
   doadora_id: number | null;

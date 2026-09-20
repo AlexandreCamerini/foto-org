@@ -77,8 +77,16 @@ class ExifWritePlanner:
                             & MediaFile.gps_lat_estimado.is_not(None)
                         )
                         | (
-                            Location.cidade.is_not(None)
-                            | Location.pais.is_not(None)
+                            (
+                                Location.cidade.is_not(None)
+                                | Location.pais.is_not(None)
+                            )
+                            # Lugar pela cidade escrita na pasta (D-083,
+                            # fonte "pasta:") NÃO entra: é a origem mais
+                            # fraca (0,60) e a escrita no original é a
+                            # operação mais irreversível do app — só com
+                            # decisão explícita do dono.
+                            & Location.fonte.not_like("pasta:%")
                         )
                     ),
                 )
@@ -140,8 +148,12 @@ class ExifWritePlanner:
             for media, location in pendentes:
                 valor_gps_lat = media.gps_lat_estimado
                 valor_gps_lon = media.gps_lon_estimado
-                valor_cidade = location.cidade if location else None
-                valor_pais = location.pais if location else None
+                # Lugar pela cidade da pasta (D-083) nunca fornece valor,
+                # mesmo que a linha tenha entrado pela perna do GPS herdado
+                # — a guarda do WHERE só cobre a outra perna.
+                pela_pasta = location is not None and location.fonte.startswith("pasta:")
+                valor_cidade = location.cidade if location and not pela_pasta else None
+                valor_pais = location.pais if location and not pela_pasta else None
 
                 if media.gps_lat is not None:
                     status_gps = CampoStatus.PULADO

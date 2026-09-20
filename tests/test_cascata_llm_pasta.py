@@ -189,7 +189,10 @@ def test_determinismo_vence_o_llm(migrated_engine):
     assert evidencias["pais"].origem == "pasta"
     assert evidencias["pais"].valor == "Japão"
     assert evidencias["cidade"].origem == "pasta"
-    assert evidencias["cidade"].valor == "Tóquio"
+    # D-083: "Tóquio" é confirmada no dataset offline e sai com a grafia
+    # dele ("Tokyo"), a mesma do geocoding reverso — determinismo continua
+    # vencendo o LLM; só a grafia da cidade mudou.
+    assert evidencias["cidade"].valor == "Tokyo"
 
 
 def test_advisor_de_cluster_vence_na_categoria(migrated_engine):

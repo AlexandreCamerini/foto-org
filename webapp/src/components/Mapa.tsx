@@ -65,6 +65,9 @@ export interface Lugar {
   fora_de_alcance: number;
 }
 
+// Chave do bloco "Por que este lugar" para pontos sem doadora (D-083).
+const CHAVE_PASTA = "\u0000pasta";
+
 function chaveDe(lat: number, lon: number): string {
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
@@ -251,8 +254,9 @@ export default function Mapa({
         </div>
         <div className="max-w-[52ch] text-texto-2">
           {contagens.sem_coordenada} de {contagens.total} fotos estão sem
-          coordenada: nenhuma gravou GPS e nenhuma ficou perto o bastante, no
-          tempo, de uma foto que tivesse. Sem coordenada não há mapa — nem
+          coordenada: nenhuma gravou GPS, nenhuma ficou perto o bastante, no
+          tempo, de uma foto que tivesse, e o nome da pasta não diz uma
+          cidade que o app conheça. Sem coordenada não há mapa — nem
           estimado.
         </div>
         <div className="max-w-[52ch] text-texto-3">
@@ -739,15 +743,19 @@ function PainelDoLugar({
   const total = totalDoLugar(lugar);
   // Uma entrada por doadora, com a frase do herdeiro de MAIOR raio: se as
   // fotos deste ponto herdaram com dúvidas diferentes, a que manda é a pior.
+  // Um ponto pela cidade da pasta (D-083) não tem doadora: entra numa
+  // entrada própria, em vez de virar "herdaram de ?".
+  const chaveDaOrigem = (h: PontoMapa) =>
+    h.origem === "pasta" ? CHAVE_PASTA : (h.doadora_nome ?? "?");
   const porDoadora = new Map<string, PontoMapa>();
   for (const h of lugar.herdados) {
-    const chave = h.doadora_nome ?? "?";
+    const chave = chaveDaOrigem(h);
     const atual = porDoadora.get(chave);
     if (!atual || (h.raio_m ?? 0) > (atual.raio_m ?? 0)) porDoadora.set(chave, h);
   }
   const contagemPorDoadora = new Map<string, number>();
   for (const h of lugar.herdados) {
-    const chave = h.doadora_nome ?? "?";
+    const chave = chaveDaOrigem(h);
     contagemPorDoadora.set(chave, (contagemPorDoadora.get(chave) ?? 0) + 1);
   }
 
@@ -791,10 +799,11 @@ function PainelDoLugar({
             >
               <div className="mb-1 text-texto">
                 {contagemPorDoadora.get(doadora)}{" "}
-                {contagemPorDoadora.get(doadora) === 1
-                  ? "foto herdou"
-                  : "fotos herdaram"}{" "}
-                de {doadora}
+                {doadora === CHAVE_PASTA
+                  ? contagemPorDoadora.get(doadora) === 1
+                    ? "foto está aqui pelo nome da pasta"
+                    : "fotos estão aqui pelo nome da pasta"
+                  : `${contagemPorDoadora.get(doadora) === 1 ? "foto herdou" : "fotos herdaram"} de ${doadora}`}
               </div>
               {/* A frase pronta do servidor. Aceite 3. */}
               <div>{ponto.porque}</div>

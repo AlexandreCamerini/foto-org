@@ -44,6 +44,7 @@ from fotoorganizer.exif_write.executor import ExifWriteExecutor
 from fotoorganizer.exif_write.planner import ExifWritePlanner
 from fotoorganizer.geolocation.escala import metros_por_grau
 from fotoorganizer.metadata.camera import nome_da_camera
+from fotoorganizer.geolocation.cidades import NOTA_RAIO_CIDADE, RAIO_CIDADE_M
 from fotoorganizer.grouping.correlacao import (
     NOTA_DO_RAIO,
     RAIO_TETO_M,
@@ -345,6 +346,7 @@ def _ponto_do_mapa(
     coordenada: tuple[float, float],
     doadoras: dict[int, MediaFile],
     motivo_indisponivel: str | None = None,
+    local_da_pasta: Location | None = None,
 ) -> dict:
     """Uma foto como o mapa a desenha: ponto cheio ou círculo.
 
@@ -368,15 +370,33 @@ def _ponto_do_mapa(
         # a tela diz por que não tem imagem.
         "motivo_indisponivel": motivo_indisponivel,
         "estimado": m.coordenada_estimada,
+        # De onde veio a coordenada: "arquivo" (lida), "doadora" (herdada
+        # de outra foto) ou "pasta" (centroide da cidade escrita no nome
+        # da pasta, D-083). É o que a legenda e a frase precisam saber.
+        "origem": "arquivo",
         "raio_m": None,
         "delta_s": None,
         "doadora_id": None,
         "doadora_nome": None,
         "porque": None,
     }
+    if local_da_pasta is not None:
+        # A foto não tem coordenada nenhuma; o ponto é o centroide da cidade
+        # escrita na pasta (D-083). Sem doadora e sem Δt: o círculo não mede
+        # "quanto ela pode ter andado", mede o tamanho da cidade.
+        ponto["estimado"] = True
+        ponto["origem"] = "pasta"
+        ponto["raio_m"] = RAIO_CIDADE_M
+        ponto["porque"] = (
+            f"Lugar pelo nome da pasta: '{local_da_pasta.cidade}' "
+            f"({local_da_pasta.pais}), cidade confirmada no dataset offline. "
+            f"{NOTA_RAIO_CIDADE}"
+        )
+        return ponto
     if not m.coordenada_estimada:
         return ponto
 
+    ponto["origem"] = "doadora"
     doadora = doadoras.get(m.gps_estimado_de_id or -1)
     # Δt ausente não é Δt zero: sem ele não dá para afirmar tamanho nenhum,
     # e o raio vai ao teto — a dúvida máxima é a resposta honesta para
@@ -740,12 +760,22 @@ def create_app(
                     # (D-025). Devolver a cidade quando a evidência só afirma
                     # o país mostraria na tela uma precisão que ninguém apurou.
                     pode = _campos_do_lugar(media)
+                    pela_pasta = (
+                        media.coordenada is None and local.fonte.startswith("pasta:")
+                    )
                     detalhe["local"] = {
                         "pais": local.pais if "pais" in pode else None,
                         "regiao": local.regiao if "regiao" in pode else None,
                         "cidade": local.cidade if "cidade" in pode else None,
                         "fonte": local.fonte,
-                        "estimado": media.coordenada_estimada,
+                        # Lugar pela cidade da pasta (D-083) é estimado como
+                        # o herdado — só que o rótulo diz de onde veio.
+                        "estimado": media.coordenada_estimada or pela_pasta,
+                        "origem": (
+                            "pasta" if pela_pasta
+                            else "doadora" if media.coordenada_estimada
+                            else "arquivo"
+                        ),
                         "granularidade": pode[-1] if pode else None,
                     }
             if media.gps_estimado_de_id is not None:
@@ -967,21 +997,41 @@ def create_app(
             # /Volumes/Externo — excluí-las deixaria o mapa VAZIO com todas
             # as coordenadas conhecidas. O ponto vai com `motivo_indisponivel`
             # para a tela dizer por que não há miniatura, como a grade já faz.
-            desenhaveis: list[tuple[MediaFile, tuple[float, float]]] = []
+            # Quem não tem coordenada pode ainda ter a cidade da pasta
+            # (D-083): o centroide vive no `Location` de fonte "pasta:", e
+            # só nele — uma consulta para o grupo inteiro.
+            ids_sem_coordenada = {
+                m.location_id for m in fotos
+                if m.coordenada is None and m.location_id is not None
+            }
+            lugares_da_pasta = {
+                l.id: l for l in session.scalars(
+                    select(Location).where(
+                        Location.id.in_(ids_sem_coordenada),
+                        Location.fonte.like("pasta:%"),
+                    )
+                )
+            } if ids_sem_coordenada else {}
+
+            desenhaveis: list[tuple[MediaFile, tuple[float, float], Location | None]] = []
             sem_coordenada = fora_de_alcance = 0
             for media in fotos:
                 coordenada = media.coordenada
+                local_da_pasta = None
                 if coordenada is None:
-                    sem_coordenada += 1
-                    continue
+                    local_da_pasta = lugares_da_pasta.get(media.location_id or -1)
+                    if local_da_pasta is None or local_da_pasta.lat is None:
+                        sem_coordenada += 1
+                        continue
+                    coordenada = (local_da_pasta.lat, local_da_pasta.lon)
                 if _motivo_indisponivel(media, fontes_off) is not None:
                     fora_de_alcance += 1
-                desenhaveis.append((media, coordenada))
+                desenhaveis.append((media, coordenada, local_da_pasta))
 
             # Passo 2: as doadoras, numa consulta só. Uma por ponto herdado
             # seria N+1 numa viagem de 2.406 fotos.
             ids_doadoras = {
-                media.gps_estimado_de_id for media, _ in desenhaveis
+                media.gps_estimado_de_id for media, _, _ in desenhaveis
                 if media.coordenada_estimada
                 and media.gps_estimado_de_id is not None
             }
@@ -993,8 +1043,9 @@ def create_app(
 
             pontos = [
                 _ponto_do_mapa(media, coordenada, doadoras,
-                               _motivo_indisponivel(media, fontes_off))
-                for media, coordenada in desenhaveis
+                               _motivo_indisponivel(media, fontes_off),
+                               local_da_pasta)
+                for media, coordenada, local_da_pasta in desenhaveis
             ]
 
         return {
