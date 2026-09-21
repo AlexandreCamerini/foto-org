@@ -4019,3 +4019,75 @@ inteiro passa a ser contado numa passada só
   frescos e corrigido antes do commit — a medição inicial que a
   aprovou também estava incompleta e foi refeita com o cascade real.
   Implementado e commitado nesta fatia.
+
+---
+
+## D-088 — Justificativa de viagem multi-país cita todas as pernas, não só o país dominante
+
+- Fase: fora do roadmap — achado direto do dono usando o app (não medição
+  prévia). Início de um novo foco: suspender o backlog e concentrar
+  esforço em robustecer o que já foi entregue, em vez de funcionalidade
+  nova.
+- Classe: A — corrige texto que o dono leu como classificação errada.
+- Contexto: dono relatou "fotos da Holanda sendo classificadas como
+  França" numa viagem de 13 dias (03–16/10/2016, pastas `Paris 2016` +
+  `Amsterdam 2016`, álbum Apple Fotos "Franca-Holanda"). Investigação via
+  `/api/midia/{id}` contra o catálogo real (só leitura): a evidência
+  `pais` da foto (campo que diz onde ELA está) já estava correta —
+  "Países Baixos". O erro era na evidência `viagem` (e `categoria`, que
+  reusa a mesma frase): a justificativa da SESSÃO/VIAGEM inteira dizia
+  "fotos com GPS em França ao longo de 13 dias" para QUALQUER foto da
+  viagem, inclusive as da perna Holanda — porque
+  `fotoorganizer/grouping/classifier.py`, regra 5 da cascata ("estadia
+  geocodificada"), usava `pais_dominante` (um único país, o mais
+  frequente na viagem inteira) na frase, mesmo quando a viagem já era
+  reconhecida como multi-país para efeito de RÓTULO
+  (`paises_no_tempo`, usado uma dezena de linhas acima na mesma função
+  para nomear "França – Países Baixos").
+- Decisão: a frase da regra 5 passa a citar `paises_no_tempo` (join com
+  " – ", mesmo separador do rótulo — não " e ": doze nomes canônicos de
+  país já contêm " e " no próprio nome — Bósnia e Herzegovina, Trinidad
+  e Tobago, São Tomé e Príncipe — e "GPS em Croácia e Bósnia e
+  Herzegovina" leria como três destinos, achado da revisão com olhos
+  frescos) quando há 2+ pernas; com 1 perna só, comportamento inalterado
+  (`pais_dominante` sozinho). Nova função `_paises_em_texto` em
+  `classifier.py`. Verificado contra a sessão REAL do dono (1.242 fotos,
+  duas pernas acima do `_MIN_FOTOS_PERNA`): frase passa a dizer "fotos
+  com GPS em França – Países Baixos ao longo de 14 dias" — a mesma
+  frase, agora correta, para qualquer foto da viagem.
+- Por quê a foto não recebe uma frase própria dizendo em qual perna ELA
+  está: o Inspetor já mostra, ao lado, a evidência `pais` calculada por
+  FOTO (que já estava certa) — o par (país da foto + país(es) da viagem)
+  já lê coerente sem precisar de uma terceira frase.
+- Achados da revisão com olhos frescos, **não corrigidos nesta fatia**
+  (pré-existentes, fora do escopo da correção pontual, registrados para
+  decisão própria):
+  1. `classification/engine.py` (`_evidencias_geo`, passo de vizinhança)
+     — foto sem coordenada própria NEM herança dentro da janela recebe
+     `pais_dominante` (um só) como evidência de `pais` — não só na
+     frase, no VALOR do campo. Hoje as 3.926 linhas desse tipo no
+     catálogo real são todas de viagens de um país só (não manifesta o
+     bug), mas é o único caminho estrutural por onde uma foto poderia
+     mesmo virar "Holanda classificada como França" de verdade (não só
+     no texto). Requer decisão: usar `paises_no_tempo` aqui também, ou
+     não afirmar país nenhum quando a viagem é multi-país e a foto não
+     tem evidência própria.
+  2. `classifier.py`, regra 3, segundo ramo (país lido do NOME da pasta)
+     — nomeia e justifica com o país da pasta mesmo quando o GPS de toda
+     a sessão contradiz. Caso real encontrado: 35 fotos de 14/06/2015,
+     evidência `pais` = "Brasil" nas 35, rotuladas "Chile" por causa da
+     pasta "Chile Jun.15". Pode ser comportamento intencional (D-030:
+     pasta é palavra do dono, vence dedução) OU pasta digitada errada
+     pelo próprio dono — precisa de decisão do dono, não é bug óbvio de
+     código.
+- Alternativas rejeitadas: nenhuma — correção mínima e direta, sem
+  desenho alternativo cogitado.
+- Como reverter: `git revert` neste commit; `_paises_em_texto` e o uso de
+  `paises_no_tempo` na regra 5 saem, frase volta a citar só
+  `pais_dominante`. Nada persistido depende disso além de `Evidence`
+  (reescrita a cada `gerar()`; sugestões já decididas mantêm o texto
+  antigo até reprocessar — limitação pré-existente do modelo, não desta
+  fatia).
+- Status: decidido, implementado e commitado. Revisão com olhos frescos
+  rodada uma vez, achados aplicados (separador, robustez do teste);
+  achados 1 e 2 acima ficam registrados para o dono priorizar.

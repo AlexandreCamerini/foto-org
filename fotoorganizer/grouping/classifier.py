@@ -95,6 +95,18 @@ NEUTRA = Decisao("neutra", None, "agrupamento", "")
 ORIGEM_ALBUM = "album_externo"
 
 
+def _paises_em_texto(paises: tuple[str, ...]) -> str:
+    """Lista de países para a frase de justificativa ('França – Países
+    Baixos'). Mesmo separador do RÓTULO (`_cascata.viagem`, ' – ' entre
+    pernas) de propósito — não ' e ': doze nomes canônicos de país já têm
+    ' e ' no próprio nome (Bósnia e Herzegovina, Trinidad e Tobago, São
+    Tomé e Príncipe…), e "GPS em Croácia e Bósnia e Herzegovina" lê como
+    três destinos, não dois (achado da revisão com olhos frescos)."""
+    if len(paises) <= 1:
+        return paises[0] if paises else ""
+    return " – ".join(paises)
+
+
 def classificar_sessao(
     dados: DadosSessao,
     config: ConfigClassificacao = ConfigClassificacao(),
@@ -235,9 +247,21 @@ def _cascata(
             and dados.duracao >= config.duracao_min_viagem
             and (not config.estadia_exige_casa_desconhecida
                  or dados.dist_mediana_casa_km is None)):
+        # Viagem multi-país (≥2 pernas) cita TODAS as pernas na frase, não
+        # só o país dominante — sem isto, uma foto da perna Holanda de uma
+        # viagem França–Holanda lia "fotos com GPS em França" na própria
+        # justificativa, o mesmo texto que qualquer foto da perna França
+        # recebia. A foto já tem o país CERTO na evidência `pais`
+        # (`vizinhanca_temporal`/`geocoding_offline`, calculada por foto);
+        # o bug era só aqui, na frase que descreve a SESSÃO inteira.
+        pais_da_frase = (
+            _paises_em_texto(dados.paises_no_tempo)
+            if len(dados.paises_no_tempo) >= 2
+            else dados.pais_dominante
+        )
         return viagem(
             "geocoding_offline",
-            f"fotos com GPS em {dados.pais_dominante} ao longo de "
+            f"fotos com GPS em {pais_da_frase} ao longo de "
             f"{dados.duracao.days + 1} dias",
         )
 

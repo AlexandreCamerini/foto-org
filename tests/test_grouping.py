@@ -136,3 +136,53 @@ def test_pasta_que_lista_destinos_nomeia_a_viagem_inteira():
     # mostrar que os Emirados foram vistos mesmo sem GPS.
     assert "lista 3 destinos" in decisao.justificativa
     assert "Emirados Árabes Unidos" in decisao.justificativa
+
+
+def test_estadia_geocodificada_multi_pais_cita_todas_as_pernas_na_frase():
+    """Achado real do dono: viagem França–Holanda, sessão da perna Holanda
+    (país dominante do ACERVO é França, mas esta sessão está na outra
+    perna) mostrava "fotos com GPS em França" na justificativa — o mesmo
+    texto para qualquer foto da viagem, inclusive as da Holanda. A foto já
+    tem o país CERTO na evidência `pais` (calculada por foto); o bug era
+    só na frase que descreve a sessão/viagem inteira, que usava só
+    `pais_dominante` (um valor) mesmo quando `paises_no_tempo` (calculado
+    do mesmo jeito que já nomeia a viagem multi-país) tinha duas pernas."""
+    from datetime import timedelta
+
+    from fotoorganizer.grouping.classifier import DadosSessao, classificar_sessao
+
+    decisao = classificar_sessao(DadosSessao(
+        # Pasta neutra de propósito (não "Amsterdam 2016"): D-083 amplia o
+        # reconhecimento de cidade em nome de pasta, e a regra 3 (pasta)
+        # venceria a regra 5 (GPS) que este teste quer isolar — achado da
+        # revisão com olhos frescos.
+        pastas=("/fotos/DCIM",),
+        duracao=timedelta(days=12),
+        pais_dominante="França",
+        dist_mediana_casa_km=None,
+        periodo_curto="Viagem de 03-10 a 15-10",
+        paises_no_tempo=("França", "Países Baixos"),
+    ))
+    assert decisao.tipo == "viagem"
+    assert decisao.origem == "geocoding_offline"
+    assert "GPS em França – Países Baixos" in decisao.justificativa
+    assert f"ao longo de {12 + 1} dias" in decisao.justificativa
+
+
+def test_estadia_geocodificada_pais_unico_mantem_frase_de_sempre():
+    """Sem 2ª perna, a frase continua citando só o país dominante —
+    comportamento de antes desta correção, inalterado."""
+    from datetime import timedelta
+
+    from fotoorganizer.grouping.classifier import DadosSessao, classificar_sessao
+
+    decisao = classificar_sessao(DadosSessao(
+        pastas=("/Users/x/Pictures/Lisboa 2022",),
+        duracao=timedelta(days=5),
+        pais_dominante="Portugal",
+        dist_mediana_casa_km=None,
+        periodo_curto="Viagem de 01-06 a 05-06",
+        paises_no_tempo=(),
+    ))
+    assert decisao.tipo == "viagem"
+    assert "GPS em Portugal ao longo de" in decisao.justificativa
