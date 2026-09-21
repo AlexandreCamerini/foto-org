@@ -350,6 +350,7 @@ class SuggestionEngine:
             )
 
             geradas = 0
+            a_gerar = sum(1 for m in organizaveis if m.id not in decididas)
             for media in organizaveis:
                 if media.id in decididas:
                     continue
@@ -362,6 +363,11 @@ class SuggestionEngine:
                 geradas += 1
                 if geradas % 500 == 0:
                     session.commit()
+                    # Sem isto o laço fica mudo por vários minutos num
+                    # catálogo grande — nada nos logs entre "sessão X virou
+                    # Y acontecimentos" (rápido) e o fim da rodada inteira,
+                    # difícil de distinguir de uma trava real.
+                    log.info("gerar: %d/%d sugestões", geradas, a_gerar)
 
             session.commit()
             return {

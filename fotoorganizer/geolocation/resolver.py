@@ -23,6 +23,17 @@ def cache_key(lat: float, lon: float) -> str:
 class LocationResolver:
     def __init__(self, provider: GeocodingProvider) -> None:
         self._provider = provider
+        # Atalho em memória por coordenada, além do cache na tabela
+        # `locations`: uma geração passa pela MESMA coordenada em várias
+        # chamadas (herança de GPS, tz estimado, evidência geo — cada uma
+        # resolve de novo por conta própria), e sem isto cada uma vira um
+        # SELECT, mesmo indexado. Só vale para a MESMA sessão: um objeto
+        # `Location` carregado numa sessão já fechada pode estar destacado
+        # (SQLAlchemy expira atributos ao sair do `with`), então a troca de
+        # sessão zera o atalho — a tabela continua servindo de cache entre
+        # sessões/execuções, como sempre serviu.
+        self._cache: dict[str, Location | None] = {}
+        self._cache_session: Session | None = None
 
     def _desatualizado(self, location: Location) -> bool:
         """Linha em cache resolvida por uma versão anterior do provedor.
@@ -34,7 +45,18 @@ class LocationResolver:
         return atual is not None and location.fonte != atual
 
     def resolve(self, session: Session, lat: float, lon: float) -> Location | None:
+        if session is not self._cache_session:
+            self._cache = {}
+            self._cache_session = session
         chave = cache_key(lat, lon)
+        if chave in self._cache:
+            return self._cache[chave]
+        self._cache[chave] = self._resolve_sem_cache(session, chave, lat, lon)
+        return self._cache[chave]
+
+    def _resolve_sem_cache(
+        self, session: Session, chave: str, lat: float, lon: float
+    ) -> Location | None:
         location = session.scalar(select(Location).where(Location.cache_key == chave))
         if location is not None and not self._desatualizado(location):
             return location

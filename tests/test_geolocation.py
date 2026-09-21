@@ -95,6 +95,46 @@ def test_resolver_usa_cache_da_tabela(migrated_engine):
     assert fake.chamadas == 1
 
 
+def test_resolver_cache_em_memoria_evita_select_repetido(migrated_engine):
+    """Uma geração chama `resolve()` várias vezes pela MESMA coordenada
+    (herança de GPS, tz estimado, evidência geo — cada uma resolve por
+    conta própria) — sem atalho em memória, cada uma vira um SELECT.
+
+    O cache na tabela (`test_resolver_usa_cache_da_tabela`, acima) já evita
+    reconsultar o provedor; este teste prova a camada de cima, que evita
+    reconsultar o BANCO dentro da mesma sessão — e que trocar de sessão
+    zera o atalho em memória sem reabrir a porta pro provedor (a tabela
+    continua protegendo)."""
+    factory = create_session_factory(migrated_engine)
+    fake = FakeGeocoder()
+    resolver = LocationResolver(fake)
+
+    chamadas_sem_cache = []
+    original = resolver._resolve_sem_cache
+
+    def contando(*args, **kwargs):
+        chamadas_sem_cache.append(1)
+        return original(*args, **kwargs)
+
+    resolver._resolve_sem_cache = contando
+
+    with factory() as session:
+        a = resolver.resolve(session, 43.9500, 4.8083)
+        b = resolver.resolve(session, 43.9501, 4.8083)  # ~10m: mesma chave
+        session.commit()
+        assert b.id == a.id
+    assert len(chamadas_sem_cache) == 1  # só a primeira foi ao banco
+
+    # Sessão nova: o atalho em memória zera (objeto da sessão anterior
+    # pode estar destacado), mas a tabela ainda serve de cache — o
+    # provedor não é consultado de novo.
+    with factory() as session:
+        c = resolver.resolve(session, 43.95, 4.8083)
+        assert c.id == a.id
+    assert len(chamadas_sem_cache) == 2
+    assert fake.chamadas == 1
+
+
 def test_geocoder_offline_real():
     """Uma consulta real ao dataset local (sem rede)."""
     from fotoorganizer.geolocation.offline import OfflineGeocoder
