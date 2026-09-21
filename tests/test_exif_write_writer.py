@@ -21,6 +21,7 @@ from fotoorganizer.exif_write.verificacao import (
     avisos,
     campo_gravado,
     diferenca,
+    gps_valor_correto,
     reclassificar_deslocamentos_de_offset,
 )
 from fotoorganizer.exif_write.writer import ExifToolWriter, ValorInvalido, validar_campos
@@ -111,6 +112,75 @@ def test_campo_gravado_exige_todas_as_tags_do_campo():
 
     diff_parcial = diferenca({}, {"IPTC:City": "São Paulo"})
     assert campo_gravado("cidade", diff_parcial) is False
+
+
+# -- A2 da auditoria: hemisfério errado no sidecar XMP (D-089) --------------
+# `campo_gravado` só confere presença — a tag pode estar lá com o
+# hemisfério errado e ele aprova do mesmo jeito. `gps_valor_correto` é a
+# rede de segurança por VALOR, testada aqui sem exiftool (puro Python,
+# diff montado à mão) porque o que importa é o predicado, não o
+# subprocesso — o round-trip real contra o binário está nos testes
+# `@tem_exiftool` mais abaixo.
+
+
+def test_gps_valor_correto_sidecar_aceita_valor_assinado_certo():
+    diff = diferenca({}, {
+        "XMP-exif:GPSLatitude": "-22.95", "XMP-exif:GPSLongitude": "-43.18",
+    })
+    assert gps_valor_correto((-22.95, -43.18), diff, sidecar=True) is True
+
+
+def test_gps_valor_correto_sidecar_recusa_hemisferio_trocado():
+    """Repro exato do bug A2: antes da correção do writer, o sidecar
+    gravava o valor ABSOLUTO (sem sinal) porque a Ref não é gravável em
+    XMP — (-22.95, -43.18) virava "22.95"/"43.18", hemisfério norte/leste
+    em vez de sul/oeste. `campo_gravado` aprovava (a tag estava lá);
+    `gps_valor_correto` tem que recusar."""
+    diff_do_bug = diferenca({}, {
+        "XMP-exif:GPSLatitude": "22.95", "XMP-exif:GPSLongitude": "43.18",
+    })
+    assert campo_gravado("gps", diff_do_bug, sidecar=True) is True  # aprovava
+    assert gps_valor_correto((-22.95, -43.18), diff_do_bug, sidecar=True) is False
+
+
+def test_gps_valor_correto_sidecar_recusa_tag_ausente():
+    diff = diferenca({}, {"XMP-exif:GPSLatitude": "-22.95"})  # só metade
+    assert gps_valor_correto((-22.95, -43.18), diff, sidecar=True) is False
+
+
+def test_gps_valor_correto_direto_reconstroi_sinal_do_ref():
+    diff = diferenca({}, {
+        "GPS:GPSLatitude": "22.95", "GPS:GPSLatitudeRef": "S",
+        "GPS:GPSLongitude": "43.18", "GPS:GPSLongitudeRef": "W",
+    })
+    assert gps_valor_correto((-22.95, -43.18), diff, sidecar=False) is True
+
+
+def test_gps_valor_correto_direto_recusa_ref_trocada():
+    """Se algum dia a escrita direta regredir e a Ref vier errada (N/E
+    para um valor que deveria ser S/W), o predicado tem que pegar —
+    mesma classe de bug do sidecar, testada no caminho que hoje está
+    certo, para não confiar cegamente que "sempre vai continuar certo"."""
+    diff = diferenca({}, {
+        "GPS:GPSLatitude": "22.95", "GPS:GPSLatitudeRef": "N",
+        "GPS:GPSLongitude": "43.18", "GPS:GPSLongitudeRef": "E",
+    })
+    assert gps_valor_correto((-22.95, -43.18), diff, sidecar=False) is False
+
+
+def test_gps_valor_correto_norte_leste_tambem_funciona():
+    """Não é só o hemisfério sul/oeste que tem que bater — cobre o caso
+    positivo dos dois lados para não ficar assimétrico."""
+    diff_sidecar = diferenca({}, {
+        "XMP-exif:GPSLatitude": "48.8566", "XMP-exif:GPSLongitude": "2.3522",
+    })
+    assert gps_valor_correto((48.8566, 2.3522), diff_sidecar, sidecar=True) is True
+
+    diff_direto = diferenca({}, {
+        "GPS:GPSLatitude": "48.8566", "GPS:GPSLatitudeRef": "N",
+        "GPS:GPSLongitude": "2.3522", "GPS:GPSLongitudeRef": "E",
+    })
+    assert gps_valor_correto((48.8566, 2.3522), diff_direto, sidecar=False) is True
 
 
 # -- Correção de meio-de-fase pós-06-09 (D-078): IPTC:EnvelopeRecordVersion
@@ -311,8 +381,92 @@ def test_escrever_com_destino_xmp_cria_sidecar_autonomo_sem_iptc(tmp_path):
     assert "XMP-photoshop:City" in dump_sidecar
     assert "XMP-photoshop:Country" in dump_sidecar
     assert "XMP-exif:GPSLatitude" in dump_sidecar
+    # A2 da auditoria: presença da tag não bastava — o valor de antes da
+    # correção vinha sem sinal (hemisfério norte/leste, errado para um
+    # ponto no sul/oeste). Sem esta asserção, este teste já existia e
+    # passava com o bug ativo.
+    assert dump_sidecar["XMP-exif:GPSLatitude"] == "-23.55052"
+    assert dump_sidecar["XMP-exif:GPSLongitude"] == "-46.633308"
     assert not any(chave.startswith("IPTC:") for chave in dump_sidecar)
     assert sha256_full(foto) == hash_antes
+
+
+@tem_exiftool
+def test_escrever_sidecar_hemisferio_norte_leste_tambem_grava_certo(tmp_path):
+    """Espelho do teste acima com sinal positivo (Paris: norte/leste) —
+    a correção de A2 não pode ter só resolvido o caso sul/oeste que
+    apareceu no achado original."""
+    foto = make_jpeg(tmp_path / "para_sidecar_ne.jpg", gps=None)
+    sidecar = Path(str(foto) + ".xmp")
+
+    from fotoorganizer.exif_write.verificacao import dump
+
+    writer = ExifToolWriter()
+    resultado = writer.escrever(
+        foto, {"gps": (48.8566, 2.3522)}, destino=sidecar,
+    )
+    assert resultado.returncode == 0, resultado.stderr
+
+    dump_sidecar = dump(sidecar)
+    assert dump_sidecar["XMP-exif:GPSLatitude"] == "48.8566"
+    assert dump_sidecar["XMP-exif:GPSLongitude"] == "2.3522"
+
+
+@tem_exiftool
+def test_escrever_direto_no_arquivo_mantem_par_valor_e_ref(tmp_path):
+    """O caminho direto (não sidecar) continua gravando abs()+Ref — o
+    par junto tem que reconstruir o sinal certo. Prova que a correção do
+    sidecar não regrediu o caso comum (arquivo limpo, sem GPS nenhum)."""
+    foto = make_jpeg(tmp_path / "direto.jpg", gps=None)
+
+    from fotoorganizer.exif_write.verificacao import dump
+
+    writer = ExifToolWriter()
+    resultado = writer.escrever(foto, {"gps": (-23.55052, -46.633308)})
+    assert resultado.returncode == 0, resultado.stderr
+
+    dump_direto = dump(foto)
+    assert dump_direto["GPS:GPSLatitude"] == "23.55052"
+    assert dump_direto["GPS:GPSLatitudeRef"] == "S"
+    assert dump_direto["GPS:GPSLongitude"] == "46.633308"
+    assert dump_direto["GPS:GPSLongitudeRef"] == "W"
+
+
+@tem_exiftool
+def test_escrever_direto_com_grupo_explicito_nao_atropela_gps_ja_existente_em_xmp(tmp_path):
+    """Achado da revisão com olhos frescos, mesmo A2: SEM prefixo de
+    grupo, `-GPSLatitude=` é ambíguo — num arquivo que já tem
+    `XMP-exif:GPSLatitude` (comum vindo de Lightroom/Aftershoot), o
+    exiftool resolve para ESSE grupo em vez de criar o bloco EXIF
+    binário, grava `abs()` sem Ref gravável ali e sobrescreve a
+    coordenada real com hemisfério errado — sem backup (não é a primeira
+    escrita do bloco). Este teste não deveria nem chegar a escrever de
+    verdade (`_campo_ja_preenchido` do executor bloqueia antes) — aqui é
+    o writer isolado, defesa em profundidade: o prefixo `-GPS:` explícito
+    tem que criar um bloco NOVO sem tocar no XMP pré-existente."""
+    import subprocess
+
+    foto = make_jpeg(tmp_path / "gps_so_em_xmp.jpg", gps=None)
+    subprocess.run(
+        ["exiftool", "-XMP-exif:GPSLatitude=-33.8688",
+         "-XMP-exif:GPSLongitude=151.2093", str(foto)],
+        capture_output=True, text=True, check=True,
+    )
+
+    from fotoorganizer.exif_write.verificacao import dump
+
+    writer = ExifToolWriter()
+    resultado = writer.escrever(foto, {"gps": (-22.95, -43.18)})
+    assert resultado.returncode == 0, resultado.stderr
+
+    depois = dump(foto)
+    assert depois["GPS:GPSLatitude"] == "22.95"
+    assert depois["GPS:GPSLatitudeRef"] == "S"
+    # O XMP pré-existente não foi tocado — continua a coordenada real
+    # original, não sobrescrita com o valor novo nem com hemisfério
+    # trocado.
+    assert depois["XMP-exif:GPSLatitude"] == "-33.8688"
+    assert depois["XMP-exif:GPSLongitude"] == "151.2093"
 
 
 @tem_exiftool

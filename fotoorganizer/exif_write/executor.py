@@ -55,7 +55,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -111,6 +111,24 @@ def _campo_ja_preenchido(
     presente e não-vazia em `dump_alvo` — a checagem AO VIVO que decide
     `PULADO` (EXIF-02), tanto no dry-run quanto na reconferência TOCTOU da
     execução."""
+    if campo == "gps" and not sidecar:
+        # GPS pode morar só no pacote XMP embutido no arquivo — sem
+        # nenhuma tag do grupo binário GPS: (comum em foto que passou por
+        # Lightroom/Aftershoot). Achado real, A2 da auditoria (D-089): o
+        # catálogo tem o MESMO ponto cego (`meta.gps_lat` em
+        # `metadata/exiftool.py` só lê `Composite:GPSLatitude`) — e
+        # continua tendo, de propósito: um fallback para a tag XMP crua
+        # foi cogitado e REVERTIDO, porque ele também lia de volta a
+        # própria estimativa que o app grava em sidecar como se fosse
+        # GPS medido (ver o comentário de `meta.gps_lat`). Esta checagem
+        # AQUI, no arquivo ao vivo, é a ÚNICA proteção que sobra nesse
+        # caminho — não depende do catálogo e não pode ser relaxada
+        # assumindo que a camada de cima já resolveu.
+        lat_xmp = dump_alvo.get("XMP-exif:GPSLatitude")
+        lon_xmp = dump_alvo.get("XMP-exif:GPSLongitude")
+        if lat_xmp and lon_xmp:
+            return True, f"{lat_xmp}, {lon_xmp}"
+
     tags = verificacao.TAGS_POR_CAMPO_SIDECAR if sidecar else verificacao.TAGS_POR_CAMPO
     presentes = {tag: dump_alvo[tag] for tag in tags.get(campo, ()) if dump_alvo.get(tag)}
     if not presentes:
@@ -440,17 +458,37 @@ class ExifWriteExecutor:
 
             # Veredito por campo (T-06-23): campo_gravado exige TODAS as
             # tags do campo em diff.esperadas — meio campo gravado é falha.
+            # GPS soma uma segunda checagem, por VALOR, não só presença
+            # (A2 da auditoria): a tag pode estar lá com o hemisfério
+            # errado, e campo_gravado sozinho não pega isso.
             for campo in campos:
-                if verificacao.campo_gravado(campo, diff, sidecar=sidecar):
+                gravado = verificacao.campo_gravado(campo, diff, sidecar=sidecar)
+                # Mensagem distinta de propósito (achado da revisão com
+                # olhos frescos): quando `campo_gravado` reprova, o
+                # exiftool de fato não gravou a tag — "rejeitado pelo
+                # exiftool" é fiel. Quando é `gps_valor_correto` que
+                # reprova, a tag ESTÁ lá, com um valor que o exiftool
+                # aceitou — foi o app que recusou o resultado, não o
+                # exiftool; dizer "rejeitado pelo exiftool" nesse caso
+                # sugeriria (errado) que nada foi escrito.
+                motivo_falha = (
+                    f"{_ROTULOS_CAMPO[campo]}: valor rejeitado pelo exiftool "
+                    "(ver auditoria)"
+                )
+                if gravado and campo == "gps" and not verificacao.gps_valor_correto(
+                    cast(tuple, campos["gps"]), diff, sidecar=sidecar
+                ):
+                    gravado = False
+                    motivo_falha = (
+                        "GPS: coordenada gravada não confere com a pedida "
+                        "(ver auditoria)"
+                    )
+                if gravado:
                     setattr(item, f"status_{campo}", CampoStatus.GRAVADO)
                     setattr(item, f"motivo_{campo}", None)
                 else:
                     setattr(item, f"status_{campo}", CampoStatus.FALHA)
-                    setattr(
-                        item, f"motivo_{campo}",
-                        f"{_ROTULOS_CAMPO[campo]}: valor rejeitado pelo exiftool "
-                        "(ver auditoria)",
-                    )
+                    setattr(item, f"motivo_{campo}", motivo_falha)
 
             item.hash_pos = sha256_full(origem)
 

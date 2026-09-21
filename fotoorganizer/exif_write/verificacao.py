@@ -482,9 +482,73 @@ def campo_gravado(campo: str, diff: DiffTags, sidecar: bool = False) -> bool:
     O "todas" é o detector de falha parcial de EXIF-03: cidade que entrou
     no IPTC mas não no XMP é falha, não sucesso — metade dos consumidores
     de metadado continuaria sem enxergar o dado.
+
+    Só PRESENÇA — não confere se o valor gravado bate com o pedido. Para
+    `gps`, isso não basta (achado real, A2 da auditoria): a tag pode estar
+    presente com o hemisfério errado e este predicado aprova do mesmo
+    jeito. Quem chama por `gps` precisa combinar com `gps_valor_correto`.
     """
     mapa = TAGS_POR_CAMPO_SIDECAR if sidecar else TAGS_POR_CAMPO
     tags = mapa.get(campo, ())
     if not tags:
         return False
     return all(tag in diff.esperadas for tag in tags)
+
+
+# Tolerância de comparação de ponto flutuante — não de precisão de GPS. O
+# valor passa pelo formato texto do exiftool e volta (`str(lat)` na
+# escrita, parse de volta na leitura); a única perda possível nesse
+# caminho é arredondamento de representação, não erro de medição.
+_TOLERANCIA_GPS = 1e-6
+
+
+def gps_valor_correto(
+    lat_lon_esperado: tuple[float, float], diff: DiffTags, sidecar: bool = False,
+) -> bool:
+    """O par (lat, lon) GRAVADO bate com o par PEDIDO — não só que as tags
+    de GPS apareceram (`campo_gravado`).
+
+    Existe por causa do achado real de A2: no sidecar, a Ref de
+    hemisfério não é gravável (exiftool aceita em silêncio, sem efeito) —
+    a tag `XMP-exif:GPSLatitude` ficava presente, com o valor errado
+    (hemisfério sempre norte/leste), e `campo_gravado` aprovava. Depois
+    da correção do writer (valor assinado, sem Ref, no sidecar) este
+    predicado deveria sempre bater — ele é a rede de segurança contra a
+    MESMA classe de bug voltar (mudança de versão do exiftool, reescrita
+    futura do writer), não um substituto da correção na origem.
+    """
+    if sidecar:
+        lat_str = diff.esperadas.get("XMP-exif:GPSLatitude")
+        lon_str = diff.esperadas.get("XMP-exif:GPSLongitude")
+        if lat_str is None or lon_str is None:
+            return False
+        try:
+            lat_gravado, lon_gravado = float(lat_str), float(lon_str)
+        except ValueError:
+            return False
+    else:
+        lat_str = diff.esperadas.get("GPS:GPSLatitude")
+        lat_ref = diff.esperadas.get("GPS:GPSLatitudeRef")
+        lon_str = diff.esperadas.get("GPS:GPSLongitude")
+        lon_ref = diff.esperadas.get("GPS:GPSLongitudeRef")
+        if lat_str is None or lat_ref is None or lon_str is None or lon_ref is None:
+            return False
+        # Falha FECHADA na própria Ref (achado da revisão com olhos
+        # frescos): "S"/"N" e "W"/"E" são os únicos valores que o
+        # exiftool 13.55 devolve com `-n` — testado. Uma Ref fora dessas
+        # quatro strings (versão futura do exiftool, formato mudou) não
+        # pode virar "positivo por padrão" só porque não bateu com "S"
+        # ou "W" — é exatamente o eixo (hemisfério) que esta função
+        # existe para proteger.
+        if lat_ref not in ("N", "S") or lon_ref not in ("E", "W"):
+            return False
+        try:
+            lat_gravado = float(lat_str) * (-1.0 if lat_ref == "S" else 1.0)
+            lon_gravado = float(lon_str) * (-1.0 if lon_ref == "W" else 1.0)
+        except ValueError:
+            return False
+    lat_esperado, lon_esperado = lat_lon_esperado
+    return (
+        abs(lat_gravado - lat_esperado) <= _TOLERANCIA_GPS
+        and abs(lon_gravado - lon_esperado) <= _TOLERANCIA_GPS
+    )

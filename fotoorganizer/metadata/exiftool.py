@@ -485,6 +485,28 @@ class ExifToolExtractor:
                                      "File:ImageHeight", "QuickTime:ImageHeight"))
         # Composite já aplica o hemisfério (N/S, E/W); a tag crua é sempre
         # positiva e usá-la direto põe o Rio no hemisfério errado.
+        #
+        # Cogitado e REVERTIDO (A2 da auditoria, D-089): cair para
+        # `XMP:GPSLatitude`/`GPSLongitude` quando `Composite:GPSLatitude`
+        # falta (GPS que mora só no pacote XMP embutido, comum vindo de
+        # Lightroom/Aftershoot) parecia fechar um ponto cego — mas
+        # `_fundir_sidecar` (acima) mistura, na mesma chave `XMP:*`, o
+        # pacote de um editor de terceiro E o sidecar que o PRÓPRIO app
+        # escreve a partir de uma coordenada ESTIMADA/HERDADA
+        # (`exif_write/writer.py`). Sem uma marca que distinga as duas
+        # origens, o fallback lia de volta a própria estimativa do app
+        # como se fosse GPS medido — derrotando por dentro exatamente a
+        # distinção que `gps_direto_do_arquivo` (D-087) existe para
+        # proteger, e inflando a herança em cadeia sem evidência real.
+        # Verificado contra o exiftool real: escrever um sidecar com
+        # `(-22.95,-43.18)` estimado e reler com o fallback devolvia
+        # `gps_lat=-22.95` como se medido. Ativar o fallback exige
+        # primeiro uma marca de proveniência no sidecar (ou cruzar com
+        # `exif_write_items.sidecar_destino`) — fora do escopo desta
+        # fatia; ficou maior do que corrigir a leitura de embutido de
+        # terceiro. `_campo_ja_preenchido` (`exif_write/executor.py`) e o
+        # prefixo de grupo explícito no writer já fecham o risco de
+        # sobrescrita nesse caminho, sem depender desta leitura.
         meta.gps_lat = _numero(valor("Composite:GPSLatitude"))
         meta.gps_lon = _numero(valor("Composite:GPSLongitude"))
         meta.palavras_chave = _palavras_chave(dados)

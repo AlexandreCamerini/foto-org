@@ -32,6 +32,27 @@ def test_coordenada_vem_do_composite_com_sinal():
     assert (meta.gps_lat, meta.gps_lon) == (-22.95, -43.18)
 
 
+def test_coordenada_ignora_xmp_bruto_quando_composite_falta():
+    """Decisão deliberada (A2 da auditoria, D-089), não descuido: GPS que
+    mora só no pacote XMP (`Composite:GPSLatitude` ausente, só
+    `Composite:GPSPosition`) fica de fora — `gps_lat`/`gps_lon` viram
+    `None`. Cogitado um fallback para `XMP:GPSLatitude`/`GPSLongitude` e
+    REVERTIDO: `_fundir_sidecar` mistura, na mesma chave, o pacote de um
+    editor de terceiro E o sidecar que o PRÓPRIO app escreve a partir de
+    uma coordenada ESTIMADA (`exif_write/writer.py`) — sem marca de
+    proveniência, o fallback lia de volta a própria estimativa do app
+    como se fosse GPS medido, derrotando por dentro a distinção que
+    `gps_direto_do_arquivo` (D-087) existe para proteger. Subestimar GPS
+    (este teste) é a direção seguro do erro; superestimar não é."""
+    meta = ExifToolExtractor._converter({
+        "XMP:GPSLatitude": -33.8688, "XMP:GPSLongitude": 151.2093,
+        "Composite:GPSLatitudeRef": "South",
+        "Composite:GPSLongitudeRef": "East",
+        "Composite:GPSPosition": "-33.8688 151.2093",
+    })
+    assert (meta.gps_lat, meta.gps_lon) == (None, None)
+
+
 def test_orientacao_por_extenso_vira_numero():
     """`-n` daria o número e estragaria o resto da base bruta, que existe
     para ser lida por gente."""
@@ -159,6 +180,27 @@ def test_le_um_jpeg_de_verdade(tmp_path):
     assert meta.erro is None
     assert meta.largura and meta.altura
     assert any(ns == "exif" for ns, _, _ in meta.extras) or meta.extras == []
+
+
+@tem_exiftool
+def test_le_gps_que_mora_so_no_pacote_xmp_do_jpeg_fica_de_fora(tmp_path):
+    """Ponta a ponta com o exiftool real, mesmo cenário do achado A2
+    (foto que passou por um editor que grava GPS só em XMP-exif) —
+    confirma que a decisão de NÃO cair para `XMP:*` (ver
+    `test_coordenada_ignora_xmp_bruto_quando_composite_falta`) vale
+    também no caminho real do extrator, não só na conversão pura."""
+    import subprocess
+
+    foto = make_jpeg(tmp_path / "so_xmp.jpg", gps=None)
+    subprocess.run(
+        ["exiftool", "-XMP-exif:GPSLatitude=-33.8688",
+         "-XMP-exif:GPSLongitude=151.2093", str(foto)],
+        capture_output=True, text=True, check=True,
+    )
+    with ExifToolExtractor() as extrator:
+        meta = extrator.extract(foto)
+    assert meta.gps_lat is None
+    assert meta.gps_lon is None
 
 
 @tem_exiftool

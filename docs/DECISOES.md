@@ -4091,3 +4091,127 @@ inteiro passa a ser contado numa passada só
 - Status: decidido, implementado e commitado. Revisão com olhos frescos
   rodada uma vez, achados aplicados (separador, robustez do teste);
   achados 1 e 2 acima ficam registrados para o dono priorizar.
+
+---
+
+## D-089 — Hemisfério errado na escrita de GPS em XMP (sidecar e direto) — A2 da auditoria
+
+- Fase: fora do roadmap — o dono pediu foco em "consertar o que já
+  entregamos" em vez de backlog novo; A2 era o achado mais grave ainda
+  aberto da auditoria completa de 2026-09-19 (`docs/reconstrucao/08-ERROS_CONHECIDOS.md`).
+- Classe: A — dado geograficamente errado gravável em arquivo real do
+  dono, com verificação que aprovava a escrita errada como sucesso.
+- Contexto: `ExifToolWriter.escrever()` sempre gravava GPS como
+  `-GPSLatitude={abs(lat)}` + `-GPSLatitudeRef={N/S}` (par equivalente de
+  longitude) — correto para EXIF binário real (a Ref é a ÚNICA forma de
+  o formato guardar hemisfério), mas quando o alvo é um sidecar `.xmp`
+  autônomo, `GPSLatitudeRef`/`GPSLongitudeRef` sem prefixo de grupo não
+  são graváveis nesse contexto — o exiftool aceita a escrita em silêncio,
+  sem efeito, e o valor (sempre positivo) fica gravado como se fosse
+  hemisfério norte/leste. `(-22.95, -43.18)` — Rio de Janeiro, sul/oeste
+  — virava `"22,57.0N"/"43,10.8E"` no sidecar: um ponto em outro lugar do
+  planeta. A verificação de sucesso (`campo_gravado`) só checava
+  PRESENÇA da tag, nunca o valor — a escrita errada passava como
+  sucesso.
+- Medição: zero arquivos reais do dono corrompidos. Cruzei
+  `exif_write_items` (nenhum item com `sidecar_destino` chegou a
+  `GRAVADO` para `gps`) com o `audit_log` (fonte independente: 115
+  linhas `escrita_exif_verificada|ok`, todas com `tags_gravadas`
+  idênticas — só cidade/país, nunca GPS, e todos os alvos `.jpg/.JPG`
+  diretos, nenhum sidecar criado). O caminho que tinha o bug nunca foi
+  de fato executado contra um arquivo do dono; os 2.060 itens `PRONTO`
+  com sidecar pendente são exatamente a população que o teria acionado
+  na próxima execução.
+- Decisão — três correções, uma medição negativa, uma decisão de
+  reverter:
+  1. `exif_write/writer.py`: sidecar passa a gravar `-GPSLatitude={lat}`/
+     `-GPSLongitude={lon}` (valor ASSINADO, sem Ref) — a XMP aceita o
+     hemisfério embutido na própria string ("22,57.0S"). Verificado
+     contra o exiftool real (13.55) nos quatro hemisférios e no caso
+     Δ=0 (equador/Greenwich).
+  2. `exif_write/verificacao.py`: nova `gps_valor_correto(lat_lon, diff,
+     sidecar)` — confere o par GRAVADO contra o PEDIDO (reconstruindo
+     sinal do Ref no caminho direto), não só presença. Falha FECHADA
+     numa Ref fora de `{N,S}`/`{E,W}` — não assume positivo por padrão
+     na própria dimensão que existe para proteger. `exif_write/executor.py`
+     chama essa checagem a mais para `gps`, com mensagem de motivo
+     distinta de "rejeitado pelo exiftool" (que seria factualmente
+     errada — o exiftool aceitou, o app que recusou o resultado).
+  3. **Achado da revisão com olhos frescos, mais sério que o original**:
+     o mesmo bug existia no caminho DIRETO, de um jeito pior — quando o
+     arquivo já tem GPS gravado só em `XMP-exif:` (comum em foto que
+     passou por Lightroom/Aftershoot, sem nenhuma tag do grupo binário
+     `GPS:`), `-GPSLatitude=` sem prefixo de grupo é ambíguo: o exiftool
+     resolvia para o grupo XMP já existente (em vez de criar um bloco
+     EXIF binário novo) e SOBRESCREVIA a coordenada real com hemisfério
+     errado — sem backup (não é a primeira escrita do bloco) e aprovado
+     por todas as verificações, incluinda a nova do item 2. Corrigido em
+     duas camadas: `_campo_ja_preenchido` (`executor.py`) passa a
+     reconhecer `XMP-exif:GPSLatitude`/`GPSLongitude` como "campo já
+     preenchido" também no caminho direto (bloqueia a escrita na
+     origem — é a checagem AO VIVO que decide `PULADO`, e depois desta
+     correção é a ÚNICA proteção que resta nesse caminho, ver item 4);
+     `writer.py` passa a gravar o caminho direto com prefixo de grupo
+     explícito (`-GPS:GPSLatitude=`, mesma convenção de `verificacao.py`)
+     — defesa em profundidade, verificado contra o exiftool real que
+     isso cria um bloco EXIF binário novo sem tocar no XMP pré-existente.
+  4. **Cogitado e REVERTIDO**: fechar o ponto cego do CATÁLOGO (o
+     leitor, `metadata/exiftool.py`, só lê `Composite:GPSLatitude`, que
+     o exiftool não sintetiza quando o GPS mora só em XMP — a foto
+     entra como "sem GPS", vira alvo de herança e não passa pela guarda
+     de `gps_direto_do_arquivo`, D-087) com um fallback para
+     `XMP:GPSLatitude`/`GPSLongitude` bruto. Verificado contra o
+     exiftool real que o fallback FUNCIONAVA para XMP embutido de
+     terceiro — mas `_fundir_sidecar` mistura, na MESMA chave, o pacote
+     de um editor de terceiro E o sidecar que o PRÓPRIO app escreve a
+     partir de uma coordenada ESTIMADA/HERDADA (`exif_write/writer.py`).
+     Sem marca de proveniência no sidecar, o fallback lia de volta a
+     PRÓPRIA estimativa do app como se fosse GPS medido — derrotando por
+     dentro exatamente a distinção que `gps_direto_do_arquivo` (D-087)
+     existe para proteger, e inflando a herança em cadeia sem nenhuma
+     evidência real por trás. Revertido: o leitor continua só com
+     `Composite:GPSLatitude`/`GPSLongitude` — subestimar GPS (foto com
+     GPS só em XMP embutido de terceiro entra como "sem GPS") é a
+     direção segura do erro; superestimar (estimativa lida como
+     medição) não é. Corrigir isso direito pede distinguir "sidecar de
+     terceiro" de "sidecar que o app gerou" — marca no pacote na escrita,
+     ou cruzar com `exif_write_items.sidecar_destino` — fora do escopo
+     desta fatia, registrado para o futuro.
+- Por quê os itens 1-3 e não o item 4: os três primeiros fecham risco de
+  ESCRITA ERRADA em arquivo real (a categoria de dano que A2 nomeou); o
+  item 4 era uma melhoria de CATALOGAÇÃO (a foto aparecer com lugar no
+  mapa), que por sua vez abriu um risco novo pior que o que resolvia. A
+  régua do dono para esta fase ("consertar o que já entregamos") favorece
+  fechar o buraco medido, não abrir um novo maior atrás dele.
+- Quatro rodadas de revisão com olhos frescos (mesmo agente, resumido
+  via SendMessage): a 1ª confirmou o writer/verificação/executor
+  corretos; a 2ª achou o crítico do caminho direto (writer.py) e dois
+  altos (`_campo_ja_preenchido`, o leitor) que a 1ª rodada não tinha
+  pedido para olhar; a 3ª confirmou o crítico fechado nos dois níveis e
+  achou o problema novo do item 4 (fallback do leitor lavando
+  estimativa); a 4ª confirmou a reversão limpa e achou um comentário
+  desatualizado (corrigido nesta versão) mais esta entrada faltando (o
+  próprio D-089, agora escrito).
+- Achados menores, registrados sem correção: `hash_pre`/`hash_pos`
+  gravados em `ExifWriteItem` mas nunca comparados neste módulo
+  (diferente de `operations/executor.py`, que compara) — fora do tema
+  GPS especificamente; `scripts/testar_escrita_exif.py` (gate de
+  aprovação de formato) continua usando só `campo_gravado`, sem
+  `gps_valor_correto` nem `sidecar=` — script standalone, não caminho de
+  produção; um sidecar `.xmp` cuja escrita reprove por
+  `gps_valor_correto` fica no disco (arquivo novo, sem `_original` para
+  restaurar) e planos futuros recusam mexer nele — praticamente
+  inalcançável depois do item 3 (a escrita nem é mais tentada quando já
+  tinha XMP), mas não impossível por desenho; `_campo_ja_preenchido`
+  exige os DOIS (`lat` e `lon`) presentes no fallback XMP do caminho
+  direto — um XMP corrompido/parcial (só latitude) não bloqueia a
+  escrita, hoje inofensivo porque o writer já usa `-GPS:` explícito
+  (resulta num bloco EXIF novo ao lado de uma tag órfã, não sobrescrita).
+- Como reverter: os itens 1-3 são independentes e reversíveis
+  separadamente — `git revert` neste commit desfaz os três juntos; nada
+  persistido depende disso (GPS herdado nunca é gravado como se fosse
+  próprio, e a escrita em arquivo original segue o mesmo rigor de
+  dry-run/hash/audit log de sempre, invariante 7 do CLAUDE.md).
+- Status: decidido, implementado e commitado. Zero arquivos reais
+  afetados — a correção fechou uma janela antes dela ser usada contra o
+  acervo do dono.

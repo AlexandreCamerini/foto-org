@@ -29,7 +29,11 @@ from sqlalchemy import select
 
 from fotoorganizer.database import create_session_factory
 from fotoorganizer.exif_write import verificacao
-from fotoorganizer.exif_write.executor import DryRunObrigatorioExif, ExifWriteExecutor
+from fotoorganizer.exif_write.executor import (
+    DryRunObrigatorioExif,
+    ExifWriteExecutor,
+    _campo_ja_preenchido,
+)
 from fotoorganizer.exif_write.planner import ExifWritePlanner
 from fotoorganizer.exif_write.writer import ExifToolWriter
 from fotoorganizer.metadata.exiftool import ExifToolExtractor
@@ -161,6 +165,37 @@ def test_dry_run_nao_escreve(ambiente):
 
 
 # -- EXIF-02: só campo vazio ao vivo -----------------------------------------
+# `_campo_ja_preenchido` puro (sem exiftool, dump montado à mão) — A2 da
+# auditoria: GPS que mora só em XMP-exif (sem nenhuma tag GPS: binária)
+# passava como "campo vazio" no caminho direto, porque a checagem olhava
+# só o grupo binário. Sidecar já olhava o grupo certo (XMP-exif) desde
+# sempre — só o caminho direto tinha o ponto cego.
+
+
+def test_campo_ja_preenchido_direto_reconhece_gps_que_mora_so_em_xmp():
+    dump = {"XMP-exif:GPSLatitude": "-33.8688", "XMP-exif:GPSLongitude": "151.2093"}
+    preenchido, valor = _campo_ja_preenchido("gps", dump, sidecar=False)
+    assert preenchido is True
+    assert valor == "-33.8688, 151.2093"
+
+
+def test_campo_ja_preenchido_direto_sem_gps_nenhum_fica_vazio():
+    preenchido, valor = _campo_ja_preenchido("gps", {}, sidecar=False)
+    assert preenchido is False
+    assert valor is None
+
+
+def test_campo_ja_preenchido_direto_ainda_reconhece_gps_binario():
+    """Comportamento de sempre, inalterado: GPS no grupo EXIF binário
+    (o caso comum) continua reconhecido do mesmo jeito."""
+    dump = {
+        "GPS:GPSLatitude": "22.95", "GPS:GPSLatitudeRef": "S",
+        "GPS:GPSLongitude": "43.18", "GPS:GPSLongitudeRef": "W",
+    }
+    preenchido, valor = _campo_ja_preenchido("gps", dump, sidecar=False)
+    assert preenchido is True
+    assert valor == "-22.95, -43.18"
+
 
 @tem_exiftool
 def test_dry_run_promove_campo_vazio_e_pula_preenchido(ambiente):
@@ -183,6 +218,40 @@ def test_dry_run_promove_campo_vazio_e_pula_preenchido(ambiente):
         ))
         assert item_preenchida.status_gps == CampoStatus.PULADO
         assert "não sobrescrito" in item_preenchida.motivo_gps
+
+
+@tem_exiftool
+def test_dry_run_pula_gps_que_mora_so_em_xmp_no_caminho_direto(ambiente):
+    """Ponta a ponta com exiftool real, A2 da auditoria: uma foto cujo
+    GPS foi gravado só em XMP-exif (por um editor externo, antes de
+    chegar no fotoorganizer) não pode ser tratada como "campo vazio" —
+    sem esta guarda, a escrita seguinte sobrescreveria com hemisfério
+    errado (Ref não gravável nesse grupo) e sem backup (não é a primeira
+    escrita do bloco)."""
+    import subprocess
+
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = make_jpeg(origem_dir / "gps_so_em_xmp.jpg", gps=None)
+    subprocess.run(
+        ["exiftool", "-XMP-exif:GPSLatitude=-33.8688",
+         "-XMP-exif:GPSLongitude=151.2093", str(alvo)],
+        capture_output=True, text=True, check=True,
+    )
+
+    with factory() as session:
+        fonte_id = session.scalar(select(Source.id))
+        loc = session.scalar(select(Location))
+        media = _media_avulsa(session, fonte_id, alvo, loc.id)
+        item = _item_manual(session, plan_id, media)
+        session.commit()
+        item_id = item.id
+
+    executor.dry_run(plan_id)
+
+    with factory() as session:
+        item = session.get(ExifWriteItem, item_id)
+        assert item.status_gps == CampoStatus.PULADO
+        assert "não sobrescrito" in (item.motivo_gps or "")
 
 
 # -- EXIF-03: diff completo de tags como veredito ----------------------------
@@ -416,6 +485,11 @@ def test_formato_nao_suportado_grava_sidecar(ambiente):
     assert "XMP-photoshop:City" in dump_sidecar
     assert "XMP-photoshop:Country" in dump_sidecar
     assert "XMP-exif:GPSLatitude" in dump_sidecar
+    # A2 da auditoria: este teste já existia com estas mesmas coordenadas
+    # (sul/oeste) e passava com o bug ativo — só checava presença. O
+    # valor tem que bater com o sinal certo, não só a tag existir.
+    assert dump_sidecar["XMP-exif:GPSLatitude"] == "-22.95"
+    assert dump_sidecar["XMP-exif:GPSLongitude"] == "-43.18"
     assert sha256_full(alvo) == hash_antes
 
     with factory() as session:
@@ -423,6 +497,81 @@ def test_formato_nao_suportado_grava_sidecar(ambiente):
         assert item.status_gps == CampoStatus.GRAVADO
         assert item.status_cidade == CampoStatus.GRAVADO
         assert item.status_pais == CampoStatus.GRAVADO
+
+
+@tem_exiftool
+def test_gps_com_valor_errado_reprova_mesmo_com_tag_presente(ambiente, monkeypatch):
+    """Rede de segurança de A2, de ponta a ponta: se o writer (por bug
+    futuro, mudança de exiftool, etc.) voltar a gravar hemisfério errado,
+    o executor tem que reprovar o campo `gps` — não bastar a tag existir.
+    Simulado forçando o writer real a gravar o valor absoluto sem sinal
+    (o comportamento de ANTES da correção), para provar que é a
+    verificação nova que pega, não um acidente do writer atual."""
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = make_jpeg(origem_dir / "sidecar_com_bug.jpg", gps=None)
+    hash_antes = sha256_full(alvo)
+    sidecar_destino = str(alvo) + ".xmp"
+
+    with factory() as session:
+        fonte_id = session.scalar(select(Source.id))
+        loc = session.scalar(select(Location))
+        media = _media_avulsa(session, fonte_id, alvo, loc.id)
+        item = _item_manual(
+            session, plan_id, media, formato_suportado=False,
+            sidecar_destino=sidecar_destino, valor_gps=(-22.95, -43.18),
+        )
+        session.commit()
+        item_id = item.id
+
+    original_escrever = ExifToolWriter.escrever
+
+    def escrever_com_hemisferio_errado(self, origem, campos, destino=None):
+        # Só substitui o comportamento para ESTE sidecar especificamente
+        # — não só "quando há gps em campos" (achado da revisão com
+        # olhos frescos: `limpa.jpg`, da fixture `ambiente`, também tem
+        # "gps" em campos por herança e é escrita DIRETA; a fake omitia
+        # `-IPTC:City`/`-IPTC:Country-PrimaryLocationName`, que o writer
+        # real grava no caminho direto — quebrava cidade/país desse OUTRO
+        # item por engano, mascarado por um `>= 1` frouxo na asserção).
+        alvo_real = destino or origem
+        if "gps" not in campos or Path(alvo_real).suffix.lower() != ".xmp":
+            return original_escrever(self, origem, campos, destino)
+        # Reproduz literalmente o bug de A2: abs() + Ref, que a XMP
+        # aceita em silêncio sem gravar a Ref — mesma chamada que o
+        # writer real fazia antes da correção.
+        lat, lon = campos["gps"]
+        args = [
+            self._binario,
+            f"-GPSLatitude={abs(lat)}", f"-GPSLatitudeRef={'N' if lat >= 0 else 'S'}",
+            f"-GPSLongitude={abs(lon)}", f"-GPSLongitudeRef={'E' if lon >= 0 else 'W'}",
+            f"-XMP:City={campos['cidade']}", f"-XMP:Country={campos['pais']}",
+            "-charset", "filename=utf8", str(alvo_real),
+        ]
+        return subprocess.run(args, capture_output=True, text=True, check=False)
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", escrever_com_hemisferio_errado)
+
+    executor.dry_run(plan_id)
+    stats = executor.executar(plan_id)
+    # gps sozinho reprova, sem tag fora de escopo nem aviso novo — é
+    # falha PARCIAL (EXIF-03), não corrupção; o backup fica de pé. Só
+    # o item do sidecar falso é afetado — os outros dois candidatos da
+    # fixture `ambiente` usam o writer real, intacto.
+    assert stats["falhas_parciais"] == 1
+
+    with factory() as session:
+        item = session.get(ExifWriteItem, item_id)
+        assert item.status_gps == CampoStatus.FALHA
+        # Mensagem distinta de "rejeitado pelo exiftool" (achado da
+        # revisão): aqui o exiftool ACEITOU a tag, foi a checagem por
+        # valor do app que recusou — a foto está errada.
+        assert "não confere com a pedida" in (item.motivo_gps or "")
+        assert item.status_cidade == CampoStatus.GRAVADO
+        assert item.status_pais == CampoStatus.GRAVADO
+    # Sidecar novo (o arquivo não existia antes) não tem "_original" pra
+    # preservar — a garantia que importa aqui é a de sempre: a FOTO em
+    # si nunca é tocada por uma escrita de sidecar, com ou sem falha.
+    assert sha256_full(alvo) == hash_antes
 
 
 @tem_exiftool

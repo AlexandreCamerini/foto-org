@@ -102,12 +102,55 @@ class ExifToolWriter:
         args = [self._binario]
         if "gps" in campos:
             lat, lon = campos["gps"]
-            args += [
-                f"-GPSLatitude={abs(lat)}",
-                f"-GPSLatitudeRef={'N' if lat >= 0 else 'S'}",
-                f"-GPSLongitude={abs(lon)}",
-                f"-GPSLongitudeRef={'E' if lon >= 0 else 'W'}",
-            ]
+            if sidecar:
+                # XMP não tem os dois tags EXIF separados (valor +
+                # Ref) — `GPSLatitudeRef`/`GPSLongitudeRef` sem prefixo
+                # de grupo resolvem para o grupo EXIF binário, que não
+                # existe num `.xmp` autônomo, e a escrita é aceita em
+                # silêncio sem efeito (achado real, A2 da auditoria:
+                # exiftool 13.55, `-listx` confirma `writable='false'`
+                # nesse contexto). O valor de `GPSLatitude`/`GPSLongitude`
+                # gravava com `abs()`, então toda coordenada do
+                # hemisfério sul/oeste virava norte/leste — a mesma
+                # tag presente, o valor errado, e a verificação por
+                # presença (antiga) aprovava. XMP-exif:GPSLatitude
+                # aceita o valor ASSINADO diretamente (embute o
+                # hemisfério na própria string, "22,57.0S") — testado
+                # contra o exiftool real antes desta correção.
+                args += [
+                    f"-GPSLatitude={lat}",
+                    f"-GPSLongitude={lon}",
+                ]
+            else:
+                # Escrita direta: o EXIF binário real não tem sinal no
+                # próprio GPSLatitude (é um racional sem sinal) — o
+                # hemisfério SÓ existe no Ref, tag irmã separada. Sem
+                # ela o sinal se perde de vez (testado contra o
+                # exiftool real: valor assinado sozinho grava como se
+                # fosse sempre positivo, sem Ref nenhuma).
+                #
+                # Grupo `-GPS:` explícito (achado da revisão com olhos
+                # frescos, mesmo A2): sem prefixo, `-GPSLatitude=` é
+                # ambíguo — se o arquivo já tem `XMP-exif:GPSLatitude`
+                # (comum em foto que passou por Lightroom/Aftershoot),
+                # o exiftool resolve para ESSE grupo em vez de criar o
+                # bloco EXIF binário, grava o `abs()` sem Ref gravável
+                # ali (mesma causa raiz de A2) e SOBRESCREVE a
+                # coordenada real com hemisfério errado — sem backup
+                # (não é a primeira escrita do bloco) e aprovado por
+                # todas as verificações. `_campo_ja_preenchido`
+                # (executor.py) já bloqueia isso na origem detectando
+                # `XMP-exif:GPSLatitude` como "campo preenchido"; este
+                # prefixo é defesa em profundidade — verificado contra
+                # o exiftool real: com `-GPS:` explícito, um arquivo com
+                # GPS só em XMP ganha um bloco EXIF binário NOVO, sem
+                # tocar no XMP existente.
+                args += [
+                    f"-GPS:GPSLatitude={abs(lat)}",
+                    f"-GPS:GPSLatitudeRef={'N' if lat >= 0 else 'S'}",
+                    f"-GPS:GPSLongitude={abs(lon)}",
+                    f"-GPS:GPSLongitudeRef={'E' if lon >= 0 else 'W'}",
+                ]
         if "cidade" in campos:
             # Os dois grupos são sempre gravados explicitamente: `-City`
             # sem prefixo cai em IPTC, `-Country` sem prefixo cai em
