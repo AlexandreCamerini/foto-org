@@ -106,6 +106,12 @@ _CATEGORIAS_PASTA = {"viagens": "Viagens", "viagem": "Viagens",
                      "familia": "Família", "família": "Família",
                      "eventos": "Eventos", "evento": "Eventos"}
 _MIN_FOTOS_SESSAO = 2
+# Tamanho do lote de `gerar()`: quantas mídias têm sugestão antiga limpa
+# em bloco e são commitadas juntas. Mesmo número de sempre (o commit já
+# batia a cada 500); vira também o grão da limpeza em lote de
+# `_limpar_sugestoes_antigas` — uma queda no meio do lote perde só ele,
+# os lotes ainda não alcançados mantêm a sugestão antiga intacta.
+_TAMANHO_LOTE = 500
 # Campos que dão nome ao destino. Sem nenhum deles, sobra só a data.
 _CAMPOS_QUE_NOMEIAM = ("categoria", "viagem", "evento", "pais", "regiao",
                        "cidade")
@@ -350,24 +356,39 @@ class SuggestionEngine:
             )
 
             geradas = 0
-            a_gerar = sum(1 for m in organizaveis if m.id not in decididas)
-            for media in organizaveis:
-                if media.id in decididas:
-                    continue
-                drafts = self._evidencias_para(
-                    session, media, sessao_da_media.get(media.id),
-                    herancas, por_id, curadoria.get(media.id, ()),
-                    proposta_de_pasta=self._pastas_classificadas.get(media.pasta),
-                )
-                self._persistir_sugestao(session, media, drafts)
-                geradas += 1
-                if geradas % 500 == 0:
-                    session.commit()
-                    # Sem isto o laço fica mudo por vários minutos num
-                    # catálogo grande — nada nos logs entre "sessão X virou
-                    # Y acontecimentos" (rápido) e o fim da rodada inteira,
-                    # difícil de distinguir de uma trava real.
-                    log.info("gerar: %d/%d sugestões", geradas, a_gerar)
+            pendentes = [m for m in organizaveis if m.id not in decididas]
+            a_gerar = len(pendentes)
+            for inicio in range(0, len(pendentes), _TAMANHO_LOTE):
+                lote = pendentes[inicio:inicio + _TAMANHO_LOTE]
+                # Limpa a sugestão pendente antiga e as evidências de TODO
+                # o lote de uma vez (3 DELETEs) em vez de mídia por mídia
+                # (SELECT + 2 DELETE + flush × cada uma). O ganho real não
+                # é só nos DELETEs: cada SELECT por item também disparava
+                # autoflush de TODO o lote ainda pendente naquele commit —
+                # item 500 de um lote de 500 forçava flush dos 499
+                # anteriores só pra rodar uma consulta trivial. Medido num
+                # catálogo sintético de 8k (mesmo banco, antes/depois):
+                # regeneração caiu de ~15s para ~3,9s (~4x). Resumo
+                # continua no mesmo grão de hoje: um lote só é limpo e
+                # reescrito dentro do MESMO commit — uma queda no meio
+                # perde no máximo o lote em voo (≤500), os ainda não
+                # alcançados mantêm a sugestão antiga intacta, nunca ficam
+                # sem nenhuma.
+                self._limpar_sugestoes_antigas(session, [m.id for m in lote])
+                for media in lote:
+                    drafts = self._evidencias_para(
+                        session, media, sessao_da_media.get(media.id),
+                        herancas, por_id, curadoria.get(media.id, ()),
+                        proposta_de_pasta=self._pastas_classificadas.get(media.pasta),
+                    )
+                    self._persistir_sugestao(session, media, drafts)
+                    geradas += 1
+                session.commit()
+                # Sem isto o laço fica mudo por vários minutos num catálogo
+                # grande — nada nos logs entre "sessão X virou Y
+                # acontecimentos" (rápido) e o fim da rodada inteira,
+                # difícil de distinguir de uma trava real.
+                log.info("gerar: %d/%d sugestões", geradas, a_gerar)
 
             session.commit()
             return {
@@ -1371,22 +1392,37 @@ class SuggestionEngine:
                      removidas)
         return removidas
 
+    @staticmethod
+    def _limpar_sugestoes_antigas(session: Session, media_ids: list[int]) -> None:
+        """Apaga a sugestão PENDENTE antiga e as evidências de um LOTE de
+        mídias de uma vez — era feito mídia por mídia dentro de
+        `_persistir_sugestao` (SELECT + 2 DELETE + flush, ×55 mil numa
+        regeneração real). `media_ids` já vem do chamador limitado a
+        `_TAMANHO_LOTE` (500): bem abaixo do teto de variáveis do SQLite
+        (ver `_descartar_sugestoes_orfas`, que usa subquery por poder
+        chegar a dezenas de milhares de uma vez — aqui não precisa,
+        o lote já é pequeno por desenho).
+
+        Chamado uma vez por lote, ANTES do laço que gera e persiste as
+        sugestões novas DESSE MESMO lote, dentro do mesmo commit — uma
+        queda no meio só perde o lote em voo; os ainda não alcançados
+        mantêm a sugestão antiga intacta.
+        """
+        sugestoes_antigas = session.scalars(select(Suggestion.id).where(
+            Suggestion.media_id.in_(media_ids),
+            Suggestion.status == SuggestionStatus.PENDENTE,
+        )).all()
+        if sugestoes_antigas:
+            session.execute(delete(suggestion_evidence).where(
+                suggestion_evidence.c.suggestion_id.in_(sugestoes_antigas)
+            ))
+            session.execute(delete(Suggestion).where(
+                Suggestion.id.in_(sugestoes_antigas)
+            ))
+        session.execute(delete(Evidence).where(Evidence.media_id.in_(media_ids)))
+
     def _persistir_sugestao(self, session: Session, media: MediaFile,
                             drafts: list[_Draft]) -> None:
-        antigas = list(
-            session.scalars(select(Suggestion).where(
-                Suggestion.media_id == media.id,
-                Suggestion.status == SuggestionStatus.PENDENTE,
-            ))
-        )
-        for sugestao in antigas:
-            session.execute(delete(suggestion_evidence).where(
-                suggestion_evidence.c.suggestion_id == sugestao.id
-            ))
-            session.delete(sugestao)
-        session.execute(delete(Evidence).where(Evidence.media_id == media.id))
-        session.flush()
-
         evidencias: dict[str, Evidence] = {}
         for draft in drafts:
             evidencia = Evidence(

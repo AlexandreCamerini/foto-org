@@ -4353,3 +4353,59 @@ inteiro passa a ser contado numa passada só
   catálogo real volta ao estado original, nenhum resíduo de teste
   ficou gravado.
 - Status: decidido, implementado, verificado na UI real, commitado.
+
+## D-092 — Limpeza de sugestões antigas em lote, não item a item
+
+- Fase: continuação de "consertar o que já entregamos", autônoma,
+  autorizada pelo dono para rodar durante a noite — terceiro dos três
+  itens pedidos ("_persistir_sugestao é o gargalo de verdade", medido
+  pela revisão do cache do LocationResolver da mesma noite).
+- Achado: `_persistir_sugestao` limpava a sugestão PENDENTE antiga e as
+  evidências de CADA mídia individualmente (SELECT + 2 DELETE, dentro do
+  laço principal de `gerar()`, ×55 mil numa regeneração real) — e um
+  `session.flush()` explícito ao final da limpeza. Medido num catálogo
+  sintético de 8k mídias (mesmo banco, antes/depois de cada mudança):
+  - Remover só o `flush()` explícito (deixando o autoflush do
+    SQLAlchemy cobrir): ~15s → ~15s. Dentro do ruído, sem ganho real —
+    o autoflush do próximo SELECT já fazia o mesmo trabalho, só
+    adiado. Mantido de qualquer forma (não piora, simplifica), mas não
+    é a correção.
+  - A causa real: cada SELECT de "sugestão antiga desta mídia" também
+    disparava autoflush de TODO o lote ainda pendente de commit — o
+    item 500 de um lote de 500 forçava flush dos 499 anteriores só
+    para rodar uma consulta trivial que quase sempre voltava vazia.
+- Correção: `_limpar_sugestoes_antigas` (staticmethod novo) apaga em
+  BLOCO a sugestão pendente antiga e as evidências de um lote inteiro
+  (3 DELETEs cobrindo até 500 media_ids via `IN`, bem abaixo do teto de
+  variáveis do SQLite), chamada UMA VEZ por lote, ANTES do laço que
+  gera e persiste as sugestões novas desse mesmo lote — não mais dentro
+  de `_persistir_sugestao`, que agora só insere. `gerar()` passa a
+  iterar em fatias de `_TAMANHO_LOTE` (=500, mesmo número do commit de
+  sempre) via `range()`, em vez de contador `% 500`. Medido: regeneração
+  de 8k caiu de ~15s para ~3,9s (~4x) — bem acima do que os DELETEs em
+  si explicariam; o ganho real é evitar o autoflush em cascata dentro
+  do lote.
+- Risco considerado e descartado: limpar tudo de uma vez, no início de
+  `gerar()` inteiro (antes do laço), em vez de por lote — pareceria a
+  otimização mais óbvia, mas troca a garantia de resumo por velocidade:
+  o bulk-delete cedo ficaria durável no PRIMEIRO commit, e uma queda
+  no meio da rodada deixaria toda mídia AINDA NÃO alcançada sem
+  sugestão nenhuma (hoje: mantém a antiga). Real nesta mesma sessão —
+  o processo anterior foi interrompido de propósito (SIGKILL) porque
+  travava o servidor inteiro. Por lote (não a rodada inteira) preserva
+  exatamente a granularidade de resumo de hoje: só o lote em voo
+  (≤500) se perde numa queda; os não alcançados mantêm a sugestão
+  antiga intacta.
+- Verificado: 2 testes novos (`test_suggestion_engine_lote.py`) — N >
+  2×`_TAMANHO_LOTE` atravessa a fronteira do lote sem perder/duplicar
+  mídia; uma exceção simulada no início do 2º lote deixa o 1º lote
+  novo (commitado) e o 2º INTACTO (mesma linha, não apagada) — prova
+  direta da garantia de resumo acima. Suíte completa (1103 Python / 192
+  vitest) verde, mesmos artefatos de sandbox de sempre.
+- Escopo deixado de fora: bulk-delete cedo (acima) foi cogitado e
+  descartado por risco, não implementado de forma alguma — não há
+  vestígio dele no código.
+- Como reverter: `git revert` neste commit — muda só a forma de limpar
+  (SQL, não semântica); estado final de `suggestions`/`evidence` é
+  idêntico ao código anterior para o mesmo input.
+- Status: decidido, implementado, testado, commitado.
