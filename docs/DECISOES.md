@@ -4409,3 +4409,19 @@ inteiro passa a ser contado numa passada só
   (SQL, não semântica); estado final de `suggestions`/`evidence` é
   idêntico ao código anterior para o mesmo input.
 - Status: decidido, implementado, testado, commitado.
+- Addendum — verificação diferencial contra o catálogo real (rodou em
+  paralelo, terminou depois do commit): `gerar()` executado duas vezes
+  em cópias descartáveis (102.251 mídias reais), uma com o código
+  anterior (`c28ed5c`), outra com este. Resultado: **zero divergência**
+  — `suggestions`/`evidence`/`suggestion_evidence`/`trips`/`events` e os
+  campos que `gerar()` grava em `media_files` batem por hash, incluindo
+  os IDS ABSOLUTOS (o delete/insert em lote não deslocou o autoincrement
+  na mesma sequência que o código antigo). Tempo real (máquina sob
+  carga concorrente): 1415,95s → 771,28s (1,84x — menor que o 4x do
+  benchmark sintético, esperado: no catálogo real o preâmbulo de
+  `gerar()` — correlação de GPS, sessões — é custo fixo grande que este
+  fix não tocou; só o laço de persistência encurtou). Achado da revisão,
+  incorporado: comentário em `_limpar_sugestoes_antigas` documentando o
+  acoplamento latente (a limpeza em lote assume que `_persistir_sugestao`
+  só grava evidência da PRÓPRIA mídia — verdade hoje, mas não garantida
+  pelo tipo).

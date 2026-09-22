@@ -1407,6 +1407,16 @@ class SuggestionEngine:
         sugestões novas DESSE MESMO lote, dentro do mesmo commit — uma
         queda no meio só perde o lote em voo; os ainda não alcançados
         mantêm a sugestão antiga intacta.
+
+        Acoplamento latente (achado da verificação diferencial contra o
+        catálogo real, D-092): esta limpeza pré-apaga POR LOTE assumindo
+        que `_persistir_sugestao` só cria `Evidence`/`Suggestion` da
+        PRÓPRIA mídia que está processando — nunca de outra. Verdade
+        hoje. Se um dia alguém fizer a mídia A gravar evidência em nome
+        da mídia B, o comportamento diverge do antigo em silêncio: a
+        limpeza de B já rodou (ou ainda vai rodar, e apaga o que A acabou
+        de criar) dependendo de qual delas cai quando no lote — o padrão
+        antigo, mídia por mídia, não tinha essa janela.
         """
         sugestoes_antigas = session.scalars(select(Suggestion.id).where(
             Suggestion.media_id.in_(media_ids),
