@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { useJob } from "./useJob";
 import { EventSourceFalso } from "../test/setup";
-import { servirApi } from "../test/servidor";
+import { erro, servirApi } from "../test/servidor";
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -71,5 +71,42 @@ describe("useJob — reconexão do SSE", () => {
       { timeout: 4000 },
     );
     expect(EventSourceFalso.instancias).toHaveLength(1); // nada novo assinado
+  });
+});
+
+describe("useJob — janela entre o clique e a resposta do POST (A1/D-090)", () => {
+  it("fica 'rodando' desde o clique, antes do POST responder", async () => {
+    // Sem isto, um botão com `disabled={!podeX || job.rodando}` não
+    // protegia nada entre o clique e a resposta — o duplo clique real que
+    // iniciava duas threads no servidor (D-090) passava batido pelo botão
+    // "desabilitado" a olho nu.
+    servirApi({
+      "/api/operacoes/1/executar": { status: "rodando", tipo: "operacao" },
+    });
+    const { result } = renderHook(() => useJob(), { wrapper });
+
+    expect(result.current.rodando).toBe(false);
+    let promessa!: Promise<void>;
+    act(() => {
+      promessa = result.current.executarPlano(1);
+    });
+    expect(result.current.rodando).toBe(true);
+
+    await act(async () => {
+      await promessa;
+    });
+    expect(result.current.rodando).toBe(true); // servidor confirmou "rodando"
+  });
+
+  it("um POST que falha ainda libera o guard (finally cobre o 409 engolido)", async () => {
+    servirApi({
+      "/api/operacoes/1/executar": erro(409, "já tem um job rodando"),
+    });
+    const { result } = renderHook(() => useJob(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.executarPlano(1)).rejects.toThrow();
+    });
+    expect(result.current.rodando).toBe(false);
   });
 });

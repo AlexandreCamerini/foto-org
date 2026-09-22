@@ -4425,3 +4425,30 @@ inteiro passa a ser contado numa passada só
   acoplamento latente (a limpeza em lote assume que `_persistir_sugestao`
   só grava evidência da PRÓPRIA mídia — verdade hoje, mas não garantida
   pelo tipo).
+
+## D-093 — `useJob` fica "rodando" desde o clique, não só depois do POST responder
+
+- Fase: item deixado de fora de D-090 (A1) por escopo — a análise de
+  backlog desta sessão (2026-09-22) achou e o dono aprovou implementar.
+- Lacuna: o lock de `JobManager` (D-090) fecha a corrida no SERVIDOR, mas
+  `useJob.rodando` (`webapp/src/hooks/useJob.ts`) só refletia
+  `estado.status === "rodando"` — que só é gravado DEPOIS que a promise
+  do `fetch` resolve. Todo botão com `disabled={!podeX || job.rodando}`
+  (`EscritaExif.tsx`, `Operations.tsx`) ficava sem proteção nenhuma na
+  janela entre o clique e a resposta — exatamente a janela que o duplo
+  clique real explora. Com D-090 já corrigido no servidor, o pior caso
+  virou "409 tratado, ruidoso" em vez de "duas threads reais", mas a
+  lacuna do cliente continuava real.
+- Correção: `disparar()` (a função única por trás de TODOS os disparos de
+  job — scan, importação, gerar sugestões, detectar duplicatas, executar
+  plano, executar escrita EXIF, pausar, continuar) grava um estado
+  `disparando` síncrono no início, libera em `finally` (cobre o caminho
+  de erro — `pausar`/`continuar` engolem 409 sem chamar `setEstado`).
+  `rodando` vira `estado.status === "rodando" || disparando`. Um lugar
+  só, todos os botões que já checavam `job.rodando` ganham a proteção de
+  graça — não precisou tocar `EscritaExif.tsx` nem `Operations.tsx`.
+- Verificado: 2 testes novos em `useJob.test.tsx` — `rodando` vira `true`
+  no instante do clique (antes do `await` da promise resolver, via
+  `act()` síncrono) e continua `false` depois de um POST que falha (prova
+  do `finally`). Suíte completa (194 vitest, `tsc -b` limpo) verde.
+- Status: decidido, implementado, testado, commitado.

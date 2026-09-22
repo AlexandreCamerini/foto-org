@@ -91,19 +91,33 @@ export function useJob() {
     };
   }, [assinar]);
 
+  // Janela entre o clique e a resposta do POST em que `estado.status` ainda
+  // não é "rodando" — sem isto, `rodando` só vira true depois do round-trip
+  // completo, e um botão com `disabled={!podeX || job.rodando}` não protege
+  // nada nesse intervalo. Duplo clique real chegava a iniciar duas threads
+  // no servidor (A1/D-090) mesmo com o botão "desabilitado" a olho nu.
+  // `finally` cobre o caminho de erro também (pausar/continuar engolem 409
+  // e não chamam `setEstado`).
+  const [disparando, setDisparando] = useState(false);
+
   const disparar = useCallback(
     async (url: string, body: unknown) => {
-      const resposta = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const dados = await resposta.json();
-      if (!resposta.ok) {
-        throw new Error(dados.detail ?? `erro ${resposta.status}`);
+      setDisparando(true);
+      try {
+        const resposta = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const dados = await resposta.json();
+        if (!resposta.ok) {
+          throw new Error(dados.detail ?? `erro ${resposta.status}`);
+        }
+        setEstado(dados as JobEstado);
+        assinar();
+      } finally {
+        setDisparando(false);
       }
-      setEstado(dados as JobEstado);
-      assinar();
     },
     [assinar],
   );
@@ -130,7 +144,7 @@ export function useJob() {
 
   return {
     estado,
-    rodando: estado.status === "rodando",
+    rodando: estado.status === "rodando" || disparando,
     limpar: () => setEstado({ status: "nenhum" }),
     escanear: (caminho: string) => disparar("/api/scan", { caminho }),
     importarApple: () =>
