@@ -92,6 +92,8 @@ export default function Inspector({ media }: { media: Media | null }) {
 
           <TipoDaImagem media={media} detalhe={detalhe} />
 
+          <LocalizacaoDaImagem media={media} detalhe={detalhe} />
+
           <MetadadosDoArquivo mediaId={media.id} />
 
           {detalhe?.sugestao && (
@@ -205,6 +207,172 @@ function TipoDaImagem({
         desfazer
       </Botao>
     </div>
+  );
+}
+
+/** Corrige à mão o país/região/cidade mostrados na linha "Lugar" acima,
+ * quando a cascata (GPS, herança de outra câmera, nome da pasta) errou.
+ *
+ * Mesmo padrão de `TipoDaImagem`: grava em pais_confirmado/
+ * regiao_confirmado/cidade_confirmado, e nenhuma geração de sugestões
+ * sobrescreve. A API é full-replace nos três campos (server/app.py) —
+ * por isso o formulário sempre pré-carrega os três valores atuais
+ * (`detalhe.local`) antes de abrir, mesmo que o usuário só vá mudar um.
+ */
+function LocalizacaoDaImagem({
+  media,
+  detalhe,
+}: {
+  media: Media;
+  detalhe?: MediaDetalhe;
+}) {
+  const queryClient = useQueryClient();
+  const [editando, setEditando] = useState(false);
+  const [pais, setPais] = useState("");
+  const [regiao, setRegiao] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+
+  const confirmar = useMutation({
+    mutationFn: (local: {
+      pais: string | null;
+      regiao: string | null;
+      cidade: string | null;
+    }) => api.confirmarLocal(media.id, local),
+    onSuccess: () => {
+      setEditando(false);
+      setErro(null);
+      void queryClient.invalidateQueries({ queryKey: ["detalhe", media.id] });
+      void queryClient.invalidateQueries({ queryKey: ["midia"] });
+      void queryClient.invalidateQueries({ queryKey: ["panorama"] });
+    },
+    onError: (e: Error) => setErro(e.message),
+  });
+
+  const confirmado = detalhe?.local?.origem === "usuario";
+
+  const abrirEdicao = () => {
+    setPais(detalhe?.local?.pais ?? "");
+    setRegiao(detalhe?.local?.regiao ?? "");
+    setCidade(detalhe?.local?.cidade ?? "");
+    setErro(null);
+    setEditando(true);
+  };
+
+  const cancelarEdicao = () => {
+    setEditando(false);
+    setErro(null);
+  };
+
+  const salvar = () => {
+    confirmar.mutate({
+      pais: pais.trim() || null,
+      regiao: regiao.trim() || null,
+      cidade: cidade.trim() || null,
+    });
+  };
+
+  if (editando) {
+    return (
+      <div className="mt-3 rounded-md border border-borda bg-cartao px-2 py-1.5">
+        <div className="mb-1.5 text-texto-2">Corrigir lugar</div>
+        <div className="space-y-1.5">
+          <CampoDeLocal
+            rotulo="País"
+            valor={pais}
+            onChange={setPais}
+            onCancelar={cancelarEdicao}
+          />
+          <CampoDeLocal
+            rotulo="Região"
+            valor={regiao}
+            onChange={setRegiao}
+            onCancelar={cancelarEdicao}
+          />
+          <CampoDeLocal
+            rotulo="Cidade"
+            valor={cidade}
+            onChange={setCidade}
+            onCancelar={cancelarEdicao}
+          />
+        </div>
+        {erro && <div className="mt-1.5 text-[11px] text-erro">{erro}</div>}
+        <div className="mt-1.5 flex gap-1.5">
+          <Botao
+            tamanho="sm"
+            onClick={salvar}
+            disabled={confirmar.isPending}
+            className="bg-transparent hover:border-ok hover:text-ok"
+          >
+            Salvar
+          </Botao>
+          <Botao
+            tamanho="sm"
+            onClick={cancelarEdicao}
+            disabled={confirmar.isPending}
+            className="bg-transparent hover:border-borda-forte"
+          >
+            Cancelar
+          </Botao>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2 text-texto-2">
+      {confirmado && (
+        <>
+          <span className="text-texto-3">lugar corrigido por você</span>
+          <Botao
+            variante="fantasma"
+            tamanho="sm"
+            onClick={() =>
+              confirmar.mutate({ pais: null, regiao: null, cidade: null })
+            }
+            disabled={confirmar.isPending}
+            className="px-1 text-texto-2"
+            title="Devolver o lugar à cascata automática"
+          >
+            desfazer
+          </Botao>
+        </>
+      )}
+      <Botao
+        variante="fantasma"
+        tamanho="sm"
+        onClick={abrirEdicao}
+        className="px-1 text-texto-2"
+      >
+        {confirmado ? "editar" : "lugar errado? corrigir"}
+      </Botao>
+    </div>
+  );
+}
+
+function CampoDeLocal({
+  rotulo,
+  valor,
+  onChange,
+  onCancelar,
+}: {
+  rotulo: string;
+  valor: string;
+  onChange: (v: string) => void;
+  onCancelar: () => void;
+}) {
+  return (
+    <label className="flex items-center gap-2">
+      <span className="w-14 shrink-0 text-texto-2">{rotulo}</span>
+      <input
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onCancelar();
+        }}
+        className="w-full rounded-md border border-borda bg-cartao px-2 py-1 outline-none focus:border-acento"
+      />
+    </label>
   );
 }
 

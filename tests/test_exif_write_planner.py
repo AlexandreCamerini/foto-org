@@ -58,6 +58,8 @@ def _media(
     gps_estimado_delta_s: int | None = None,
     gps_estimado_mesma_camera: bool = False,
     location: Location | None = None,
+    pais_confirmado: str | None = None,
+    cidade_confirmado: str | None = None,
     conteudo: bytes | None = b"conteudo sintetico",
 ) -> MediaFile:
     """Cria um MediaFile candidato com as colunas relevantes preenchidas à
@@ -97,6 +99,7 @@ def _media(
         gps_estimado_delta_s=gps_estimado_delta_s,
         gps_estimado_mesma_camera=gps_estimado_mesma_camera,
         location_id=location_id,
+        pais_confirmado=pais_confirmado, cidade_confirmado=cidade_confirmado,
     )
     session.add(media)
     session.flush()
@@ -145,6 +148,61 @@ def test_lista_campo_vazio_e_valor_que_entraria(ambiente):
         assert item.status_gps == CampoStatus.PENDENTE
         assert item.status_cidade == CampoStatus.PENDENTE
         assert item.status_pais == CampoStatus.PENDENTE
+
+
+def test_pais_confirmado_vence_o_da_location_e_ignora_a_guarda_de_pasta(ambiente):
+    """País confirmado pelo usuário (Inspector) tem que chegar ao plano de
+    escrita mesmo quando a Location resolvida propõe outro valor — e
+    mesmo quando a Location veio de fonte "pasta:" (a guarda que barra
+    ESSA origem de virar candidata sozinha não se aplica a uma correção
+    explícita do usuário)."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        loc = Location(pais="França", fonte="pasta:D-083")
+        media = _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            location=loc, pais_confirmado="Bélgica",
+        )
+        media_id = media.id
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None
+
+    with factory() as session:
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.media_id == media_id)
+        )
+        assert item is not None
+        assert item.valor_pais == "Bélgica"
+        assert item.status_pais == CampoStatus.PENDENTE
+
+
+def test_cidade_confirmada_sem_gps_nenhum_ainda_vira_candidata(ambiente):
+    """Sem GPS e sem Location, uma mídia nunca satisfaria o WHERE de
+    candidatos — cidade confirmada pelo usuário, de próprio punho, tem
+    que abrir essa porta sozinha."""
+    factory, planner, origem_dir, fonte_id = ambiente
+    with factory() as session:
+        media = _media(
+            session, fonte_id, origem_dir, "a.jpg",
+            cidade_confirmado="Nîmes",
+        )
+        media_id = media.id
+        session.commit()
+
+    plan_id = planner.criar_plano_exif()
+    assert plan_id is not None
+
+    with factory() as session:
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.media_id == media_id)
+        )
+        assert item is not None
+        assert item.valor_cidade == "Nîmes"
+        assert item.status_cidade == CampoStatus.PENDENTE
+        assert item.valor_pais is None
+        assert item.status_pais == CampoStatus.SEM_VALOR
 
 
 def test_campo_ja_preenchido_no_arquivo_sai_como_pulado(ambiente):

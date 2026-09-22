@@ -278,6 +278,99 @@ describe("Inspector", () => {
 });
 
 
+describe("correção manual de lugar", () => {
+  it("oferece corrigir mesmo quando o lugar veio certo da cascata", async () => {
+    servirApi({ "/api/midia/7": DETALHE_HERDADO });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("lugar errado? corrigir")).toBeInTheDocument();
+  });
+
+  it("abre o formulário pré-carregado com o lugar atual da cascata", async () => {
+    servirApi({ "/api/midia/7": DETALHE_HERDADO });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await usuario.click(await screen.findByText("lugar errado? corrigir"));
+
+    expect(screen.getByDisplayValue("França")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Provence-Alpes-Côte d'Azur")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Avignon")).toBeInTheDocument();
+  });
+
+  it("salvar grava os três campos", async () => {
+    const chamadas = servirApi({
+      "/api/midia/7": DETALHE_HERDADO,
+      "/api/midia/7/local": {
+        pais: "Bélgica", regiao: null, cidade: "Bruxelas",
+        local_confirmado: true,
+      },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await usuario.click(await screen.findByText("lugar errado? corrigir"));
+    const campoPais = screen.getByDisplayValue("França");
+    await usuario.clear(campoPais);
+    await usuario.type(campoPais, "Bélgica");
+    const campoCidade = screen.getByDisplayValue("Avignon");
+    await usuario.clear(campoCidade);
+    await usuario.type(campoCidade, "Bruxelas");
+    const campoRegiao = screen.getByDisplayValue("Provence-Alpes-Côte d'Azur");
+    await usuario.clear(campoRegiao);
+    await usuario.click(screen.getByText("Salvar"));
+
+    const post = chamadas.find((c) => c.caminho === "/api/midia/7/local");
+    expect(post?.metodo).toBe("POST");
+    expect(post?.corpo).toEqual({
+      pais: "Bélgica", regiao: null, cidade: "Bruxelas",
+    });
+    // Fecha o formulário depois de salvar.
+    expect(await screen.findByText("lugar errado? corrigir")).toBeInTheDocument();
+  });
+
+  it("lugar já corrigido mostra 'corrigido por você' e oferece desfazer", async () => {
+    servirApi({
+      "/api/midia/7": {
+        ...DETALHE_HERDADO,
+        local: {
+          pais: "Bélgica", regiao: null, cidade: "Bruxelas",
+          fonte: "usuario", estimado: false, origem: "usuario",
+          granularidade: "cidade",
+        },
+      },
+    });
+    montar(<Inspector media={MEDIA} />);
+
+    expect(await screen.findByText("lugar corrigido por você")).toBeInTheDocument();
+    expect(screen.getByText("editar")).toBeInTheDocument();
+    expect(screen.getByText("desfazer")).toBeInTheDocument();
+    expect(screen.queryByText("lugar errado? corrigir")).not.toBeInTheDocument();
+  });
+
+  it("desfazer devolve os três campos à cascata", async () => {
+    const chamadas = servirApi({
+      "/api/midia/7": {
+        ...DETALHE_HERDADO,
+        local: {
+          pais: "Bélgica", regiao: null, cidade: "Bruxelas",
+          fonte: "usuario", estimado: false, origem: "usuario",
+          granularidade: "cidade",
+        },
+      },
+      "/api/midia/7/local": { pais: null, regiao: null, cidade: null,
+                              local_confirmado: false },
+    });
+    const usuario = userEvent.setup();
+    montar(<Inspector media={MEDIA} />);
+
+    await usuario.click(await screen.findByText("desfazer"));
+
+    const post = chamadas.find((c) => c.caminho === "/api/midia/7/local");
+    expect(post?.corpo).toEqual({ pais: null, regiao: null, cidade: null });
+  });
+});
+
 describe("lugar pela cidade da pasta (D-083)", () => {
   it("rotula a origem e mostra a cidade inteira", async () => {
     servirApi({

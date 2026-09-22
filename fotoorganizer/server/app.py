@@ -154,6 +154,14 @@ class TipoBody(BaseModel):
     tipo: str | None = None
 
 
+class LocalBody(BaseModel):
+    """Cada campo `None` devolve ESSE campo à cascata — os três são
+    independentes (confirmar cidade não obriga confirmar país/região)."""
+    pais: str | None = None
+    regiao: str | None = None
+    cidade: str | None = None
+
+
 class PlanoBody(BaseModel):
     raiz_destino: str
     nome: str | None = None
@@ -769,7 +777,26 @@ def create_app(
             # Só no detalhe: na grade isto seria uma consulta por miniatura.
             # O lugar pode ter vindo de GPS próprio ou herdado de outra
             # câmera — qual dos dois foi está nas evidências, abaixo.
-            if media.location_id is not None:
+            if media.local_confirmado:
+                # Corrigido pelo usuário (Inspector) — vence a Location
+                # geocodificada por completo, mesma precedência do motor
+                # (`_evidencias_geo`). Granularidade é o campo mais fino
+                # que ele de fato confirmou, não os três — confirmar só a
+                # cidade não afirma ter confirmado país/região também.
+                detalhe["local"] = {
+                    "pais": media.pais_confirmado,
+                    "regiao": media.regiao_confirmado,
+                    "cidade": media.cidade_confirmado,
+                    "fonte": "usuario",
+                    "estimado": False,
+                    "origem": "usuario",
+                    "granularidade": (
+                        "cidade" if media.cidade_confirmado
+                        else "regiao" if media.regiao_confirmado
+                        else "pais"
+                    ),
+                }
+            elif media.location_id is not None:
                 local = session.get(Location, media.location_id)
                 if local is not None:
                     # Lugar herdado só é entregue até onde o Δt sustenta
@@ -882,6 +909,38 @@ def create_app(
             return {
                 "tipo_imagem": media.tipo_efetivo,
                 "tipo_provisorio": media.tipo_provisorio,
+            }
+
+    @app.post("/api/midia/{media_id}/local")
+    def confirmar_local(media_id: int, body: LocalBody) -> dict:
+        """A palavra do usuário sobre onde a foto foi tirada.
+
+        Grava em pais_confirmado/regiao_confirmado/cidade_confirmado, que
+        nenhuma geração de sugestões sobrescreve — mesmo padrão de
+        `tipo_confirmado`. Substitui os TRÊS campos pelo que veio no
+        corpo (nunca parcial): quem chama e quer preservar um campo já
+        confirmado manda o valor atual dele de volta — o cliente já tem
+        esse valor em mãos, veio de `GET /api/midia/{id}` (`local`).
+        Campo `null` devolve aquele campo à cascata; os três `null`
+        devolve tudo.
+        """
+        with session_factory() as session:
+            media = session.get(MediaFile, media_id)
+            if media is None:
+                raise HTTPException(404, "foto não encontrada")
+            media.pais_confirmado = body.pais
+            media.regiao_confirmado = body.regiao
+            media.cidade_confirmado = body.cidade
+            media.local_confirmado_em = (
+                datetime.now(timezone.utc).replace(tzinfo=None)
+                if (body.pais or body.regiao or body.cidade) else None
+            )
+            session.commit()
+            return {
+                "pais": media.pais_confirmado,
+                "regiao": media.regiao_confirmado,
+                "cidade": media.cidade_confirmado,
+                "local_confirmado": media.local_confirmado,
             }
 
     # -- imagens ---------------------------------------------------------------

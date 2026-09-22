@@ -4278,3 +4278,78 @@ inteiro passa a ser contado numa passada só
   `server/jobs.py` (lock) e ao teste novo; nenhum dado persistido
   depende disso.
 - Status: decidido, implementado e commitado.
+
+## D-091 — Correção manual de localização no Inspector
+
+- Fase: continuação de "consertar o que já entregamos", autônoma,
+  autorizada pelo dono para rodar durante a noite — o pedido original
+  desta sessão inteira ("não vi uma forma de avisar do erro ou tentar
+  consertar" a localização no Inspetor), investigado, adiado enquanto
+  D-085 a D-090 resolviam bugs concretos de localização, e retomado
+  agora como o terceiro item de três.
+- Lacuna confirmada por investigação (antes de implementar): não existia
+  NENHUM campo de override de usuário para localização — `tipo_imagem`
+  já tinha `tipo_confirmado` (0007), país/região/cidade não tinham
+  equivalente. Cascata geo (`_evidencias_geo`) e `_pais_efetivo`
+  (tz_estimado, CR-01) recalculam do zero a cada `gerar()`; uma correção
+  manual seria desfeita em silêncio na próxima regeneração, exatamente
+  como `tipo_imagem` era antes de 0007.
+- Desenho: mesmo padrão de `tipo_confirmado`, replicado em TRÊS campos
+  independentes (`pais_confirmado`, `regiao_confirmado`,
+  `cidade_confirmado` — migração 0022) porque, ao contrário de tipo
+  (valor único, lista fechada), lugar tem três granularidades e o
+  usuário pode só querer corrigir uma. Não entra em `Location`: essa
+  tabela é cache POR COORDENADA (~110m), compartilhada por todas as
+  fotos que caem no mesmo bucket — gravar a correção lá vazaria para
+  fotos de outro momento que só coincidem no mesmo lugar.
+- Quatro camadas tocadas, todas com o MESMO gancho no topo ("usuário
+  manda, cascata não decide"), porque a investigação achou três
+  consumidores independentes de geo, não um:
+  1. `classification/engine.py::_evidencias_geo` — evidência/sugestão.
+     Confirmar QUALQUER campo bloqueia a cascata geo INTEIRA (não só o
+     campo confirmado) — evita misturar uma correção com um palpite não
+     confirmado no mesmo destino.
+  2. `classification/engine.py::_pais_efetivo` — sem isto, `tz_estimado`
+     continuaria vindo da cascata antiga mesmo com o país corrigido na
+     tela; o fuso gravado divergiria silenciosamente do que o Inspetor
+     mostra.
+  3. `exif_write/planner.py` — sem isto, a correção do usuário nunca
+     chegaria ao EXIF gravado no arquivo original: a tela mostraria uma
+     coisa, o arquivo gravaria outra. Ao contrário do valor inferido, o
+     confirmado ignora as guardas de granularidade/Δt/pela_pasta (elas
+     existem para não escrever um PALPITE fraco, não para desconfiar de
+     uma correção explícita) e abre candidatura mesmo sem GPS/Location
+     nenhum (usuário pode digitar o lugar de próprio punho).
+  4. `server/app.py::detalhe_midia` — o bloco `"local"` da resposta
+     precisa mostrar a correção, não só a cascata; se só o motor
+     soubesse, o Inspetor continuaria exibindo o valor errado até a
+     próxima geração de sugestões.
+- API: `POST /api/midia/{id}/local` (espelha `/tipo`) — full-replace
+  nos três campos, não parcial (`LocalBody`, os três `None` devolve tudo
+  à cascata). Decisão explícita: parcial exigiria distinguir "campo
+  omitido" de "campo null" no corpo, ambiguidade que o padrão de
+  `tipo_confirmado` (um campo só) nunca precisou resolver; full-replace
+  empurra a responsabilidade pro cliente, que já tem os três valores
+  atuais em mãos (veio do GET) — mais simples e sem estado ambíguo no
+  servidor.
+- UI: componente novo `LocalizacaoDaImagem` no Inspector, logo abaixo de
+  `TipoDaImagem` (mesma posição relativa, mesmo padrão de mutação/
+  invalidação de query) — três campos de texto livre, "Salvar"/
+  "Cancelar" quando editando, "corrigido por você" + "desfazer"/"editar"
+  quando já confirmado, "lugar errado? corrigir" caso contrário. Sem
+  dropdown/enum: país/cidade são texto livre, ao contrário do tipo
+  (lista fechada).
+- Verificado: 5 testes de motor (`test_suggestion_engine.py`, cascata
+  geo + tz_estimado sobrevivem a regeneração, campo confirmado sozinho
+  não inventa os outros dois), 2 de planner
+  (`test_exif_write_planner.py`, confirmado vence Location e abre
+  candidatura sem GPS), 1 de API (`test_server_api.py`) e 5 de UI
+  (`Inspector.test.tsx`) — 1103 testes Python / 192 vitest, tudo verde
+  (mesmos 3 falhas + 23 erros de sandbox pré-existentes, documentados
+  desde a auditoria). Provado na UI real contra o catálogo do dono
+  (servidor local, build de produção do webapp): abri uma foto do
+  acervo real, corrigi cidade para um valor de teste, confirmei que
+  "Lugar" e a badge "corrigido por você" atualizaram, e desfiz — o
+  catálogo real volta ao estado original, nenhum resíduo de teste
+  ficou gravado.
+- Status: decidido, implementado, verificado na UI real, commitado.

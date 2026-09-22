@@ -256,6 +256,17 @@ class MediaFile(Base):
     # significar coisas diferentes para o plano de escrita EXIF.
     gps_estimado_mesma_camera: Mapped[bool] = mapped_column(default=False)
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
+    # O que o USUÁRIO disse sobre o lugar — mesmo padrão de
+    # `tipo_confirmado`: nada no motor sobrescreve. Não pode viver em
+    # `Location` (a linha lá é cache POR COORDENADA, compartilhada por
+    # todas as fotos que caem no mesmo bucket de ~110m — gravar a
+    # correção ali vazaria pra fotos de outras pessoas/momentos que só
+    # coincidem no mesmo lugar). Três campos, não um — o usuário pode
+    # corrigir só a cidade e deixar país/região vir da cascata.
+    pais_confirmado: Mapped[str | None]
+    regiao_confirmado: Mapped[str | None]
+    cidade_confirmado: Mapped[str | None]
+    local_confirmado_em: Mapped[datetime | None]
     trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"))
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id"))
     # O que o DETECTOR concluiu: foto | captura | recebida | baixada.
@@ -315,6 +326,18 @@ class MediaFile(Base):
         É o que permite a interface perguntar em vez de afirmar.
         """
         return self.tipo_confirmado is None and self.tipo_imagem is not None
+
+    @property
+    def local_confirmado(self) -> bool:
+        """True quando o usuário corrigiu manualmente ao menos um campo de
+        lugar (país, região ou cidade) — qualquer um dos três já é
+        suficiente pra parar de mostrar a cascata como se fosse a
+        resposta final."""
+        return (
+            self.pais_confirmado is not None
+            or self.regiao_confirmado is not None
+            or self.cidade_confirmado is not None
+        )
 
     @property
     def coordenada(self) -> tuple[float, float] | None:

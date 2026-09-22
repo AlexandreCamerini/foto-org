@@ -513,7 +513,17 @@ class SuggestionEngine:
         fix. Mantém o mesmo critério de parada de cada ramo do original:
         GPS próprio decide sozinho assim que resolve (mesmo que
         `location.pais` seja `None`), herdado só decide quando a janela de
-        tempo sustenta o campo país (`heranca.fator_de('pais')`)."""
+        tempo sustenta o campo país (`heranca.fator_de('pais')`).
+
+        País confirmado pelo usuário vence tudo, no topo — mesmo gancho de
+        `_evidencias_geo`, duplicado aqui pelo mesmo motivo do resto desta
+        função (CR-01): sem isto, `tz_estimado` continuaria calculado pela
+        cascata antiga mesmo depois do usuário corrigir o país no
+        Inspector — o fuso gravado divergiria silenciosamente do país que
+        a tela mostra."""
+        if media.pais_confirmado is not None:
+            return media.pais_confirmado
+
         if media.gps_lat is not None and self._resolver is not None:
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)
             if location is not None:
@@ -1018,6 +1028,25 @@ class SuggestionEngine:
                         por_id: dict[int, MediaFile],
                         proposta_de_pasta: PropostaDePasta | None = None,
                         ) -> list[_Draft]:
+        # 0) Lugar corrigido manualmente pelo usuário (Inspector) — vence
+        # qualquer ramo abaixo, mesmo padrão de `tipo_confirmado`
+        # (`_evidencias_para`, acima): nada no motor sobrescreve a
+        # palavra do usuário. Só os campos que ele de fato confirmou
+        # entram — confirmar só a cidade não inventa país/região pela
+        # cascata ao lado (misturaria uma correção com um palpite não
+        # confirmado no mesmo destino).
+        if media.local_confirmado:
+            return [
+                _Draft(campo, "usuario", valor, "informado por você",
+                       score_override=1.0)
+                for campo, valor in [
+                    ("pais", media.pais_confirmado),
+                    ("regiao", media.regiao_confirmado),
+                    ("cidade", media.cidade_confirmado),
+                ]
+                if valor
+            ]
+
         # 1) GPS + geocodificação offline.
         if media.gps_lat is not None and self._resolver is not None:
             location = self._resolver.resolve(session, media.gps_lat, media.gps_lon)

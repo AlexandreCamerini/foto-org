@@ -70,9 +70,10 @@ export interface Media {
     cidade: string | null;
     fonte: string;
     estimado: boolean;
-    /** De onde veio o lugar: lido do arquivo, herdado de uma doadora ou
-     *  pela cidade escrita no nome da pasta (D-083). */
-    origem?: "arquivo" | "doadora" | "pasta";
+    /** De onde veio o lugar: lido do arquivo, herdado de uma doadora,
+     *  pela cidade escrita no nome da pasta (D-083), ou corrigido à mão
+     *  por você no Inspector. */
+    origem?: "arquivo" | "doadora" | "pasta" | "usuario";
     /** Até onde o lugar pode ser afirmado: "cidade" | "regiao" | "pais".
      *  Lugar herdado de horas atrás diz o país, não a cidade (D-025). */
     granularidade: string | null;
@@ -614,6 +615,16 @@ export const api = {
       `/api/midia/${id}/tipo`,
       { tipo },
     ),
+  confirmarLocal: (
+    id: number,
+    local: { pais: string | null; regiao: string | null; cidade: string | null },
+  ) =>
+    post<{
+      pais: string | null;
+      regiao: string | null;
+      cidade: string | null;
+      local_confirmado: boolean;
+    }>(`/api/midia/${id}/local`, local),
   opcoesFiltros: () =>
     json<{
       extensoes: string[];

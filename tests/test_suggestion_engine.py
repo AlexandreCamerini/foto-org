@@ -1405,6 +1405,83 @@ def test_confirmar_como_nao_foto_manda_para_o_ramo_certo(migrated_engine):
         assert "por você" in vinculadas["tipo"].justificativa
 
 
+def test_local_confirmado_pelo_usuario_sobrevive_a_regeneracao(migrated_engine):
+    """Mesmo padrão de tipo_confirmado: a cascata geo é recalculada a
+    cada geração (GPS pode ganhar nova doadora, o geocoder pode revisar
+    um nome) — uma correção do usuário no país precisa sobreviver a
+    isso, e o tz_estimado (CR-01, `_pais_efetivo`) precisa acompanhar,
+    senão o fuso gravado no EXIF divergiria do país que a tela mostra."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(fonte.id, "img.jpg", "/fotos",
+                           data=datetime(2024, 5, 4, 10, 0),
+                           gps=(43.95, 4.81)))  # cai na França do FakeGeocoder
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    engine.gerar()
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        sugestao = session.scalar(select(Suggestion))
+        vinculadas = {e.campo: e for e in sugestao.evidencias}
+        assert vinculadas["pais"].valor == "França"
+        assert media.tz_estimado == "Europe/Paris"
+        media.pais_confirmado = "Bélgica"  # usuário corrige
+        session.commit()
+
+    engine.gerar()  # regenera tudo — GPS continua "achando" França
+
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        assert media.pais_confirmado == "Bélgica"
+        assert media.tz_estimado == "Europe/Brussels"
+        sugestao = session.scalar(select(Suggestion))
+        vinculadas = {e.campo: e for e in sugestao.evidencias}
+        assert vinculadas["pais"].valor == "Bélgica"
+        assert vinculadas["pais"].origem == "usuario"
+        assert vinculadas["pais"].score == 1.0
+        assert "por você" in vinculadas["pais"].justificativa
+        # Confirmar o país bloqueia a cascata INTEIRA (não só o país) —
+        # evita misturar correção com palpite geo não confirmado.
+        assert "regiao" not in vinculadas
+        assert "cidade" not in vinculadas
+
+
+def test_local_confirmado_so_cidade_nao_inventa_pais_nem_regiao(migrated_engine):
+    """Confirmar só um campo não obriga confirmar os três — mas também
+    não deixa a cascata preencher os outros dois ao lado do confirmado
+    (misturaria uma correção com um palpite não confirmado no mesmo
+    destino)."""
+    factory = create_session_factory(migrated_engine)
+    with factory() as session:
+        fonte = Source(caminho="/fotos")
+        session.add(fonte)
+        session.flush()
+        session.add(_media(fonte.id, "img.jpg", "/fotos",
+                           data=datetime(2024, 5, 4, 10, 0),
+                           gps=(43.95, 4.81)))
+        session.commit()
+
+    engine = SuggestionEngine(factory, LocationResolver(FakeGeocoder()))
+    with factory() as session:
+        media = session.scalar(select(MediaFile))
+        media.cidade_confirmado = "Nîmes"
+        session.commit()
+
+    engine.gerar()
+
+    with factory() as session:
+        sugestao = session.scalar(select(Suggestion))
+        vinculadas = {e.campo: e for e in sugestao.evidencias}
+        assert vinculadas["cidade"].valor == "Nîmes"
+        assert vinculadas["cidade"].origem == "usuario"
+        assert "pais" not in vinculadas
+        assert "regiao" not in vinculadas
+
+
 def test_miniatura_de_cache_doa_gps_mas_nao_vira_sugestao(migrated_engine):
     """A separação que salvou a revisão: 89% do acervo local de um usuário
     real eram miniaturas 540×360 do pacote do Apple Fotos, e cada uma virava

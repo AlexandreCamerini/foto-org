@@ -1033,6 +1033,33 @@ def test_tipo_invalido_e_recusado(client):
     assert "meme" in r.json()["detail"]
 
 
+def test_confirmar_local_grava_a_palavra_do_usuario_e_aparece_no_detalhe(client):
+    media_id = client.get("/api/midia").json()["itens"][0]["id"]
+
+    r = client.post(
+        f"/api/midia/{media_id}/local",
+        json={"pais": "Bélgica", "regiao": None, "cidade": "Bruxelas"},
+    )
+    assert r.json() == {
+        "pais": "Bélgica", "regiao": None, "cidade": "Bruxelas",
+        "local_confirmado": True,
+    }
+
+    detalhe = client.get(f"/api/midia/{media_id}").json()
+    assert detalhe["local"] == {
+        "pais": "Bélgica", "regiao": None, "cidade": "Bruxelas",
+        "fonte": "usuario", "estimado": False, "origem": "usuario",
+        "granularidade": "cidade",
+    }
+
+    # Devolver tudo à cascata: os três null.
+    r = client.post(
+        f"/api/midia/{media_id}/local",
+        json={"pais": None, "regiao": None, "cidade": None},
+    )
+    assert r.json()["local_confirmado"] is False
+
+
 def test_lugar_herdado_de_longe_nao_entrega_a_cidade(client, migrated_engine):
     """D-025 na borda que o usuário enxerga.
 

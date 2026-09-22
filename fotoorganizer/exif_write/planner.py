@@ -120,6 +120,14 @@ class ExifWritePlanner:
                             # decisão explícita do dono.
                             & Location.fonte.not_like("pasta:%")
                         )
+                        # Cidade/país CONFIRMADOS pelo usuário no Inspector
+                        # entram mesmo sem GPS/Location nenhum — é uma
+                        # correção explícita, não uma inferência; sem este
+                        # ramo, uma mídia sem coordenada nunca vira
+                        # candidata, mesmo com o usuário tendo digitado o
+                        # lugar de próprio punho.
+                        | MediaFile.pais_confirmado.is_not(None)
+                        | MediaFile.cidade_confirmado.is_not(None)
                     ),
                 )
                 .order_by(MediaFile.caminho)
@@ -216,15 +224,26 @@ class ExifWritePlanner:
                 # mesmo que a linha tenha entrado pela perna do GPS herdado
                 # — a guarda do WHERE só cobre a outra perna.
                 pela_pasta = location is not None and location.fonte.startswith("pasta:")
-                valor_cidade = (
+                # País/cidade CONFIRMADOS pelo usuário (Inspector) vencem
+                # qualquer valor inferido — mesmo espírito do gancho em
+                # `classification/engine.py::_evidencias_geo`: nada aqui
+                # pode "descobrir melhor" o que o usuário já disse. Ao
+                # contrário do valor inferido, não passa pelas guardas de
+                # granularidade/Δt/pela_pasta acima — essas existem para
+                # não escrever um PALPITE fraco demais; uma confirmação
+                # explícita não é palpite.
+                valor_cidade = media.cidade_confirmado or (
                     location.cidade
                     if location and not pela_pasta and delta_sustenta_cidade
                     else None
                 )
-                # País continua sem guarda de granularidade: D-025 sustenta
-                # o campo país em qualquer Δt da própria janela de país —
-                # é o único campo desenhado para isso.
-                valor_pais = location.pais if location and not pela_pasta else None
+                # País continua sem guarda de granularidade quando vem da
+                # cascata: D-025 sustenta o campo país em qualquer Δt da
+                # própria janela de país — é o único campo desenhado para
+                # isso.
+                valor_pais = media.pais_confirmado or (
+                    location.pais if location and not pela_pasta else None
+                )
 
                 if media.gps_lat is not None:
                     status_gps = CampoStatus.PULADO
