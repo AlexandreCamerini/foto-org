@@ -44,7 +44,11 @@ class JobManager:
     ) -> None:
         self._settings = settings
         self._factory = session_factory
-        self._lock = threading.Lock()
+        # RLock, não Lock: `iniciar_execucao`/`iniciar_escrita_exif`
+        # seguram o lock e chamam `_iniciar`, que também o adquire — o
+        # mesmo par check-then-act precisa cobrir as duas camadas (A1,
+        # ver `_iniciar` e `iniciar_execucao` abaixo).
+        self._lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._control = ScanControl()
         self._exec_control: ExecutionControl | None = None
@@ -123,44 +127,64 @@ class JobManager:
 
     def iniciar_execucao(self, plan_id: int) -> bool:
         """Executa um plano aprovado. O controle nasce aqui, na thread do
-        pedido, para que um cancelamento imediato não se perca."""
-        if self.ocupado():
-            return False
-        controle = ExecutionControl()
-        self._exec_control = controle
-        return self._iniciar(
-            "operacao", f"plano {plan_id}", self._rodar_execucao,
-            plan_id, controle,
-        )
+        pedido, para que um cancelamento imediato não se perca.
+
+        O check `ocupado()` e a gravação de `self._exec_control` precisam
+        estar dentro do MESMO lock que `_iniciar` usa (A1): sem isso, duas
+        chamadas concorrentes podiam passar as duas no check antes de
+        qualquer uma chegar a `_iniciar`, e a segunda sobrescrevia
+        `self._exec_control` mesmo que só uma thread real chegasse a
+        rodar — `cancelar()` (abaixo) então operava sobre o controle da
+        chamada perdedora, um no-op silencioso.
+        """
+        with self._lock:
+            if self.ocupado():
+                return False
+            controle = ExecutionControl()
+            self._exec_control = controle
+            return self._iniciar(
+                "operacao", f"plano {plan_id}", self._rodar_execucao,
+                plan_id, controle,
+            )
 
     def iniciar_escrita_exif(self, plan_id: int) -> bool:
         """Executa um plano de escrita EXIF aprovado (D-075). Mesmo padrão
-        de `iniciar_execucao`: o `ExecutionControl` nasce aqui, na thread
-        do pedido, para que um cancelamento imediato não se perca."""
-        if self.ocupado():
-            return False
-        controle = ExecutionControl()
-        self._exec_control = controle
-        return self._iniciar(
-            "escrita_exif", f"plano {plan_id}", self._rodar_escrita_exif,
-            plan_id, controle,
-        )
+        de `iniciar_execucao`, mesma nota sobre o lock cobrir o check e a
+        gravação de `self._exec_control`."""
+        with self._lock:
+            if self.ocupado():
+                return False
+            controle = ExecutionControl()
+            self._exec_control = controle
+            return self._iniciar(
+                "escrita_exif", f"plano {plan_id}", self._rodar_escrita_exif,
+                plan_id, controle,
+            )
 
     def _iniciar(self, tipo: str, alvo: str, funcao, *args) -> bool:
-        if self.ocupado():
-            return False
-        self._control = ScanControl()
+        # O check (`ocupado()`) e o act (criar e iniciar a thread) viviam
+        # fora do lock — dois POSTs simultâneos podiam ambos ver
+        # `ocupado() == False` antes de qualquer um setar `self._thread`
+        # (A1, auditoria 2026-09-19: reproduzido 55/200 sem tuning; com
+        # escrita EXIF, a segunda chamada do exiftool sobre o mesmo
+        # arquivo sobrescrevia o backup `.jpg_original` com uma versão já
+        # modificada). `with self._lock` envolvendo o método inteiro
+        # torna o par atômico — chamadores como `iniciar_execucao`
+        # entram reentrantes no mesmo lock (por isso RLock, não Lock).
         with self._lock:
+            if self.ocupado():
+                return False
+            self._control = ScanControl()
             self._estado = {
                 "status": "rodando", "tipo": tipo, "alvo": alvo,
                 "vistos": 0, "processados": 0, "pulados": 0, "erros": 0,
                 "arquivos_por_segundo": 0.0,
             }
-        self._thread = threading.Thread(
-            target=funcao, args=args, daemon=True, name=f"job-{tipo}"
-        )
-        self._thread.start()
-        return True
+            self._thread = threading.Thread(
+                target=funcao, args=args, daemon=True, name=f"job-{tipo}"
+            )
+            self._thread.start()
+            return True
 
     def _atualizar(self, **campos) -> None:
         with self._lock:

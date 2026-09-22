@@ -4215,3 +4215,66 @@ inteiro passa a ser contado numa passada só
 - Status: decidido, implementado e commitado. Zero arquivos reais
   afetados — a correção fechou uma janela antes dela ser usada contra o
   acervo do dono.
+
+## D-090 — Corrida no JobManager (check-then-act sem lock) — A1 da auditoria
+
+- Fase: continuação de "consertar o que já entregamos" (mesma decisão de
+  escopo de D-085 a D-089), autônoma, autorizada pelo dono para rodar
+  durante a noite.
+- Achado original (auditoria 2026-09-19, severidade ALTO): `ocupado()` (o
+  check) e a criação/partida da thread do job (o act), em
+  `server/jobs.py`, não eram atômicos — dois POSTs simultâneos (duplo
+  clique real, medido 55/200 sem tuning) podiam os dois passar no check
+  antes de qualquer um setar `self._thread`, iniciando duas threads sobre
+  o mesmo plano. Com escrita EXIF, o exiftool não usa
+  `-overwrite_original` de propósito (o backup `_original` é a rede de
+  segurança até a verificação aprovar, `exif_write/writer.py`); uma
+  segunda chamada do exiftool sobre o mesmo arquivo, antes da primeira
+  terminar, renomeia a versão JÁ MODIFICADA por cima do backup — destrói
+  a única cópia intacta do original, sem nada para restaurar.
+- Investigação (agente Explore, antes da correção) achou uma SEGUNDA
+  janela de corrida, independente da primeira, que a sugestão original da
+  auditoria ("lock em `_iniciar`") não fechava sozinha:
+  `iniciar_execucao`/`iniciar_escrita_exif` criam o `ExecutionControl` e
+  gravam `self._exec_control` ANTES de chamar `_iniciar` — um lock só
+  dentro de `_iniciar` corrige "duas threads", mas não corrige duas
+  chamadas sobrescrevendo `self._exec_control` entre si. Consequência: a
+  thread vencedora roda com o `ExecutionControl` que ela recebeu por
+  parâmetro (closure), mas `cancelar()` lê `self._exec_control` do campo
+  — se uma chamada perdedora foi a última a escrever ali, `cancelar()`
+  vira no-op silencioso (o botão "Cancelar" para de funcionar, sem erro
+  visível).
+- Correção: `self._lock` virou `threading.RLock()` (era `Lock()`
+  simples), e o corpo inteiro de `_iniciar`, `iniciar_execucao` e
+  `iniciar_escrita_exif` passou a rodar sob `with self._lock:` — do check
+  `ocupado()` até `self._thread.start()`, incluindo a criação do
+  `ExecutionControl`. RLock (não Lock) porque `iniciar_execucao`/
+  `iniciar_escrita_exif` seguram o lock e chamam `_iniciar`, que também o
+  adquire — mesma thread, reentrante. `_iniciar` continua com seu próprio
+  check interno (agora redundante para essas duas rotas, necessário para
+  as outras seis que chamam `_iniciar` direto).
+- Verificação: teste de estresse (não revisão por diff — corrida não se
+  vê num diff), `tests/test_jobs_concorrencia.py`. Duas provas: (1) N=50
+  chamadas a `_iniciar` soltas pela mesma `threading.Barrier` — sem o
+  fix, reproduziu 2 a 5 threads iniciadas em 3/3 rodadas; com o fix,
+  exatamente 1 em 5/5 rodadas. (2) N=30 chamadas a `iniciar_execucao`
+  soltas pela mesma barreira, com `_rodar_execucao` substituído por um
+  stub que registra o `ExecutionControl` recebido — sem o fix, mais de um
+  controle "visto" (thread real rodando com um controle diferente do que
+  ficou em `self._exec_control`); com o fix, sempre exatamente 1, e
+  `self._exec_control is controles_vistos[0]`.
+- Escopo deixado de fora, mesma causa raiz, correlato: `self._control`
+  (o `ScanControl` do scan/reconciliação, distinto de
+  `ExecutionControl`) é reatribuído em `_iniciar` e lido diretamente do
+  atributo de instância em `_rodar_scan`/`_rodar_reconciliacao`, em vez
+  de receber por parâmetro/closure como `_rodar_execucao`/
+  `_rodar_escrita_exif` fazem — mesma classe de risco (controle
+  trocado sob corrida) se duas chamadas a `iniciar_scan`/
+  `iniciar_reconciliacao` colidirem. Não corrigido nesta fatia: o achado
+  original (A1) e o pedido do dono eram sobre escrita EXIF/execução de
+  plano; scan/reconciliação têm proteção adicional de UI (não expostos a
+  duplo clique do mesmo jeito) e ficam para decisão separada.
+- Como reverter: `git revert` neste commit — mudança contida a
+  `server/jobs.py` (lock) e ao teste novo; nenhum dado persistido
+  depende disso.
+- Status: decidido, implementado e commitado.
