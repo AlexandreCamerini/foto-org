@@ -53,6 +53,7 @@ from sqlalchemy import func, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from fotoorganizer.classification import custo_genai  # noqa: E402
+from fotoorganizer.classification.pasta_curta import nomes_curtos_unicos
 from fotoorganizer.classification.location_advisor import (  # noqa: E402
     ClassificacaoDePastaClaude,
     PastaPayload,
@@ -159,6 +160,10 @@ def montar_amostra(session: Session, limite: int | None) -> list[ItemDeAmostra]:
     metadado = _metadado_por_pasta(session)
 
     itens: list[ItemDeAmostra] = []
+    # O mesmo recorte que a produção envia (D-094): medir com o caminho
+    # absoluto mediria outra entrada — mais contexto do que o modelo vê de
+    # verdade — e o score não valeria para o que roda de fato.
+    curtos = nomes_curtos_unicos(verdade)
     for pasta in sorted(verdade):
         v = verdade[pasta]
         v_categoria = v.get("categoria")
@@ -175,7 +180,7 @@ def montar_amostra(session: Session, limite: int | None) -> list[ItemDeAmostra]:
 
         n_fotos, periodo = metadado.get(pasta, (0, None))
         payload = PastaPayload(
-            pasta=pasta,
+            pasta=curtos[pasta],
             n_fotos=n_fotos,
             periodo=periodo,
             campos_a_preencher=tuple(campos_a_preencher),
@@ -237,6 +242,9 @@ class ContadorDeCampo:
 
 def comparar(itens: list[ItemDeAmostra],
              propostas: list[PropostaDoModelo]) -> dict[str, ContadorDeCampo]:
+    # O modelo ecoa o nome CURTO que recebeu (`item.payload.pasta`), não o
+    # caminho absoluto de `item.pasta` — casar pelo absoluto contaria toda
+    # resposta como recusa.
     por_pasta = {p.pasta: p for p in propostas}
     contadores = {
         "categoria": ContadorDeCampo(),
@@ -244,7 +252,7 @@ def comparar(itens: list[ItemDeAmostra],
         "pais": ContadorDeCampo(),
     }
     for item in itens:
-        proposta = por_pasta.get(item.pasta)  # None = recusa total da pasta
+        proposta = por_pasta.get(item.payload.pasta)  # None = recusa total da pasta
         if "categoria" in item.payload.campos_a_preencher:
             proposto = proposta.categoria if proposta else None
             contadores["categoria"].registrar(

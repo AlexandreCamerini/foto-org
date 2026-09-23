@@ -222,10 +222,16 @@ function PassoCandidatas({
                   className="h-3.5 w-3.5 shrink-0 rounded-sm border-borda-forte accent-acento"
                   checked={selecionadas.has(c.pasta)}
                   onChange={() => onAlternar(c.pasta)}
-                  aria-label={`Incluir ${pastaCurta(c.pasta)}`}
+                  aria-label={`Incluir ${c.pasta_enviada}`}
                 />
-                <span className="min-w-0 flex-1 truncate font-titulo">
-                  {pastaCurta(c.pasta)}
+                {/* O que a lista mostra é byte a byte o que vai no payload
+                    (`pasta_enviada`, D-094) — o caminho absoluto fica só no
+                    tooltip, para o dono localizar a pasta. */}
+                <span
+                  className="min-w-0 flex-1 truncate font-titulo"
+                  title={c.pasta}
+                >
+                  {c.pasta_enviada}
                 </span>
                 <span className="shrink-0 text-[11px] text-texto-2">
                   {etiquetaCamposAusentes(c.campos_ausentes)} ·{" "}

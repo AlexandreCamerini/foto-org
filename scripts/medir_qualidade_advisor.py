@@ -57,6 +57,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fotoorganizer.classification.pasta_curta import nome_curto
 from fotoorganizer.classification.advisor import (  # noqa: E402
     AdvisorResult,
     ClaudeAdvisor,
@@ -106,7 +107,9 @@ def _reconstruir_cluster(con: sqlite3.Connection, inicio: str, fim: str) -> Clus
         """,
         (inicio, fim),
     ).fetchall()
-    pastas = tuple(sorted({p for p, *_ in linhas if p}))
+    # Nome curto, como `_consultar_advisor` envia de verdade (D-094) —
+    # medir com o caminho absoluto mediria outra entrada.
+    pastas = tuple(sorted({n for n in (nome_curto(p) for p, *_ in linhas if p) if n}))
     exemplos = tuple(nome for _, nome, *_ in linhas[:8])
     lugares = tuple(sorted({
         f"{cidade}, {pais}" if cidade and pais else (pais or cidade)

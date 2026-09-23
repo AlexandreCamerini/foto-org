@@ -29,7 +29,15 @@ function candidata(
   n_fotos: number,
   campos_ausentes: CandidataGenaiPasta["campos_ausentes"],
 ): CandidataGenaiPasta {
-  return { pasta, n_fotos, campos_ausentes, periodo: null };
+  // Mesmo recorte do servidor (`pasta_curta.py`): as duas últimas pastas.
+  const partes = pasta.split("/").filter(Boolean);
+  return {
+    pasta,
+    pasta_enviada: partes.slice(-2).join("/"),
+    n_fotos,
+    campos_ausentes,
+    periodo: null,
+  };
 }
 
 function proposta(
@@ -139,6 +147,25 @@ describe("ClassificacaoPasta", () => {
       screen.getByLabelText("Habilitar classificação de pasta por IA"),
     );
     expect(habilitar).toBeEnabled();
+  });
+
+  it("a lista mostra o nome que vai no payload, nunca o caminho absoluto", async () => {
+    // D-094: o que o dono vê no passo 1 é byte a byte o que sai da
+    // máquina (`pasta_enviada`); o caminho absoluto — usuário, volume,
+    // árvore do acervo — fica só no tooltip.
+    servirApi({
+      "/api/genai-pasta/config": config(true, true),
+      "/api/genai-pasta/candidatas": [
+        candidata("/Users/eu/Pictures/Viagens/Peru 2023", 10, ["categoria"]),
+      ],
+    });
+    montar(<ClassificacaoPasta onFechar={vi.fn()} />);
+
+    const nome = await screen.findByText("Viagens/Peru 2023");
+    expect(nome).toHaveAttribute("title", "/Users/eu/Pictures/Viagens/Peru 2023");
+    expect(screen.getByLabelText("Incluir Viagens/Peru 2023")).toBeInTheDocument();
+    expect(screen.queryByText(/\/Users\/eu/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/…\//)).not.toBeInTheDocument();
   });
 
   it("candidatas nascem todas marcadas", async () => {

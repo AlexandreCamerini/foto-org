@@ -62,7 +62,7 @@ class PastaPayload:
     pré-requisito de segurança.
     """
 
-    pasta: str                            # caminho relativo/nome da pasta
+    pasta: str                            # nome curto (pasta_curta.py) — nunca o caminho absoluto
     n_fotos: int
     periodo: str | None                   # "2024-03-12 a 2024-03-19", já catalogado
     campos_a_preencher: tuple[str, ...]   # ("categoria",) | ("cidade","pais") | ambos
@@ -147,8 +147,10 @@ _SCHEMA = {
 
 _SYSTEM = """\
 Você classifica PASTAS de um acervo de fotos pessoal. Você recebe apenas
-o nome da pasta e metadado já catalogado (contagem de fotos, período) —
-nunca a imagem, nunca um caminho de arquivo, nunca uma miniatura.
+o nome da pasta (as duas últimas pastas do caminho, como
+"Viagens/Peru 2023" — a de cima é só contexto) e metadado já catalogado
+(contagem de fotos, período) — nunca a imagem, nunca um caminho de
+arquivo completo, nunca uma miniatura.
 
 Para cada pasta, proponha, quando der para concluir com segurança:
 

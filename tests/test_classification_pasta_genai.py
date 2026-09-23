@@ -80,7 +80,7 @@ def test_payload_nunca_envia_imagem():
     }
 
     proibidos = ("caminho", "thumb", "miniatura", "base64", "image",
-                 ".jpg", ".cr2", ".heic")
+                 ".jpg", ".cr2", ".heic", "users/", "volumes/")
     for chave, valor in item.items():
         texto = f"{chave}={valor}".lower()
         for termo in proibidos:

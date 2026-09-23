@@ -40,6 +40,7 @@ from fotoorganizer.geolocation.cidades import (
     LugarDaPasta,
     lugar_da_pasta,
 )
+from fotoorganizer.classification.pasta_curta import nome_curto
 from fotoorganizer.geolocation.resolver import cache_key as _chave_de_coordenada
 from fotoorganizer.grouping.datas import (
     fuso_da_maquina,
@@ -847,7 +848,13 @@ class SuggestionEngine:
 
     def _consultar_advisor(self, sessao: _Sessao, membros) -> None:
         cluster = ClusterInfo(
-            pastas=tuple(sorted({m.pasta for m in membros})),
+            # Nome curto, nunca o caminho absoluto: o advisor recebe só o
+            # que PRIVACIDADE.md promete ("nomes de pastas") — sem usuário,
+            # volume ou árvore do acervo (M2, D-094). `nome_curto` direto,
+            # não `nomes_curtos_unicos`: aqui não há resposta a casar de
+            # volta, e desambiguar escalaria segmentos à toa (cópia local
+            # + NAS da mesma foto caem no mesmo cluster).
+            pastas=tuple(sorted({n for n in (nome_curto(m.pasta) for m in membros) if n})),
             exemplos_arquivos=tuple(m.nome for m in membros[:8]),
             inicio=sessao.draft.inicio,
             fim=sessao.draft.fim,

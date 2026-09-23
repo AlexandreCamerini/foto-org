@@ -27,6 +27,7 @@ from fotoorganizer.classification.location_advisor import (
     PastaPayload,
     PropostaDoModelo,
 )
+from fotoorganizer.classification.pasta_curta import nomes_curtos_unicos
 from fotoorganizer.config.settings import Settings
 from fotoorganizer.models import Evidence, MediaFile
 from fotoorganizer.repositories.pasta_classificacao import (
@@ -70,9 +71,13 @@ class ClassificacaoIndisponivel(Exception):
     O endpoint converte isto em `HTTPException(502, ...)`."""
 
 
-def _candidata_json(c: candidatas_de_pasta.CandidataDePasta) -> dict:
+def _candidata_json(c: candidatas_de_pasta.CandidataDePasta, pasta_enviada: str) -> dict:
     return {
+        # `pasta` é a chave LOCAL (caminho absoluto) — nunca sai da máquina.
+        # `pasta_enviada` é exatamente o que vai no payload (D-094): a lista
+        # mostra este, para o dono ver o que está consentindo.
         "pasta": c.pasta,
+        "pasta_enviada": pasta_enviada,
         "n_fotos": c.n_fotos,
         "campos_ausentes": list(c.campos_ausentes),
         "periodo": c.periodo,
@@ -177,19 +182,34 @@ class SessaoDeClassificacaoDePasta:
     def candidatas(self) -> list[dict]:
         if not self.liberado():
             raise RecursoDesligado(MENSAGEM_GATE_FECHADO)
-        return [_candidata_json(c) for c in self._candidatas_atuais()]
+        lista = self._candidatas_atuais()
+        # Sobre a lista INTEIRA, o mesmo cálculo que `_payloads` faz — é o
+        # que garante que o nome mostrado aqui é byte a byte o enviado lá
+        # (uma colisão só existe contra o conjunto todo).
+        curtos = nomes_curtos_unicos(c.pasta for c in lista)
+        return [_candidata_json(c, curtos[c.pasta]) for c in lista]
 
-    def _payloads(self, pastas: list[str]) -> list[PastaPayload]:
+    def _payloads(self, pastas: list[str]) -> tuple[list[PastaPayload], dict[str, str]]:
         """Monta os `PastaPayload` das pastas PEDIDAS que ainda são
         candidatas de verdade agora — uma pasta pedida que já saiu da
         lista de candidatas (o catálogo mudou entre o passo 1 e o passo 2
         do assistente, ou foi classificada por outra sessão) é ignorada,
         não vira erro (T-07-04-03: reconcilia contra as candidatas reais,
-        nunca confia cegamente no corpo da requisição)."""
+        nunca confia cegamente no corpo da requisição).
+
+        Devolve também `{nome curto: caminho absoluto}`: o modelo só vê o
+        nome curto (D-094, M2 da auditoria — antes ia o caminho inteiro,
+        com usuário, volume e árvore do acervo, enquanto a tela prometia
+        "nome da pasta") e ecoa esse nome na resposta; quem chama usa o
+        mapa para gravar e responder pela chave local de sempre."""
         candidatas_por_pasta = {c.pasta: c for c in self._candidatas_atuais()}
         confirmadas = [p for p in pastas if p in candidatas_por_pasta]
         if not confirmadas:
-            return []
+            return [], {}
+        # Calculado sobre TODAS as candidatas (não só as confirmadas), para
+        # sair idêntico ao que `candidatas()` mostrou ao dono.
+        curto_por_pasta = nomes_curtos_unicos(candidatas_por_pasta)
+        absoluta_por_curto = {curto_por_pasta[p]: p for p in confirmadas}
 
         # Uma consulta agregada para TODAS as pastas confirmadas — nunca
         # uma consulta por pasta (mesma disciplina de
@@ -222,19 +242,19 @@ class SessaoDeClassificacaoDePasta:
             if "cidade_pais" in c.campos_ausentes:
                 campos_a_preencher.extend(["cidade", "pais"])
             payloads.append(PastaPayload(
-                pasta=pasta,
+                pasta=curto_por_pasta[pasta],
                 n_fotos=c.n_fotos,
                 periodo=c.periodo,
                 campos_a_preencher=tuple(campos_a_preencher),
                 ja_conhecido=conhecidos_por_pasta.get(pasta, {}),
             ))
-        return payloads
+        return payloads, absoluta_por_curto
 
     # -- custo --------------------------------------------------------------
     def estimar_custo(self, pastas: list[str]) -> dict:
         if not self.liberado():
             raise RecursoDesligado(MENSAGEM_GATE_FECHADO)
-        payloads = self._payloads(pastas)
+        payloads, _ = self._payloads(pastas)
         if not payloads:
             # Sessão vazia: zero sem invocar o classificador (nem sequer
             # resolvê-lo) — não há nada a estimar.
@@ -288,7 +308,7 @@ class SessaoDeClassificacaoDePasta:
         if not self.liberado():
             raise RecursoDesligado(MENSAGEM_GATE_FECHADO)
 
-        payloads = self._payloads(pastas)
+        payloads, absoluta_por_curto = self._payloads(pastas)
         if not payloads:
             return {
                 "propostas": [],
@@ -307,10 +327,16 @@ class SessaoDeClassificacaoDePasta:
             log.warning("classificação de pasta falhou de forma inesperada: %s", exc)
             raise ClassificacaoIndisponivel(str(exc)) from exc
 
+        # A resposta ecoa o nome CURTO (o único que o modelo viu); daqui
+        # para baixo tudo volta à chave local. Nome que não estava no
+        # pedido é ignorado — `ClassificacaoDePastaClaude` já filtra isso,
+        # mas um classificador injetado pode não filtrar.
+        resultado = [p for p in resultado if p.pasta in absoluta_por_curto]
+
         sessao = datetime.now(timezone.utc).isoformat()
         propostas_para_gravar = [
             PropostaDePasta(
-                pasta=p.pasta, cidade=p.cidade, pais=p.pais,
+                pasta=absoluta_por_curto[p.pasta], cidade=p.cidade, pais=p.pais,
                 categoria=p.categoria, evento=p.evento,
                 justificativa=p.justificativa,
             )
@@ -321,15 +347,15 @@ class SessaoDeClassificacaoDePasta:
                 propostas_para_gravar, sessao=sessao
             )
 
-        pastas_pedidas = {p.pasta for p in payloads}
-        pastas_respondidas = {p.pasta for p in resultado}
+        pastas_pedidas = set(absoluta_por_curto.values())
+        pastas_respondidas = {absoluta_por_curto[p.pasta] for p in resultado}
         pastas_sem_resposta = sorted(pastas_pedidas - pastas_respondidas)
 
         propostas_achatadas = [
             linha
             for p in resultado
             for linha in _achatar_proposta(
-                p.pasta,
+                absoluta_por_curto[p.pasta],
                 {
                     "categoria": p.categoria, "cidade": p.cidade,
                     "pais": p.pais, "evento": p.evento,

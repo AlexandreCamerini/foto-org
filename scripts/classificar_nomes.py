@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import select  # noqa: E402
 
+from fotoorganizer.classification.pasta_curta import segmentos_uteis
 from fotoorganizer.classification.lexico import (  # noqa: E402
     CATEGORIAS,
     LexicoClaude,
@@ -75,7 +76,10 @@ def nomes_do_acervo(factory) -> set[str]:
             nome, _ = extrair_evento([pasta])
             if nome:
                 nomes.add(nome)
-            for segmento in pasta.split("/"):
+            # Só os segmentos do acervo: nome de usuário e de volume
+            # (`/Users/x`, `/Volumes/y`) nunca são nome de álbum e não
+            # podem sair da máquina (D-094).
+            for segmento in segmentos_uteis(pasta):
                 nivel, _data = separar_data(segmento)
                 nivel = (nivel or "").strip()
                 if nivel and nome_de_album(nivel):

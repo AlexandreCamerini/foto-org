@@ -487,7 +487,12 @@ export type CampoAusenteGenaiPasta = "categoria" | "cidade_pais";
 /** Uma pasta candidata do pré-filtro D-01: ao menos um dos dois campos
  *  (categoria OU cidade/país) está vazio. */
 export interface CandidataGenaiPasta {
+  /** Caminho absoluto — chave local; NUNCA sai da máquina. */
   pasta: string;
+  /** Exatamente o que vai no payload para o modelo: as duas últimas pastas
+   *  do caminho (mais uma quando duas candidatas colidem). É isto que a
+   *  lista mostra, para o dono ver o que consente. */
+  pasta_enviada: string;
   n_fotos: number;
   campos_ausentes: CampoAusenteGenaiPasta[];
   periodo: string | null;

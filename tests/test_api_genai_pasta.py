@@ -288,3 +288,122 @@ def test_rodar_com_cliente_que_falha_devolve_502_e_servidor_continua(
     # o processo continua respondendo normalmente.
     seguinte = client.get("/api/genai-pasta/config")
     assert seguinte.status_code == 200
+
+
+# -- D-094: nome curto sai, caminho absoluto fica ----------------------------
+
+class _ClassificadorQueRegistra(_ClassificadorFalso):
+    """Guarda o que RECEBEU — é isso que sai da máquina."""
+
+    def __init__(self, respostas=None) -> None:
+        super().__init__(respostas)
+        self.recebidas: list[str] = []
+
+    def classificar(self, pastas):
+        self.recebidas.extend(p.pasta for p in pastas)
+        return super().classificar(pastas)
+
+
+@pytest.fixture()
+def candidata_profunda(factory):
+    """Uma pasta com caminho absoluto de verdade — usuário, biblioteca,
+    árvore — como no acervo real."""
+    with factory() as session:
+        source = _fonte(session)
+        _arquivo(
+            session, source,
+            "/Users/eu/Pictures/Viagens/Peru 2023", "img_0.jpg",
+        )
+        session.commit()
+    return factory
+
+
+def test_modelo_recebe_nome_curto_e_api_responde_pelo_caminho_absoluto(
+    tmp_path, candidata_profunda,
+):
+    """M2 da auditoria: a tela prometia "nome da pasta", o payload levava
+    o caminho inteiro. Agora o classificador recebe só `Viagens/Peru 2023`
+    e tudo que volta para a UI/banco continua na chave local (absoluta)."""
+    absoluta = "/Users/eu/Pictures/Viagens/Peru 2023"
+    settings = _settings(tmp_path, servicos_externos=True)
+    SettingsRepository(candidata_profunda).definir_genai_pasta(True)
+    fake = _ClassificadorQueRegistra([PropostaDoModelo(
+        pasta="Viagens/Peru 2023", cidade="Cusco", pais="Peru",
+        categoria="Viagens", evento=None, justificativa="topônimo",
+    )])
+    client = _cliente(settings, candidata_profunda, classificador=fake)
+
+    candidatas = client.get("/api/genai-pasta/candidatas").json()
+    assert [c["pasta"] for c in candidatas] == [absoluta]
+    assert [c["pasta_enviada"] for c in candidatas] == ["Viagens/Peru 2023"]
+
+    resposta = client.post("/api/genai-pasta/rodar", json={"pastas": [absoluta]})
+    assert resposta.status_code == 200
+    # O que saiu da máquina: só o nome curto.
+    assert fake.recebidas == ["Viagens/Peru 2023"]
+    assert not any("/Users" in p for p in fake.recebidas)
+    # O que volta para a UI e para o banco: a chave local de sempre.
+    corpo = resposta.json()
+    assert {p["pasta"] for p in corpo["propostas"]} == {absoluta}
+    assert corpo["pastas_sem_resposta"] == []
+    pendentes = client.get("/api/genai-pasta/propostas").json()
+    assert {p["pasta"] for p in pendentes} == {absoluta}
+
+
+def test_resposta_com_nome_que_nao_foi_pedido_e_ignorada_e_conta_como_sem_resposta(
+    tmp_path, candidata_profunda,
+):
+    absoluta = "/Users/eu/Pictures/Viagens/Peru 2023"
+    settings = _settings(tmp_path, servicos_externos=True)
+    SettingsRepository(candidata_profunda).definir_genai_pasta(True)
+    fake = _ClassificadorQueRegistra([PropostaDoModelo(
+        pasta="Inventada", cidade="Paris", pais="França",
+        categoria=None, evento=None, justificativa="",
+    )])
+    client = _cliente(settings, candidata_profunda, classificador=fake)
+
+    corpo = client.post(
+        "/api/genai-pasta/rodar", json={"pastas": [absoluta]}
+    ).json()
+    assert corpo["propostas"] == []
+    assert corpo["pastas_sem_resposta"] == [absoluta]
+
+
+@pytest.fixture()
+def duas_candidatas_que_colidem(factory):
+    """As duas últimas pastas iguais em dois lugares diferentes do acervo
+    — o nome enviado precisa desempatar, senão a resposta do modelo iria
+    para a pasta errada."""
+    with factory() as session:
+        source = _fonte(session)
+        _arquivo(session, source, "/Users/eu/Pictures/2015/Fotos", "a.jpg")
+        _arquivo(session, source, "/Volumes/nas/Backup/2015/Fotos", "b.jpg")
+        session.commit()
+    return factory
+
+
+def test_colisao_de_nome_curto_desempata_e_casa_a_resposta_na_pasta_certa(
+    tmp_path, duas_candidatas_que_colidem,
+):
+    local = "/Users/eu/Pictures/2015/Fotos"
+    nas = "/Volumes/nas/Backup/2015/Fotos"
+    settings = _settings(tmp_path, servicos_externos=True)
+    SettingsRepository(duas_candidatas_que_colidem).definir_genai_pasta(True)
+    fake = _ClassificadorQueRegistra([PropostaDoModelo(
+        pasta="Backup/2015/Fotos", cidade=None, pais=None,
+        categoria="Família", evento=None, justificativa="",
+    )])
+    client = _cliente(settings, duas_candidatas_que_colidem, classificador=fake)
+
+    candidatas = client.get("/api/genai-pasta/candidatas").json()
+    enviadas = {c["pasta"]: c["pasta_enviada"] for c in candidatas}
+    assert enviadas == {local: "Pictures/2015/Fotos", nas: "Backup/2015/Fotos"}
+
+    corpo = client.post(
+        "/api/genai-pasta/rodar", json={"pastas": [local, nas]}
+    ).json()
+    assert sorted(fake.recebidas) == ["Backup/2015/Fotos", "Pictures/2015/Fotos"]
+    assert not any("/Users" in p or "/Volumes" in p for p in fake.recebidas)
+    # A proposta foi para a pasta do NAS, não para a local de mesmo nome.
+    assert {p["pasta"] for p in corpo["propostas"]} == {nas}
+    assert corpo["pastas_sem_resposta"] == [local]

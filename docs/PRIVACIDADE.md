@@ -5,8 +5,10 @@
 - **Advisor LLM (opcional, desligado por padrão).** Com
   `[privacidade] servicos_externos = true`, sessões que as regras locais
   não classificam podem ser consultadas na API da Anthropic — enviando
-  APENAS metadados (nomes de pastas/arquivos, datas, contagem, nomes de
-  lugares já resolvidos), nunca a imagem. A credencial vem do ambiente
+  APENAS metadados (nomes curtos de pasta — as duas últimas pastas do
+  caminho, nunca o caminho absoluto com usuário/volume —, nomes de
+  arquivos, datas, contagem, nomes de lugares já resolvidos), nunca a
+  imagem (D-094). A credencial vem do ambiente
   (Keychain/`ANTHROPIC_API_KEY`), jamais do código. Detalhes em
   docs/AGRUPAMENTO.md §3.
 - **Classificação de pasta por GenAI (opcional, desligada por padrão, dois
@@ -19,7 +21,13 @@
   estar ligados; um só não basta (a mesma disciplina de dois consentimentos
   que abriu esse recurso, para não repetir o gate de um flag só que
   `jobs.py::_advisor` usa para o Advisor de cluster).
-  - **O que sai da máquina, por pasta candidata:** nome da pasta, contagem de
+  - **O que sai da máquina, por pasta candidata:** o nome curto da pasta —
+    as duas últimas pastas do caminho (ex.: `Viagens/Peru 2023`), uma a mais
+    só quando duas candidatas colidem; é exatamente o texto que a lista de
+    candidatas mostra (`pasta_enviada`), e NUNCA o caminho absoluto, que
+    carrega nome de usuário, volume/NAS e a árvore do acervo (D-094; antes
+    desta decisão o caminho inteiro ia no payload enquanto a tela mostrava
+    o nome curto — M2 da auditoria de 2026-09-19) —, contagem de
     fotos, período (data mais antiga/mais recente), a lista dos campos a
     preencher e quais campos já estão preenchidos (`ja_conhecido`, para o
     modelo nunca reafirmar o que já se sabe). **Nenhuma imagem, byte de

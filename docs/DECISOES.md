@@ -4452,3 +4452,79 @@ inteiro passa a ser contado numa passada só
   `act()` síncrono) e continua `false` depois de um POST que falha (prova
   do `finally`). Suíte completa (194 vitest, `tsc -b` limpo) verde.
 - Status: decidido, implementado, testado, commitado.
+
+## D-094 — Caminho absoluto de pasta nunca sai da máquina: só o nome curto que a tela mostra
+
+- Fase: item 2 da análise de backlog de 2026-09-22 (M2 da auditoria de
+  2026-09-19, severidade média), aprovado pelo dono.
+- Achado: os dois envios à API da Anthropic levavam `MediaFile.pasta`
+  INTEIRO — `server/genai_pasta.py::_payloads` (classificação de pasta por
+  GenAI, `PastaPayload.pasta`) e `classification/engine.py::_consultar_advisor`
+  (advisor de cluster, `ClusterInfo.pastas`). Isso inclui nome de usuário
+  (`/Users/acamerini`), nome de volume/NAS (`/Volumes/photo`) e a árvore
+  inteira do acervo. Enquanto isso, `PRIVACIDADE.md`, o cabeçalho de
+  `location_advisor.py`, D-081 e a própria tela (`pastaCurta()` em
+  `ClassificacaoPasta.tsx`, que mostra só as duas últimas pastas)
+  prometiam "nome da pasta". O teste-prova
+  (`test_payload_nunca_envia_imagem`) não pegava porque monta o
+  `PastaPayload` à mão com um nome curto — o vazamento era na camada de
+  cima. Violação real do invariante 4 (minimização de dados), não só
+  documentação desatualizada. `lexico.py` (3º chamador) envia nomes de
+  segmento, não caminhos — mas `scripts/classificar_nomes.py` oferecia
+  CADA segmento do caminho absoluto ao filtro `nome_de_album`, e
+  "Externo"/"acamerini" passam nele (achado da revisão); corrigido para
+  iterar só `segmentos_uteis(pasta)`.
+- Decisão: um helper único, `classification/pasta_curta.py` —
+  `nome_curto(pasta)` = as duas últimas pastas do caminho, sem barra
+  inicial, o MESMO recorte de `pastaCurta()` na UI ("o que é mostrado é o
+  que é enviado"); `nomes_curtos_unicos(pastas)` desempata colisão
+  (`/a/2015/Fotos` × `/b/2015/Fotos`) com um segmento a mais só para quem
+  colide. Colisão importa porque a resposta do modelo é casada de volta
+  pelo nome enviado — sem desempate, uma proposta iria para a pasta
+  errada. Alternativa cogitada e descartada: caminho relativo à raiz da
+  fonte (mais contexto para o modelo, ex. `Viagens/2016 - Franca-Holanda/
+  Amsterdam`) — descartada porque a UI mostraria menos do que é enviado,
+  exatamente a classe de problema que M2 nomeia; e a cascata determinística
+  já consome a raiz de categoria (`Viagens/`) antes de a pasta virar
+  candidata de GenAI.
+- Implementação: `_payloads` devolve também `{curto: absoluto}` e `rodar()`
+  traduz a resposta de volta — banco (`pasta_classificacoes`), propostas e
+  `pastas_sem_resposta` continuam na chave local de sempre; nome ecoado que
+  não estava no pedido é ignorado. `candidatas()` calcula os nomes curtos
+  sobre a lista INTEIRA, o mesmo conjunto que `_payloads` usa, e devolve
+  `pasta_enviada` por candidata; a lista da UI passa a mostrar esse campo
+  (caminho absoluto só no tooltip). `scripts/medir_score_llm_pasta.py`
+  passa a montar o payload com o mesmo recorte (senão mediria uma entrada
+  que a produção não envia — o 0,55 preliminar de D-081 foi medido com o
+  caminho absoluto, isto é, com MAIS contexto do que o modelo vê agora;
+  remedir antes de travar o score).
+- Verificado: `test_pasta_curta.py` (recorte, sem usuário/volume, colisão,
+  caminho irredutível), `test_api_genai_pasta.py` (classificador injetado
+  recebe só `Viagens/Peru 2023`; candidatas/propostas/pendentes respondem
+  pelo absoluto; nome não pedido vira `pastas_sem_resposta`),
+  `test_suggestion_engine.py` (advisor de cluster nunca vê `/Users`),
+  termos `users/` e `volumes/` na lista de proibidos do teste-prova de
+  privacidade. Suítes Python e vitest completas verdes.
+- Revisão com olhos frescos (opus, diff isolado), incorporada antes do
+  commit: (1) caminho RASO vazava volume/usuário mesmo com o recorte —
+  `/Volumes/Externo/Estrada Real` (caso real, 2.624 fotos) virava
+  `Externo/Estrada Real`; agora `segmentos_uteis()` corta a raiz de
+  infraestrutura (`Users`/`Volumes`/`home`) e o segmento seguinte ANTES
+  do recorte. (2) No advisor de cluster a desambiguação escalava
+  segmentos à toa (cópia local + NAS da mesma foto caem no mesmo cluster
+  → subia até o caminho inteiro); lá não há resposta a casar, então usa
+  `nome_curto` direto. (3) Barra invertida é nome válido no macOS e eu a
+  normalizava como separador — fundia `Fotos\2016` com `Fotos/2016` numa
+  colisão inexistente; só `/` separa agora. (4) Colisão irredutível
+  (barra final, raiz de dois volumes) deixava a última pasta sobrescrever
+  a outra no mapa de volta; `nomes_curtos_unicos` agora garante
+  injetividade com sufixo ` (2)`. (5) `scripts/medir_qualidade_advisor.py`
+  ainda montava `ClusterInfo.pastas` absoluto — corrigido. (6) Os
+  proibidos `/users/` nunca casariam (nome curto não começa com barra) —
+  virou `users/`. Aceito sem correção: a revisão do passo 4 da UI ainda
+  usa `pastaCurta(absoluto)` com `…/` (duas colisões aparecem iguais lá —
+  é tela pós-chamada, nada sai da máquina por ela); e a garantia "mostrado
+  = enviado" depende de dois snapshots (candidatas no passo 1, payload no
+  rodar) — uma candidata nova que colida no intervalo faz sair um segmento
+  a mais do que o dono viu, sem quebrar o casamento de volta.
+- Status: decidido, implementado, testado, commitado.

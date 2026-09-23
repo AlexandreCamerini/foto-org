@@ -838,10 +838,12 @@ def test_advisor_llm_apoia_sessao_neutra(migrated_engine):
     advisor = FakeAdvisor()
     SuggestionEngine(factory, advisor=advisor).gerar()
 
-    # Só metadados foram oferecidos ao advisor.
+    # Só metadados foram oferecidos ao advisor — e a pasta vai como nome
+    # curto (últimos dois segmentos, sem a barra inicial), nunca o
+    # caminho absoluto (M2/D-094).
     (cluster,) = advisor.clusters
     assert cluster.n_fotos == 3
-    assert cluster.pastas == ("/fotos/2025_05_24",)
+    assert cluster.pastas == ("fotos/2025_05_24",)
 
     sugestao, evidencias = _sugestao_de(factory, "luau_0.jpg")
     evento = next(e for e in evidencias if e.campo == "evento")
@@ -1897,3 +1899,46 @@ def test_data_no_nome_manda_na_linha_do_tempo_nao_o_mtime(migrated_engine):
         de_2024 = sessao_da_media.get(next(m.id for m in midias if m.nome == "IMG_9.jpg"))
         assert len(de_2015) == 1 and (de_2024 is None or id(de_2024) not in de_2015)
         assert sessao_da_media[zap[0].id].draft.inicio.year == 2015
+
+
+def test_advisor_de_cluster_nunca_recebe_caminho_absoluto(migrated_engine):
+    """M2/D-094: o advisor de cluster recebia `MediaFile.pasta` inteiro —
+    usuário, biblioteca, árvore do acervo — enquanto PRIVACIDADE.md
+    prometia "nomes de pastas". Agora só o nome curto (dois segmentos)."""
+    from fotoorganizer.classification.advisor import AdvisorResult, ClusterInfo
+
+    class FakeAdvisor:
+        def __init__(self):
+            self.clusters: list[ClusterInfo] = []
+
+        @property
+        def local(self):
+            return False
+
+        def classificar(self, cluster):
+            self.clusters.append(cluster)
+            return AdvisorResult(categoria=None, evento=None, justificativa="")
+
+    factory = create_session_factory(migrated_engine)
+    base = datetime(2025, 5, 24, 14, 0)
+    with factory() as session:
+        fonte = Source(caminho="/Users/eu/Pictures")
+        session.add(fonte)
+        session.flush()
+        # Nome de pasta NEUTRO de propósito ("luau"/"aniversário" seriam
+        # palavra-chave de evento e a cascata decidiria antes de consultar
+        # o advisor — aí não haveria payload nenhum para inspecionar).
+        for i in range(3):
+            session.add(_media(
+                fonte.id, f"img_{i}.jpg",
+                "/Users/eu/Pictures/Fotos/2025_05_24",
+                data=base + timedelta(minutes=10 * i),
+            ))
+        session.commit()
+
+    advisor = FakeAdvisor()
+    SuggestionEngine(factory, advisor=advisor).gerar()
+
+    (cluster,) = advisor.clusters
+    assert cluster.pastas == ("Fotos/2025_05_24",)
+    assert not any("/Users" in p or "Pictures" in p for p in cluster.pastas)
