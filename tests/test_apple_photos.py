@@ -140,7 +140,14 @@ def test_video_entra_junto_com_a_foto(tmp_path, monkeypatch):
 
     O teste fixa o CONTRATO com o osxphotos (qual argumento é pedido), que é
     exatamente o que a regressão trocou."""
-    import osxphotos  # noqa: F401  (pulado abaixo se ausente)
+    # O comentário antigo aqui ("pulado abaixo se ausente") prometia um
+    # skip que nunca existiu — sem osxphotos instalado (extra opcional
+    # "apple", ausente em CI e em toda instalação sem --llm/--apple), o
+    # `import` cru vira ModuleNotFoundError e o teste é reportado como
+    # FALHA, não pulado. Achado ao rodar a suíte num venv limpo só com
+    # `[dev]` (D-096) — mesmo padrão de guarda de
+    # `test_biblioteca_inacessivel_da_erro_claro`, acima.
+    pytest.importorskip("osxphotos", reason="precisa do extra opcional [apple]")
 
     pedidos = {}
 

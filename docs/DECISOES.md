@@ -4622,3 +4622,60 @@ inteiro passa a ser contado numa passada só
   precisaria do mesmo membro novo e a tela de Operações tem mapa de cores
   por status.
 - Status: decidido, implementado, testado, commitado.
+
+## D-096 — CI mínimo: GitHub Actions roda `scripts/verificar.sh` com exiftool
+
+- Fase: item 4 (último) da análise de backlog de 2026-09-22 (M6 de
+  `docs/reconstrucao/08-ERROS_CONHECIDOS.md`), aprovado pelo dono depois de
+  D-093/D-094/D-095.
+- Achado: sem `.github/workflows`, todo teste marcado `@tem_exiftool`
+  (`skipif(not ExifToolExtractor.disponivel())` — `test_exif_write_executor.py`,
+  `test_exif_write_writer.py`, `test_exif_write_cancelamento.py`,
+  `test_exiftool_extractor.py`) passava verde sem executar em qualquer
+  ambiente sem o binário — inclusive o caminho mais perigoso do projeto
+  (escrita real em arquivo, D-075). Rodar `scripts/verificar.sh` era 100%
+  manual, disciplina do dono, sem rede de segurança em push/PR.
+- Correção: `.github/workflows/ci.yml`, um job só (`ubuntu-latest`,
+  Python 3.12, Node 20), `apt-get install libimage-exiftool-perl`,
+  `.venv` criado do zero com `pip install -e ".[dev]"` (mesmo contrato de
+  `scripts/instalar.sh` — CI e local nunca divergem sobre o que
+  `verificar.sh` espera encontrar), `npm ci` em `webapp/`, e então
+  `scripts/verificar.sh` sem `--rapido` (a UI é o entregável — build e
+  vitest quebrados são fatia quebrada, não só o motor Python). `ubuntu`
+  em vez de `macos`: a suíte não tem nada específico de macOS (osxphotos
+  é lazy-import, gated por `pytest.importorskip`), e o runner Linux é uma
+  fração do custo/tempo de minutos do runner macOS hospedado.
+- Achado colateral (só apareceu rodando a suíte num venv limpo com
+  `[dev]`, sem o extra opcional `[apple]` — exatamente o ambiente que o
+  CI cria): `test_video_entra_junto_com_a_foto`
+  (`tests/test_apple_photos.py`) fazia `import osxphotos` cru, com um
+  comentário prometendo "pulado abaixo se ausente" que nunca existiu —
+  sem o pacote instalado, `ModuleNotFoundError` virava FALHA, não skip.
+  Todo dev local que já tinha `osxphotos` (via `--llm`/`--apple` alguma
+  vez) nunca via isso. Corrigido com o mesmo `pytest.importorskip` que o
+  teste vizinho (`test_biblioteca_inacessivel_da_erro_claro`) já usava —
+  sem isso, o primeiro run do CI nasceria vermelho por um motivo alheio
+  ao objetivo da fatia.
+- Verificado: `pip install -e ".[dev]"` e a suíte completa (1156 passed +
+  2 skipped de 1158 coletados) rodados de ponta a ponta num venv novo,
+  isolado do `.venv` do projeto (que já tinha `osxphotos`/`anthropic`
+  instalados e mascararia o achado colateral); os mesmos 2 testes
+  voltaram a rodar de verdade (não skip) quando reexecutados no `.venv`
+  real, com `osxphotos` presente (1158 passed/0 skipped) — a guarda não
+  esconde o caminho feliz. `scripts/verificar.sh` completo (sem
+  `--rapido`) local: 1158 pytest + 195 vitest + build, verde.
+- Fora desta fatia, registrado: `rawpy`/`pillow-heif` resolvem limpo em
+  wheel macOS/arm64 nesta verificação; o CI real em `ubuntu-latest`
+  (manylinux) é a prova definitiva, só disponível depois do primeiro push
+  — risco considerado baixo (pacotes maduros, wheels manylinux
+  publicadas). Risco mais direto e já auto-documentado pelo projeto
+  (`docs/reconstrucao/07-INTEGRACOES.md`): todo o comportamento fino de
+  escrita EXIF (`writer.py`/`verificacao.py`, grupo `-GPS:` explícito,
+  `writable='false'` do XMP em sidecar, exit code que mente em falha
+  parcial) foi verificado só contra o exiftool 13.55 (Homebrew local); o
+  `libimage-exiftool-perl` do Ubuntu 24.04/`ubuntu-latest` é 12.76 —
+  quase um ano mais velho. Os testes `@tem_exiftool` rodam pela primeira
+  vez contra essa versão só depois do primeiro push; se vier vermelho,
+  isolar se é regressão real ou skew de versão antes de mexer no código.
+- Status: decidido, implementado, testado localmente, aguardando o
+  primeiro push para confirmação no GitHub Actions.

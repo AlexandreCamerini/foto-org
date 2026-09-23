@@ -1,0 +1,63 @@
+name: CI
+
+# CI mínimo (M6 da auditoria de 2026-09-19, D-096): sem isto, todo teste
+# marcado `skipif` na ausência de exiftool passava verde sem executar nada
+# — inclusive a suíte inteira de escrita EXIF (fase 6). Este workflow só
+# roda `scripts/verificar.sh`, o mesmo script que qualquer fatia local
+# roda antes de commitar (docs/METODO_DE_TRABALHO.md): um caminho só,
+# local e CI nunca divergem sobre o que é "verde".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Um run em voo por branch/PR é o bastante — um push novo cancela o
+# anterior em vez de gastar minutos em algo já obsoleto.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      # Sem isto, toda escrita/verificação de EXIF (fase 6) é pulada em
+      # silêncio (`@tem_exiftool` = skipif) — exatamente o que M6 aponta.
+      - name: Instalar exiftool
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+
+      # `scripts/verificar.sh` exige `.venv/bin/python` — mesmo contrato
+      # que `scripts/instalar.sh` usa localmente.
+      - name: Criar venv e instalar dependências Python
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Instalar dependências do webapp
+        working-directory: webapp
+        run: npm ci
+
+      # Testes do motor + benchmark de agrupamento + testes/build do
+      # webapp — os mesmos 4 passos de uma fatia local (sem --rapido: a
+      # UI é o entregável, build quebrado é fatia quebrada).
+      - name: scripts/verificar.sh
+        run: scripts/verificar.sh
