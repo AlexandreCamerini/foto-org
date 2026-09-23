@@ -808,3 +808,102 @@ def test_motivo_extensao_desconhecida_nunca_e_none():
 
 def test_caminho_sidecar_convencao_foto_ext_xmp():
     assert caminho_sidecar(Path("/a/foto.CR3")) == Path("/a/foto.CR3.xmp")
+
+
+# -- D-095: timeout da escrita -----------------------------------------------
+
+def test_escrever_mata_o_exiftool_que_nao_responde(tmp_path):
+    """Não precisa do exiftool: um "binário" que só dorme prova o teto. A
+    escrita levanta `TimeoutExpired` (o filho já morto) em vez de segurar
+    o job para sempre — B13 da auditoria: um NAS que sumiu no meio da
+    escrita travava o plano inteiro sem sinal nenhum."""
+    import subprocess
+    import time
+
+    dorminhoco = tmp_path / "exiftool-dorminhoco.sh"
+    dorminhoco.write_text("#!/bin/sh\nsleep 5\n")
+    dorminhoco.chmod(0o755)
+    alvo = tmp_path / "foto.jpg"
+    alvo.write_bytes(b"nao importa")
+
+    writer = ExifToolWriter(binario=str(dorminhoco))
+    inicio = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        writer.escrever(alvo, {"pais": "Brasil"}, timeout=0.3)
+    assert time.monotonic() - inicio < 3  # não esperou os 5 s do sleep
+
+
+def test_timeout_padrao_e_generoso_mas_finito():
+    from fotoorganizer.exif_write.writer import TIMEOUT_ESCRITA_S
+
+    # Um RAW grande num NAS leva segundos; um volume que sumiu não pode
+    # levar para sempre.
+    assert 30 <= TIMEOUT_ESCRITA_S <= 600
+
+
+def _binario_falso(tmp_path, nome: str, corpo: str):
+    script = tmp_path / nome
+    script.write_text("#!/bin/sh\n" + corpo)
+    script.chmod(0o755)
+    return script
+
+
+def test_timeout_manda_sigint_antes_de_matar_para_o_exiftool_limpar(tmp_path):
+    """`subprocess.run(timeout=)` mata com SIGKILL, que pula o handler de
+    SIGINT do exiftool — quem apaga o temporário `<alvo>_exiftool_tmp`. Um
+    temporário deixado para trás bloqueia TODA escrita futura no arquivo
+    ("Temporary file already exists"). Este "exiftool" cria o temporário e
+    só o remove se receber SIGINT: depois do timeout ele tem que ter sumido."""
+    import subprocess
+
+    alvo = tmp_path / "foto.jpg"
+    alvo.write_bytes(b"x")
+    # O último argumento é o alvo; o temporário é `<alvo>_exiftool_tmp`.
+    exiftool = _binario_falso(tmp_path, "exiftool-que-limpa.sh", r'''
+for ultimo; do :; done
+tmp="${ultimo}_exiftool_tmp"
+trap 'rm -f "$tmp"; exit 1' INT
+: > "$tmp"
+sleep 5
+''')
+    temporario = Path(str(alvo) + "_exiftool_tmp")
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        ExifToolWriter(binario=str(exiftool)).escrever(
+            alvo, {"pais": "Brasil"}, timeout=0.3, folga_sigint=2.0,
+        )
+    assert not temporario.exists()  # o SIGINT chegou e o handler limpou
+
+
+def test_timeout_escala_para_kill_quando_o_sigint_e_ignorado(tmp_path):
+    import subprocess
+    import time
+
+    alvo = tmp_path / "foto.jpg"
+    alvo.write_bytes(b"x")
+    teimoso = _binario_falso(tmp_path, "exiftool-teimoso.sh", "trap '' INT\nsleep 10\n")
+
+    inicio = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        ExifToolWriter(binario=str(teimoso)).escrever(
+            alvo, {"pais": "Brasil"}, timeout=0.3, folga_sigint=0.3,
+        )
+    assert time.monotonic() - inicio < 3  # não esperou os 10 s: SIGKILL entrou
+
+
+def test_escrever_usa_o_timeout_padrao_quando_nao_recebe_um(tmp_path, monkeypatch):
+    from fotoorganizer.exif_write import writer as modulo
+    from fotoorganizer.exif_write.writer import TIMEOUT_ESCRITA_S
+
+    visto = {}
+
+    def _executar_espiao(args, timeout, folga_sigint):
+        visto["timeout"] = timeout
+        import subprocess
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(modulo, "_executar", _executar_espiao)
+    ExifToolWriter(binario="exiftool-nao-roda").escrever(
+        tmp_path / "foto.jpg", {"pais": "Brasil"},
+    )
+    assert visto["timeout"] == TIMEOUT_ESCRITA_S

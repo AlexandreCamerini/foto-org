@@ -4528,3 +4528,97 @@ inteiro passa a ser contado numa passada só
   rodar) — uma candidata nova que colida no intervalo faz sair um segmento
   a mais do que o dono viu, sem quebrar o casamento de volta.
 - Status: decidido, implementado, testado, commitado.
+
+## D-095 — Timeout na escrita EXIF e plano de escrita órfão reconciliado no boot
+
+- Fase: item 3 da análise de backlog de 2026-09-22 (B13 e item 10 de
+  `docs/reconstrucao/09-MELHORIAS.md`, auditoria de 2026-09-19), aprovado
+  pelo dono.
+- Achado 1: `ExifToolWriter.escrever()` chamava `subprocess.run` sem
+  `timeout`. O exiftool reescreve o arquivo inteiro; num NAS via SMB que
+  some no meio da escrita (caso real do acervo: `/Volumes/photo` é
+  smbfs), o processo ficava pendurado e o job de escrita inteiro com ele —
+  sem sinal nenhum na UI, sem como cancelar (o cancelamento é cooperativo
+  entre itens). O leitor (`verificacao.py`) já tinha 30 s.
+- Achado 2, descoberto ao corrigir o 1: `subprocess.TimeoutExpired` NÃO é
+  `OSError`. Só adicionar o timeout faria a exceção atravessar
+  `_executar_item` (que só capturava `OSError`), derrubar `executar()` e
+  deixar o plano preso em EXECUTANDO — exatamente o órfão do achado 3.
+- Achado 3: só o fim feliz, o cancelamento ou o erro escrevem o status
+  final do plano. App fechado ou Mac desligado no meio deixava o plano
+  EXECUTANDO para sempre e a tela mentindo sobre trabalho em curso — o
+  scan já tinha reconciliação no boot (`scanner.reconciliar_orfas` →
+  INTERROMPIDO); a escrita EXIF não.
+- Decisão: (1) `TIMEOUT_ESCRITA_S = 120` no writer (RAW de dezenas de MB
+  em SMB leva segundos; um volume que sumiu não pode levar para sempre),
+  parâmetro `timeout` em `escrever()`. (2) No executor, `TimeoutExpired`
+  é capturado NO ITEM: campos tentados viram FALHA com motivo "exiftool
+  não respondeu em Ns e foi encerrado", `hash_pos` é medido e o item diz
+  se o original está "intacto" ou "ALTERADO", aponta o `_original` e o
+  `_exiftool_tmp` que o exiftool tenha deixado — e não apaga NADA
+  (invariante 8: quem restaura é o dono). Auditoria `resultado="timeout"`
+  com `original_alterado`, `backup`, `temporario`. O plano segue para o
+  próximo item e fecha em ERRO. `except OSError` do item vira
+  `except (OSError, SubprocessError)`. (3) `ExifWriteStatus.INTERROMPIDA`
+  novo; `exif_write/reconciliacao.py::reconciliar_planos_orfaos` carimba
+  todo EXECUTANDO no boot (hook de startup em `server/app.py`, ao lado
+  do de scan) com auditoria `execucao_exif_interrompida` e
+  `itens_restantes`. Rerodar retoma: a execução já reconfere ao vivo,
+  item a item, o que está gravado. Migração 0023 alarga o
+  `Enum(native_enum=False)` da coluna `status` (o nome mais longo era
+  EXECUTANDO, 10; INTERROMPIDA tem 12 — SQLite não impõe, mas o schema
+  declarado ficaria mentindo e um Postgres futuro recusaria); downgrade
+  converte INTERROMPIDA→ERRO antes de estreitar.
+- Verificado: writer com "binário" que só dorme (`sleep 5`, timeout 0,3
+  s → `TimeoutExpired` em < 3 s, sem exiftool); executor com dublê que
+  estoura só para `limpa.jpg` — o outro item do plano é gravado
+  normalmente (prova que o plano CONTINUA), original intacto sem backup
+  sobrando, plano em ERRO (não EXECUTANDO), auditoria `timeout`; pior
+  caso simulado (escrita real acontece e SÓ ENTÃO o processo é dado como
+  travado): item diz "original ALTERADO", `backup_original` aponta o
+  `_original`, que continua no disco; reconciliação unitária
+  (EXECUTANDO→INTERROMPIDA, idempotente, plano concluído não é tocado,
+  auditoria com `itens_restantes` correto) e no boot real via TestClient
+  (API devolve `"interrompida"` e `executavel: true` — o botão Gravar
+  continua liberado para retomar). Suíte completa: 1121 Python, mesmos
+  artefatos de sandbox de sempre.
+- Revisão com olhos frescos (opus, diff isolado; scripts de reprodução
+  contra o exiftool real), incorporada antes do commit: (1) `run(timeout=)`
+  mata com SIGKILL, que pula o handler de SIGINT do próprio exiftool — quem
+  apaga o `<alvo>_exiftool_tmp`. O temporário parcial deixado bloqueia
+  TODA escrita futura naquele arquivo ("Temporary file already exists") e
+  o item passaria a falhar para sempre como "valor rejeitado" sem dizer
+  por quê; no sidecar sobra um `.xmp` truncado que vira "já existe" em
+  todo dry-run seguinte. Correção: `Popen` + `communicate(timeout)` →
+  SIGINT → folga de 5 s → SIGKILL (`writer._executar`); no executor, o
+  temporário e o sidecar parcial que comprovadamente nasceram DESTA
+  escrita (temporário: não existia antes; sidecar: a guarda do topo já
+  recusaria se existisse) são removidos — nunca o original nem o
+  `_original`; e o `stderr` do exiftool entra na auditoria das falhas.
+  (2) Morto entre os dois renames, o alvo não existe e o item dizia
+  "original intacto" (hash não lido → `alterado=False`) — fato falso na
+  auditoria (invariante 3). Agora quatro estados: intacto / alterado /
+  AUSENTE (com instrução de restaurar do `_original`) / não conferido.
+  (3) `verificacao.dump` devolve `{}` em falha/timeout de leitura e a
+  reconferência ao vivo lia isso como "tudo vazio" — escrevia por cima de
+  campo preenchido (a verificação pegava, com backup, mas era uma escrita
+  a mais no original). Guarda nova: `{}` em arquivo existente é "não
+  conferido — nada gravado". (4) A reconciliação no boot passa a apontar
+  o item que estava em voo (determinístico: primeiro pendente por id) e
+  os `_original`/temporário que ficaram ao lado dele — a retomada veria o
+  campo "já preenchido" e pularia sem nunca apontar o backup órfão.
+  (5) Mutantes que sobreviviam ganharam teste: `except` sem
+  `SubprocessError`, timeout padrão não passado, migração 0023 ausente
+  ou sem o `UPDATE` do downgrade. Aceito sem correção, registrado: dois
+  servidores no mesmo catálogo (o `launch.json` tem cinco entradas) fazem
+  o segundo carimbar INTERROMPIDA num plano vivo no primeiro — o mesmo
+  furo do precedente do scan; correção é lock de instância no catálogo,
+  decisão separada. E depois do `kill()`, `wait()` sem teto: um filho preso
+  em I/O não interrompível num SMB pendurado não morre — limite do SO, não
+  do app.
+- Fora desta fatia, mesma família: `operations/executor.py` (cópia física)
+  tem o MESMO órfão EXECUTANDO sem reconciliação no boot (D-069 Tier 3,
+  item 6 de 09-MELHORIAS) — decisão separada, porque `OperationStatus`
+  precisaria do mesmo membro novo e a tela de Operações tem mapa de cores
+  por status.
+- Status: decidido, implementado, testado, commitado.

@@ -18,11 +18,65 @@ empiricamente que `exiftool -GPSLatitude=999 -GPSLatitudeRef=S <arquivo>`
 from __future__ import annotations
 
 import math
+import os
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 
 _TAMANHO_MAXIMO_TEXTO = 200
+
+# Teto por escrita. O exiftool reescreve o arquivo inteiro (não edita no
+# lugar), então um RAW de dezenas de MB num NAS via SMB leva segundos, não
+# milissegundos — 120 s cobre isso com folga e ainda impede que um volume
+# que sumiu no meio da escrita segure o job para sempre (B13 da auditoria
+# de 2026-09-19; o leitor em `verificacao.py` já tinha 30 s). Ao estourar,
+# o exiftool recebe SIGINT e, se não obedecer, SIGKILL — ver `_executar`.
+# Quem decide o que fazer com o `_original` é o executor.
+TIMEOUT_ESCRITA_S = 120.0
+# Quanto esperar o exiftool limpar depois do SIGINT antes do SIGKILL.
+FOLGA_SIGINT_S = 5.0
+
+
+def _executar(args: list[str], timeout: float, folga_sigint: float) -> subprocess.CompletedProcess:
+    """`subprocess.run` com um detalhe que importa aqui: no timeout, SIGINT
+    ANTES de SIGKILL.
+
+    `run(timeout=)` mata com SIGKILL, que pula o handler de SIGINT do
+    próprio exiftool — é ele quem apaga o temporário `<alvo>_exiftool_tmp`
+    (achado da revisão de D-095, verificado contra o exiftool real: SIGKILL
+    e SIGTERM deixam o temporário; SIGINT sai com rc 1 e o remove). Um
+    temporário deixado para trás bloqueia TODA escrita futura naquele
+    arquivo ("Temporary file already exists") — o item passaria a falhar
+    para sempre com um motivo que não diz isso.
+    """
+    # Sessão própria: os sinais vão para o GRUPO, não só para o pid. Se o
+    # binário for um wrapper que delega a um filho (ou se um dia o exiftool
+    # tiver filho), sinalizar só o pai deixaria o neto vivo segurando os
+    # pipes herdados — e `communicate()` depois do kill ficaria preso até
+    # ele morrer sozinho (medido: 10 s num dublê com `sh` + `sleep`).
+    proc = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        start_new_session=True,
+    )
+
+    def sinalizar(sig: signal.Signals) -> None:
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            pass  # já morreu entre o timeout e o sinal
+
+    try:
+        saida, erro = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        sinalizar(signal.SIGINT)
+        try:
+            saida, erro = proc.communicate(timeout=folga_sigint)
+        except subprocess.TimeoutExpired:
+            sinalizar(signal.SIGKILL)
+            saida, erro = proc.communicate()
+        raise subprocess.TimeoutExpired(args, timeout, output=saida, stderr=erro)
+    return subprocess.CompletedProcess(args, proc.returncode, saida, erro)
 
 
 class ValorInvalido(ValueError):
@@ -81,8 +135,14 @@ class ExifToolWriter:
 
     def escrever(
         self, origem: Path, campos: dict, destino: Path | None = None,
+        timeout: float = TIMEOUT_ESCRITA_S, folga_sigint: float = FOLGA_SIGINT_S,
     ) -> subprocess.CompletedProcess:
         """Grava `campos` em `destino` (ou em `origem`, escrita direta).
+
+        Levanta `subprocess.TimeoutExpired` (o processo já encerrado — por
+        SIGINT, ou SIGKILL se não obedeceu em `folga_sigint`) quando o
+        exiftool passa de `timeout` segundos — nunca devolve um
+        `CompletedProcess` de uma escrita que não terminou.
 
         Sem `-overwrite_original`: o backup `_original` que o exiftool cria
         por padrão é a cópia literal de recuperação durante a janela entre
@@ -166,4 +226,4 @@ class ExifToolWriter:
             args.append(f"-XMP:Country={campos['pais']}")
 
         args += ["-charset", "filename=utf8", str(alvo)]
-        return subprocess.run(args, capture_output=True, text=True, check=False)
+        return _executar(args, timeout, folga_sigint)

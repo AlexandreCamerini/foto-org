@@ -672,3 +672,270 @@ def test_executar_nao_regride_por_deslocamento_de_offset(ambiente):
         assert item.status_cidade == CampoStatus.GRAVADO
         assert item.status_pais == CampoStatus.GRAVADO
         assert item.erro is None
+
+
+# -- D-095: timeout do exiftool fica no item, nunca derruba o plano -----------
+
+@tem_exiftool
+def test_timeout_do_exiftool_reprova_o_item_e_o_plano_segue(ambiente, monkeypatch):
+    """`TimeoutExpired` não é `OSError`: antes atravessava o item, derrubava
+    `executar()` e deixava o plano preso em EXECUTANDO (o órfão que o boot
+    reconcilia). Agora: campos tentados viram FALHA com motivo claro, o
+    original é medido (intacto aqui — nada chegou a rodar), o plano fecha
+    em ERRO e a auditoria registra `timeout`."""
+    import subprocess
+
+    from fotoorganizer.models import ExifWritePlan, ExifWriteStatus
+
+    factory, executor, origem_dir, plan_id = ambiente
+    executor.dry_run(plan_id)
+    alvo = origem_dir / "limpa.jpg"
+    hash_antes = sha256_full(alvo)
+
+    original_escrever = ExifToolWriter.escrever
+
+    # Só `limpa.jpg` trava; `preenchida.jpg` (cidade/país ainda por gravar)
+    # segue o caminho real — prova que o plano CONTINUA depois do timeout.
+    def escrever_que_trava(self, origem, campos, destino=None, timeout=None):
+        if not str(origem).endswith("limpa.jpg"):
+            return original_escrever(self, origem, campos, destino)
+        raise subprocess.TimeoutExpired(cmd=["exiftool", str(origem)], timeout=120)
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", escrever_que_trava)
+
+    stats = executor.executar(plan_id)
+
+    assert stats["erros"] == 1
+    assert stats["gravados"] == 1  # o outro item foi gravado normalmente
+    assert sha256_full(alvo) == hash_antes  # nada tocado — nem backup sobrou
+    assert not ExifToolWriter.caminho_backup(alvo).exists()
+
+    with factory() as session:
+        plano = session.get(ExifWritePlan, plan_id)
+        assert plano.status == ExifWriteStatus.ERRO  # NÃO ficou em EXECUTANDO
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.origem.endswith("limpa.jpg"))
+        )
+        assert item.status_gps == CampoStatus.FALHA
+        assert item.status_pais == CampoStatus.FALHA
+        assert "não respondeu em 120s" in item.motivo_gps
+        assert "original intacto" in item.erro
+        assert item.backup_original is None
+        auditoria = session.scalar(
+            select(AuditLog).where(AuditLog.resultado == "timeout")
+        )
+        assert auditoria is not None
+        assert auditoria.detalhe["timeout_s"] == 120
+        assert auditoria.detalhe["original"] == "intacto"
+
+
+@tem_exiftool
+def test_timeout_com_original_ja_trocado_aponta_o_backup(ambiente, monkeypatch):
+    """Morto entre os dois renames do exiftool, o alvo já é a versão nova e
+    o `_original` é o único intacto: o item precisa dizer isso e apontar o
+    backup — sem apagar nada (invariante 8)."""
+    import subprocess
+
+    factory, executor, origem_dir, plan_id = ambiente
+    executor.dry_run(plan_id)
+    alvo = origem_dir / "limpa.jpg"
+
+    original_escrever = ExifToolWriter.escrever
+
+    def escreve_e_depois_estoura(self, origem, campos, destino=None, timeout=None):
+        # Simula o pior caso: a escrita real aconteceu (arquivo trocado,
+        # backup ao lado) e SÓ ENTÃO o processo foi dado como travado.
+        resultado = original_escrever(self, origem, campos, destino)
+        if not str(origem).endswith("limpa.jpg"):
+            return resultado
+        raise subprocess.TimeoutExpired(cmd=["exiftool"], timeout=120)
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", escreve_e_depois_estoura)
+
+    stats = executor.executar(plan_id)
+
+    assert stats["erros"] == 1
+    backup = ExifToolWriter.caminho_backup(alvo)
+    assert backup.exists()  # nunca apagado numa falha
+    with factory() as session:
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.origem.endswith("limpa.jpg"))
+        )
+        assert "original ALTERADO" in item.erro
+        assert item.backup_original == str(backup)
+        assert item.hash_pos != item.hash_pre
+
+
+@tem_exiftool
+def test_erro_generico_do_subprocesso_fica_no_item(ambiente, monkeypatch):
+    """`SubprocessError` que não é timeout (ex.: o wrapper falhou ao subir
+    o processo) — também não é `OSError`, também não pode derrubar o plano."""
+    import subprocess
+
+    from fotoorganizer.models import ExifWritePlan, ExifWriteStatus
+
+    factory, executor, origem_dir, plan_id = ambiente
+    executor.dry_run(plan_id)
+    original_escrever = ExifToolWriter.escrever
+
+    def estoura(self, origem, campos, destino=None, timeout=None, folga_sigint=None):
+        if not str(origem).endswith("limpa.jpg"):
+            return original_escrever(self, origem, campos, destino)
+        raise subprocess.SubprocessError("falha genérica do subprocesso")
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", estoura)
+    stats = executor.executar(plan_id)
+
+    assert stats["erros"] == 1 and stats["gravados"] == 1
+    with factory() as session:
+        assert session.get(ExifWritePlan, plan_id).status == ExifWriteStatus.ERRO
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.origem.endswith("limpa.jpg"))
+        )
+        assert "falha genérica" in item.erro
+
+
+@tem_exiftool
+def test_timeout_com_original_ausente_diz_ausente_nao_intacto(ambiente, monkeypatch):
+    """Morto entre os dois renames do exiftool: só `_original` e o
+    temporário existem, o alvo sumiu do caminho. Dizer "intacto" aqui
+    seria registrar um fato falso (invariante 3). O temporário parcial,
+    criado por esta mesma escrita, é removido — senão bloquearia toda
+    escrita futura; o `_original` fica."""
+    import shutil
+    import subprocess
+
+    factory, executor, origem_dir, plan_id = ambiente
+    executor.dry_run(plan_id)
+    alvo = origem_dir / "limpa.jpg"
+    backup = ExifToolWriter.caminho_backup(alvo)
+    temporario = Path(str(alvo) + "_exiftool_tmp")
+    original_escrever = ExifToolWriter.escrever
+
+    def morre_entre_os_renames(self, origem, campos, destino=None, timeout=None, folga_sigint=None):
+        if not str(origem).endswith("limpa.jpg"):
+            return original_escrever(self, origem, campos, destino)
+        shutil.copy(origem, temporario)      # temporário "pronto"
+        origem.rename(backup)                # 1º rename feito, 2º não
+        raise subprocess.TimeoutExpired(cmd=["exiftool"], timeout=120)
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", morre_entre_os_renames)
+    stats = executor.executar(plan_id)
+
+    assert stats["erros"] == 1
+    assert not alvo.exists()
+    assert backup.exists()          # nunca apagado
+    assert not temporario.exists()  # parcial desta escrita: removido
+    with factory() as session:
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.origem.endswith("limpa.jpg"))
+        )
+        assert "original AUSENTE" in item.erro
+        assert "temporário parcial" in item.erro and "removido" in item.erro
+        assert item.backup_original == str(backup)
+        auditoria = session.scalar(select(AuditLog).where(AuditLog.resultado == "timeout"))
+        assert auditoria.detalhe["original"] == "ausente"
+        assert auditoria.detalhe["temporario_removido"] == str(temporario)
+
+
+@tem_exiftool
+def test_temporario_que_ja_existia_antes_nao_e_removido_no_timeout(ambiente, monkeypatch):
+    import subprocess
+
+    factory, executor, origem_dir, plan_id = ambiente
+    executor.dry_run(plan_id)
+    alvo = origem_dir / "limpa.jpg"
+    temporario = Path(str(alvo) + "_exiftool_tmp")
+    temporario.write_bytes(b"de outro processo")  # NÃO é nosso
+    original_escrever = ExifToolWriter.escrever
+
+    def estoura(self, origem, campos, destino=None, timeout=None, folga_sigint=None):
+        if not str(origem).endswith("limpa.jpg"):
+            return original_escrever(self, origem, campos, destino)
+        raise subprocess.TimeoutExpired(cmd=["exiftool"], timeout=120)
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", estoura)
+    executor.executar(plan_id)
+
+    assert temporario.read_bytes() == b"de outro processo"
+    with factory() as session:
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.origem.endswith("limpa.jpg"))
+        )
+        assert "já existia antes — não removido" in item.erro
+
+
+@tem_exiftool
+def test_leitura_que_falha_antes_da_escrita_nao_grava_nada(ambiente, monkeypatch):
+    """`verificacao.dump` devolve `{}` em falha/timeout de leitura. Lido
+    como "tudo vazio", a reconferência ao vivo aprovaria escrever por cima
+    de campo preenchido. Não conferido = não gravado."""
+    from fotoorganizer.exif_write import verificacao
+
+    factory, executor, origem_dir, plan_id = ambiente
+    executor.dry_run(plan_id)
+    antes = hashes(origem_dir)
+    monkeypatch.setattr(verificacao, "dump", lambda caminho, binario="exiftool": {})
+
+    stats = executor.executar(plan_id)
+
+    assert stats["gravados"] == 0 and stats["erros"] == 2
+    assert hashes(origem_dir) == antes  # nenhum subprocesso de escrita rodou
+    with factory() as session:
+        item = session.scalar(
+            select(ExifWriteItem).where(ExifWriteItem.origem.endswith("limpa.jpg"))
+        )
+        assert "não consegui ler as tags" in item.erro
+        assert item.status_gps == CampoStatus.PRONTO  # nada mudou de status
+
+
+@tem_exiftool
+def test_timeout_no_sidecar_remove_o_xmp_parcial_e_nao_fala_do_original(ambiente, monkeypatch):
+    """Sidecar é criado direto no caminho final (sem temporário): morto no
+    meio, sobra um `.xmp` truncado que viraria "sidecar já existe" em todo
+    dry-run seguinte, para sempre. Ele é saída parcial desta escrita
+    (a guarda no topo de `_executar_item` garante que não existia antes) —
+    é removido. E a origem nunca foi tocada: o motivo não pode falar em
+    "original intacto/alterado"."""
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = make_jpeg(origem_dir / "para_sidecar.jpg", gps=None)
+    hash_antes = sha256_full(alvo)
+    sidecar_destino = Path(str(alvo) + ".xmp")
+
+    with factory() as session:
+        fonte_id = session.scalar(select(Source.id))
+        loc = session.scalar(select(Location))
+        media = _media_avulsa(session, fonte_id, alvo, loc.id)
+        item = _item_manual(
+            session, plan_id, media, formato_suportado=False,
+            sidecar_destino=str(sidecar_destino),
+        )
+        session.commit()
+        item_id = item.id
+
+    executor.dry_run(plan_id)
+    original_escrever = ExifToolWriter.escrever
+
+    def trava_no_sidecar(self, origem, campos, destino=None, timeout=None, folga_sigint=None):
+        if destino is None or destino.suffix.lower() != ".xmp":
+            return original_escrever(self, origem, campos, destino)
+        destino.write_text("<x:xmpmeta truncado")  # o que um kill deixa
+        raise subprocess.TimeoutExpired(cmd=["exiftool"], timeout=120)
+
+    monkeypatch.setattr(ExifToolWriter, "escrever", trava_no_sidecar)
+    executor.executar(plan_id)
+
+    assert not sidecar_destino.exists()
+    assert sha256_full(alvo) == hash_antes
+    with factory() as session:
+        item = session.get(ExifWriteItem, item_id)
+        assert "sidecar parcial" in item.erro and "removido" in item.erro
+        assert "original" not in item.erro
+        auditoria = session.scalar(
+            select(AuditLog).where(
+                AuditLog.resultado == "timeout",
+                AuditLog.detalhe["item_id"].as_integer() == item_id,
+            )
+        )
+        assert auditoria.detalhe["sidecar_parcial_removido"] == str(sidecar_destino)
+        assert "original" not in auditoria.detalhe

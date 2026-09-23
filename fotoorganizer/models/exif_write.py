@@ -31,6 +31,12 @@ class ExifWriteStatus(enum.StrEnum):
     CONCLUIDA = "concluida"
     CANCELADA = "cancelada"
     ERRO = "erro"
+    # O processo morreu no meio (app fechado, Mac desligado): só o fim feliz
+    # ou o cancelamento escrevem status, então EXECUTANDO ficaria para
+    # sempre. O boot do servidor carimba INTERROMPIDA (D-095), como o scan
+    # faz com INTERROMPIDO — e rerodar retoma, porque a execução é
+    # idempotente por item (campo já gravado é reconferido ao vivo).
+    INTERROMPIDA = "interrompida"
 
 
 class CampoStatus(enum.StrEnum):

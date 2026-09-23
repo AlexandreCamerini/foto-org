@@ -1769,6 +1769,19 @@ def create_app(
                         exc_info=True)
 
     @app.on_event("startup")
+    def _reconciliar_planos_exif() -> None:
+        """Mesma promessa para a escrita EXIF (D-095): plano EXECUTANDO com
+        o servidor nascendo é órfão — vira INTERROMPIDA, e "Gravar" retoma
+        de onde parou (a execução é idempotente por item)."""
+        from fotoorganizer.exif_write.reconciliacao import reconciliar_planos_orfaos
+
+        try:
+            reconciliar_planos_orfaos(session_factory)
+        except Exception:
+            log.warning("não consegui reconciliar planos de escrita EXIF órfãos",
+                        exc_info=True)
+
+    @app.on_event("startup")
     def _conferir_fontes() -> None:
         """Quem está ao alcance agora, uma vez ao abrir.
 

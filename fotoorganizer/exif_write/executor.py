@@ -53,6 +53,7 @@ genérico, sem nenhuma semântica de cópia de arquivo).
 from __future__ import annotations
 
 import logging
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, cast
@@ -387,6 +388,21 @@ class ExifWriteExecutor:
 
         try:
             antes_alvo = verificacao.dump(alvo) if alvo.exists() else {}
+            if alvo.exists() and not antes_alvo:
+                # `dump` devolve `{}` quando o exiftool falha ou estoura o
+                # timeout de leitura — e um arquivo real nunca vem vazio
+                # (sempre há `File:`/`System:`). Ler isso como "tudo vazio"
+                # faria a reconferência ao vivo aprovar a escrita por cima
+                # de campo preenchido (achado da revisão de D-095; o mesmo
+                # volume lento que estoura a escrita estoura a leitura
+                # antes). Não conferido = não gravado.
+                item.erro = (
+                    "não consegui ler as tags atuais do arquivo (exiftool "
+                    "falhou ou não respondeu) — nada gravado; rode de novo"
+                )
+                stats["erros"] += 1
+                self._audit_item(session, item, "escrita_exif", "nao_conferido")
+                return
             avisos_antes = verificacao.avisos(alvo) if alvo.exists() else set()
 
             # Reconferência AO VIVO (TOCTOU, T-06-22): só entra na lista de
@@ -428,12 +444,27 @@ class ExifWriteExecutor:
                 return
 
             item.hash_pre = sha256_full(origem)
+            # Um temporário do exiftool que JÁ existisse antes desta escrita
+            # não é nosso — se sobrar depois de um timeout, não é apagado.
+            temporario = Path(str(alvo) + "_exiftool_tmp")
+            temporario_existia = temporario.exists()
             # `resultado.stderr` só compõe motivo de falha — o veredito
             # NUNCA vem do processo em si (T-06-23): ele sai 0 mesmo tendo
             # aceitado GPS fora de faixa em silêncio.
-            resultado = ExifToolWriter().escrever(
-                origem, campos, destino=alvo if alvo != origem else None,
-            )
+            try:
+                resultado = ExifToolWriter().escrever(
+                    origem, campos, destino=alvo if alvo != origem else None,
+                )
+            except subprocess.TimeoutExpired as exc:
+                # O exiftool passou do teto e já foi encerrado (D-095). Não
+                # é OSError — sem este ramo a exceção atravessava o item,
+                # derrubava `executar()` inteiro e deixava o plano preso
+                # em EXECUTANDO, o mesmo órfão que o boot reconcilia.
+                self._registrar_timeout(
+                    session, item, campos, origem, alvo, sidecar,
+                    temporario_existia, exc, stats,
+                )
+                return
             log.debug(
                 "exiftool escreveu %s (stderr=%r)", alvo, resultado.stderr.strip()
             )
@@ -509,7 +540,13 @@ class ExifWriteExecutor:
                 stats["erros"] += 1
                 self._audit_item(
                     session, item, "escrita_exif", "falha_verificacao",
-                    extra={"tags_gravadas": sorted(diff.esperadas)},
+                    extra={
+                        "tags_gravadas": sorted(diff.esperadas),
+                        # O stderr é a única pista de causas como um
+                        # temporário que sobrou ("Temporary file already
+                        # exists") — só no log de debug ninguém via.
+                        "stderr": resultado.stderr.strip()[:300],
+                    },
                 )
                 return  # backup NUNCA é apagado numa falha de verificação
 
@@ -557,15 +594,105 @@ class ExifWriteExecutor:
                     item.backup_original = str(backup)
                 self._audit_item(
                     session, item, "escrita_exif", "falha_parcial",
-                    extra={"tags_gravadas": sorted(diff.esperadas)},
+                    extra={
+                        "tags_gravadas": sorted(diff.esperadas),
+                        "stderr": resultado.stderr.strip()[:300],
+                    },
                 )
-        except OSError as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             # I/O inesperado (ex.: origem some entre o `is_file()` acima e
             # `sha256_full`, ou o subprocesso não sobe) — item por item,
             # nunca derruba o plano inteiro (T-06-30), no molde do analog.
+            # `SubprocessError` cobre o que o subprocesso levantar fora do
+            # timeout (tratado acima): qualquer falha de um item fica no
+            # item.
             item.erro = str(exc)
             stats["erros"] += 1
             self._audit_item(session, item, "escrita_exif", "erro")
+
+    def _registrar_timeout(
+        self, session: Session, item: ExifWriteItem, campos: dict,
+        origem: Path, alvo: Path, sidecar: bool, temporario_existia: bool,
+        exc: subprocess.TimeoutExpired, stats: dict,
+    ) -> None:
+        """Escrita que não terminou: reprova os campos tentados, diz em que
+        estado o original ficou e o que o exiftool deixou no disco.
+
+        O exiftool escreve num temporário (`<alvo>_exiftool_tmp`) e só no
+        fim faz dois renames: alvo → `_original`, temporário → alvo. Morto
+        em cada ponto, o original está num de três estados, e a auditoria
+        precisa dizer qual (invariante 3 — registrar um "intacto" para um
+        arquivo que sumiu do caminho seria mentira; achado da revisão):
+        `intacto` (hash igual), `alterado` (já é a versão nova; o
+        `_original` é o único intacto), `ausente` (morto entre os dois
+        renames: só `_original` e temporário existem). Se nem o hash deu
+        para ler, `nao_conferido`.
+
+        O que é apagado aqui é SÓ saída parcial deste mesmo processo —
+        nunca o original nem o `_original` (invariante 8: quem restaura é
+        o dono): o temporário, se não existia antes desta escrita (o
+        exiftool recusa qualquer escrita futura enquanto ele existir —
+        "Temporary file already exists" — e o item passaria a falhar para
+        sempre com um motivo que não diz isso); e o sidecar `.xmp`
+        truncado, que comprovadamente não existia antes (a guarda no topo
+        de `_executar_item` já teria recusado) e que, deixado lá, viraria
+        "sidecar já existe" em todo dry-run seguinte."""
+        for campo in campos:
+            setattr(item, f"status_{campo}", CampoStatus.FALHA)
+            setattr(
+                item, f"motivo_{campo}",
+                f"{_ROTULOS_CAMPO[campo]}: exiftool não respondeu em "
+                f"{exc.timeout:.0f}s e foi encerrado",
+            )
+        partes = [f"exiftool não respondeu em {exc.timeout:.0f}s e foi encerrado"]
+        extra: dict = {"timeout_s": exc.timeout}
+
+        # Estado do ORIGINAL — só faz sentido na escrita direta; no sidecar
+        # a origem nunca é tocada.
+        if not sidecar:
+            if not origem.is_file():
+                estado = "ausente"
+            else:
+                try:
+                    item.hash_pos = sha256_full(origem)
+                except OSError:
+                    estado = "nao_conferido"
+                else:
+                    estado = "alterado" if item.hash_pos != item.hash_pre else "intacto"
+            partes.append({
+                "intacto": "original intacto",
+                "alterado": "original ALTERADO (o _original é o intacto)",
+                "ausente": "original AUSENTE do caminho — restaure a partir do _original",
+                "nao_conferido": "original não conferido (não consegui ler o arquivo)",
+            }[estado])
+            extra["original"] = estado
+
+        backup = ExifToolWriter.caminho_backup(alvo)
+        if backup.exists():
+            item.backup_original = str(backup)
+            partes.append(f"backup em {backup.name}")
+            extra["backup"] = str(backup)
+
+        temporario = Path(str(alvo) + "_exiftool_tmp")
+        if temporario.exists():
+            if temporario_existia:
+                partes.append(f"temporário {temporario.name} já existia antes — não removido")
+                extra["temporario"] = str(temporario)
+            else:
+                temporario.unlink()
+                partes.append(f"temporário parcial {temporario.name} removido")
+                extra["temporario_removido"] = str(temporario)
+
+        if sidecar and alvo.exists():
+            # Não existia antes (guarda no topo de `_executar_item`): é o
+            # `.xmp` parcial desta escrita.
+            alvo.unlink()
+            partes.append(f"sidecar parcial {alvo.name} removido")
+            extra["sidecar_parcial_removido"] = str(alvo)
+
+        item.erro = "; ".join(partes)
+        stats["erros"] += 1
+        self._audit_item(session, item, "escrita_exif", "timeout", extra=extra)
 
     def _audit_item(
         self, session: Session, item: ExifWriteItem, acao: str, resultado: str,
