@@ -283,6 +283,111 @@ def test_escreve_e_verifica_por_diff(ambiente):
         assert tag in dump_final
 
 
+# -- D-097: aviso de IPTCDigest de terceiros não é sinal de corrupção --------
+
+def test_avisos_inesperados_descarta_so_o_digest_do_iptc():
+    """`Photoshop:IPTCDigest` é checksum da Adobe, não deste módulo — o
+    aviso que ele gera ao ficar desatualizado nunca é sinal de que ESTE
+    módulo escreveu algo errado (D-097)."""
+    from fotoorganizer.exif_write.verificacao import avisos_inesperados
+
+    antes = {"Warning: [minor] Odd offset for ExifIFD tag 0x9011 OffsetTimeOriginal"}
+    depois = antes | {"Warning: IPTCDigest is not current. XMP may be out of sync"}
+    assert avisos_inesperados(antes, depois) == set()
+
+
+def test_avisos_inesperados_mantem_qualquer_outro_aviso_novo():
+    """A allowlist é de uma linha só (D-097) — qualquer OUTRO aviso novo
+    continua reprovando o item, sem exceção por engano."""
+    from fotoorganizer.exif_write.verificacao import avisos_inesperados
+
+    depois = {"Warning: [minor] Possibly corrupted TIFF trailer detected"}
+    assert avisos_inesperados(set(), depois) == depois
+
+
+def _simular_digest_iptc_de_terceiro(alvo: Path) -> None:
+    """Reproduz contra o exiftool real o estado de um arquivo que já
+    passou por Lightroom/Photoshop: um bloco IPTC pré-existente com
+    `Photoshop:IPTCDigest` (checksum de terceiros) já sincronizado com
+    esse bloco. Qualquer escrita IPTC depois disso desatualiza esse
+    checksum — é isso que produz o aviso "IPTCDigest is not current" de
+    forma determinística (verificado manualmente antes desta fatia,
+    D-097).
+
+    Achado da revisão de olhos frescos: sem a primeira escrita de IPTC
+    abaixo, `fixtures.make_jpeg()` não tem NENHUM bloco IPTC — o
+    `File:CurrentIPTCDigest` lido vem vazio, gravar `Photoshop:IPTCDigest`
+    com valor vazio é um no-op silencioso do exiftool (0 arquivos
+    atualizados), e o resto do teste passava mesmo sem reproduzir o
+    cenário real (confirmado com um mutante: revertendo a correção em
+    `executor.py`, os testes que usavam este helper continuavam verdes).
+    O `-IPTC:Keywords=` aqui é só para criar o bloco IPTC de que o
+    digest depende — nunca é o dado sob teste."""
+    subprocess.run(
+        ["exiftool", "-overwrite_original", "-IPTC:Keywords=selo-de-terceiro", str(alvo)],
+        check=True, capture_output=True,
+    )
+    digest_atual = subprocess.run(
+        ["exiftool", "-s3", "-File:CurrentIPTCDigest", str(alvo)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert digest_atual, "pré-condição do teste: bloco IPTC precisa existir antes do digest"
+    subprocess.run(
+        ["exiftool", "-overwrite_original", f"-Photoshop:IPTCDigest={digest_atual}", str(alvo)],
+        check=True, capture_output=True,
+    )
+
+
+@tem_exiftool
+def test_iptc_digest_de_terceiro_desatualizado_nao_reprova_escrita_correta(ambiente):
+    """Achado real no acervo de produção (D-097, plano 3, 2026-09-23):
+    329/1941 itens processados reprovavam com o único aviso "IPTCDigest
+    is not current. XMP may be out of sync", apesar do diff de tags
+    aprovar exatamente as tags de País/Cidade esperadas e nada mais —
+    `Photoshop:IPTCDigest` é metadado de outra ferramenta, fora do
+    escopo estreito de D-075."""
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = origem_dir / "limpa.jpg"
+    _simular_digest_iptc_de_terceiro(alvo)
+
+    executor.dry_run(plan_id)
+    stats = executor.executar(plan_id)
+
+    assert stats["erros"] == 0
+    assert stats["gravados"] >= 1
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem).where(
+            ExifWriteItem.origem == str(alvo)))
+        assert item.status_gps == CampoStatus.GRAVADO
+        assert item.status_cidade == CampoStatus.GRAVADO
+        assert item.status_pais == CampoStatus.GRAVADO
+        assert item.erro is None
+        assert item.backup_original is None  # limpo como qualquer sucesso
+
+
+@tem_exiftool
+def test_iptc_digest_de_terceiro_nao_mascara_tag_de_localizacao_alterada(
+    ambiente, monkeypatch,
+):
+    """Contraprova: a allowlist de D-097 é só sobre o AVISO — uma tag de
+    localização gravada com valor errado continua reprovando pelo diff de
+    tags (EXIF-03), mesmo com o digest de terceiro presente."""
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = origem_dir / "limpa.jpg"
+    _simular_digest_iptc_de_terceiro(alvo)
+    _monkeypatch_sem_gps(monkeypatch)  # GPS pedido, nunca escrito -> falha parcial
+
+    executor.dry_run(plan_id)
+    stats = executor.executar(plan_id)
+
+    assert stats["falhas_parciais"] >= 1
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem).where(
+            ExifWriteItem.origem == str(alvo)))
+        assert item.status_gps == CampoStatus.FALHA
+        assert item.status_pais == CampoStatus.GRAVADO
+
+
 # -- EXIF-04: nunca escreve fora de localização ------------------------------
 
 @tem_exiftool

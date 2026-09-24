@@ -123,6 +123,29 @@ TAGS_VOLATEIS: frozenset[str] = frozenset({
 # não escrito de forma independente pelo exiftool.
 PREFIXOS_VOLATEIS: tuple[str, ...] = ("System:", "Composite:")
 
+# Andaime inevitável para AVISOS (mesmo espírito de TAGS_ESTRUTURAIS_ESPERADAS,
+# uma linha por vez, cada uma justificada — nunca um prefixo inteiro isento).
+# Achado real (D-097, plano 3 do acervo de produção, 2026-09-23): 329/1941
+# itens processados reprovavam com este único aviso, apesar do diff de tags
+# aprovar tudo (`esperadas` continha exatamente IPTC:City/Country e nada
+# mais). Causa: `Photoshop:IPTCDigest` é um checksum de terceiros (Adobe —
+# Lightroom/Photoshop) que registra o digest do bloco IPTC no momento em
+# que a ferramenta Adobe sincronizou por último; gravar QUALQUER tag IPTC
+# depois (aqui, City/Country-PrimaryLocationName) muda o
+# `File:CurrentIPTCDigest` real sem tocar no `Photoshop:IPTCDigest`
+# congelado — exiftool não recalcula esse checksum ao escrever, então
+# `-validate` sempre avisa "desatualizado" depois de QUALQUER escrita IPTC
+# num arquivo que já tinha esse checksum (reproduzido: escrever
+# `Photoshop:IPTCDigest` igual ao digest atual e depois qualquer tag IPTC
+# reproduz o aviso de forma determinística). Este módulo nunca gerencia
+# esse checksum — fora do escopo estreito de D-075 (GPS/cidade/país) — e o
+# valor gravado por este módulo está correto e verificado pelo diff de
+# tags; o aviso é sobre o metadado auxiliar de outra ferramenta, não sobre
+# o dado que escrevemos.
+AVISOS_ESTRUTURAIS_ESPERADOS: frozenset[str] = frozenset({
+    "Warning: IPTCDigest is not current. XMP may be out of sync",
+})
+
 # -- deslocamento de offset como andaime condicional (D-077, generaliza o
 # achado byte a byte de D-076) ------------------------------------------
 
@@ -415,6 +438,13 @@ def avisos(caminho: Path, binario: str = "exiftool") -> set[str]:
         if chave in ("Warning", "Error"):
             coletados.add(f"{chave}: {valor.strip()}")
     return coletados
+
+
+def avisos_inesperados(antes: set[str], depois: set[str]) -> set[str]:
+    """Delta de avisos (D-04) descontando `AVISOS_ESTRUTURAIS_ESPERADOS` —
+    mesmo espírito de `TAGS_ESTRUTURAIS_ESPERADAS`, para avisos em vez de
+    tags. Quem chama nunca deve fazer `depois - antes` à mão (D-097)."""
+    return (depois - antes) - AVISOS_ESTRUTURAIS_ESPERADOS
 
 
 @dataclass(frozen=True, slots=True)

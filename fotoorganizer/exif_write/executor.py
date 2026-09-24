@@ -485,7 +485,12 @@ class ExifWriteExecutor:
                 diff = verificacao.reclassificar_deslocamentos_de_offset(
                     diff, antes_alvo, depois, backup, alvo
                 )
-            novos_avisos = avisos_depois - avisos_antes
+            # D-097: `IPTCDigest is not current` é andaime inevitável de
+            # gravar qualquer tag IPTC num arquivo que já tinha
+            # `Photoshop:IPTCDigest` (checksum de terceiros, Adobe) —
+            # `avisos_inesperados` descarta esse aviso específico, nunca o
+            # delta cru.
+            novos_avisos = verificacao.avisos_inesperados(avisos_antes, avisos_depois)
 
             # Veredito por campo (T-06-23): campo_gravado exige TODAS as
             # tags do campo em diff.esperadas — meio campo gravado é falha.

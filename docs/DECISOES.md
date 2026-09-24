@@ -4679,3 +4679,85 @@ inteiro passa a ser contado numa passada só
   isolar se é regressão real ou skew de versão antes de mexer no código.
 - Status: decidido, implementado, testado localmente, aguardando o
   primeiro push para confirmação no GitHub Actions.
+
+## D-097 — Aviso de digest IPTC de terceiro não reprova mais escrita correta
+
+- Fase: achado em produção durante a execução real do plano 3 (9.843
+  arquivos, GPS/cidade/país) — não veio do backlog planejado, veio de
+  investigar por que itens processados apareciam em FALHA.
+- Contexto: o servidor foi interrompido no meio da execução (ação do
+  dono) com 1941/9843 itens processados. D-095 reconciliou o plano
+  (EXECUTANDO → INTERROMPIDA) corretamente no boot seguinte; ao apurar o
+  progresso antes de retomar, 329 dos 1941 processados estavam em FALHA
+  com um único motivo: `"exiftool passou a avisar: ['Warning: IPTCDigest
+  is not current. XMP may be out of sync']"`.
+- Achado: investigado item a item contra o acervo real (4 amostras:
+  `/Volumes/Externo/2026/Serena 15 Anos/ACM_7122.JPG` e mais 3), com
+  backup `_original` ainda no disco em todos. `verificacao.diferenca()`
+  no par real (depois de `reclassificar_deslocamentos_de_offset`, D-077,
+  que corretamente rebaixa `MPImage2:MPImageStart` — não era o problema)
+  mostrava `esperadas` com exatamente as tags de Cidade/País pedidas e
+  `inesperadas` vazio: a escrita em si estava CORRETA. O único motivo do
+  FALHA era `novos_avisos`. Causa raiz, confirmada contra o código-fonte
+  do exiftool (`Photoshop.pm`) e reproduzida numa fixture sintética:
+  `Photoshop:IPTCDigest` é um checksum de TERCEIRO (Adobe — Lightroom/
+  Photoshop) que registra o digest do bloco IPTC no momento em que essa
+  ferramenta sincronizou por último; gravar qualquer tag IPTC depois
+  (aqui, `-IPTC:City=`/`-IPTC:Country-PrimaryLocationName=`) muda o
+  `File:CurrentIPTCDigest` real sem o exiftool recalcular o checksum
+  congelado — `-validate` sempre avisa "desatualizado" depois de
+  QUALQUER escrita IPTC num arquivo que já tinha esse checksum de
+  terceiro (comum em fotos que passaram por Lightroom/Photoshop antes).
+  Este módulo nunca gerencia esse checksum — fora do escopo estreito de
+  D-075 (GPS/cidade/país) — e o D-04 (delta de avisos, "nenhum aviso
+  novo") não previa essa classe de aviso benigno, só a de corrupção real.
+- Correção: `verificacao.py` ganha `AVISOS_ESTRUTURAIS_ESPERADOS`
+  (frozenset de uma string, mesmo espírito de `TAGS_ESTRUTURAIS_ESPERADAS`
+  — "nunca um prefixo inteiro isento", cada entrada justificada) e
+  `avisos_inesperados(antes, depois)` = delta menos essa allowlist;
+  `executor.py` troca o `avisos_depois - avisos_antes` cru pela função
+  nova. Avaliado e descartado: parametrizar por campo (só ignorar quando
+  cidade/pais foram escritos) — verificado empiricamente que uma escrita
+  só-GPS nunca toca IPTC, então o aviso mecanicamente não tem como
+  aparecer fora desse escopo; a allowlist incondicional já é segura sem
+  a complexidade extra.
+- Verificado: reproduzido contra o exiftool real (gravar
+  `Photoshop:IPTCDigest` igual ao digest atual e depois qualquer tag
+  IPTC reproduz o aviso de forma determinística); 4 testes novos em
+  `test_exif_write_executor.py` (2 puros sobre `avisos_inesperados`, 1
+  ponta a ponta provando que a escrita correta deixa de reprovar, 1
+  contraprova — GPS pedido e nunca escrito continua reprovando pelo
+  diff de tags, a allowlist não mascara erro real). Confirmado com
+  mutante: revertendo a correção manualmente, os 2 testes de integração
+  falham (a rede de regressão pega a regressão se ela voltar). Suíte
+  completa: 1162 Python, verde.
+- Revisão com olhos frescos (agente-arquivos, adversarial, antes de
+  autorizar retomar a gravação real), incorporada: (1) achado real — os
+  2 testes de integração inicialmente escritos passavam COM ou SEM a
+  correção (falso-positivo): o helper de simulação lia
+  `File:CurrentIPTCDigest` de um arquivo que nunca teve bloco IPTC
+  (`tests/fixtures.py::make_jpeg` só escreve EXIF), a leitura vinha
+  vazia, e gravar `Photoshop:IPTCDigest` vazio era um no-op silencioso
+  do exiftool — o cenário real nunca era exercitado. Corrigido: o helper
+  agora grava uma tag IPTC inócua primeiro, criando o bloco de que o
+  digest depende, e o teste de mutante confirmou a correção do teste.
+  (2) achado operacional, não de código: os 329 itens já marcados FALHA
+  não entram em `pendentes` de `executar()` (filtro é por
+  `CampoStatus.PRONTO`) — retomar precisa rodar `dry_run(3)` de novo
+  antes de `executar(3)`, para a reconferência ao vivo (EXIF-02)
+  reclassificar esses 329 de FALHA para PULADO (campo já preenchido de
+  verdade no arquivo, confirmado nas 4 amostras). (3) pesquisado no
+  código-fonte do exiftool se o aviso poderia mascarar corrupção real:
+  não — ele é comparação pura de dois hashes de terceiro, e uma
+  corrupção que mudasse o CONTEÚDO do bloco IPTC continuaria pega pelo
+  diff de tags (`inesperadas`), camada complementar, não substituída
+  por esta allowlist.
+- Fora desta fatia, registrado sem correção: `formatos.py` ainda cita
+  "IPTCDigest desatualizado" como motivo de `.tif` reprovar (D-076,
+  comentário desatualizado à luz desta decisão) — inofensivo porque
+  `.tif` vai para sidecar independentemente desse aviso, mas vale
+  atualizar o comentário num commit futuro.
+- Status: decidido, implementado, testado (incluindo contra 4 itens
+  reais do acervo e com teste de mutante), revisado com olhos frescos.
+  Plano 3 ainda não retomado — próximo passo é `dry_run(3)` seguido de
+  `executar(3)`.
