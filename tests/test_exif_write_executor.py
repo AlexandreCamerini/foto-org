@@ -221,6 +221,57 @@ def test_dry_run_promove_campo_vazio_e_pula_preenchido(ambiente):
 
 
 @tem_exiftool
+def test_dry_run_limpa_erro_velho_quando_reconferencia_nao_acha_mais_falha(ambiente):
+    """Achado real (D-097, retomada do plano 3): um item que reprovou numa
+    execução anterior por um motivo hoje sabidamente falso (o aviso de
+    IPTCDigest de terceiro) ficava com `item.erro` mentindo para sempre —
+    `dry_run()` recomputava os 3 campos certos, mas nunca olhava pro texto
+    de erro no topo do item. Sem FALHA em nenhum campo depois da
+    reconferência, o erro velho precisa sumir."""
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = origem_dir / "limpa.jpg"
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem).where(
+            ExifWriteItem.plan_id == plan_id, ExifWriteItem.origem == str(alvo)))
+        item.erro = "exiftool passou a avisar: [...]"  # simula falha anterior
+        item.status_pais = CampoStatus.FALHA
+        session.commit()
+
+    executor.dry_run(plan_id)
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem).where(
+            ExifWriteItem.plan_id == plan_id, ExifWriteItem.origem == str(alvo)))
+        assert item.status_pais == CampoStatus.PRONTO  # reconferido ao vivo, sem valor no arquivo
+        assert item.erro is None  # a reconferência não achou FALHA nenhuma
+
+
+@tem_exiftool
+def test_dry_run_mantem_erro_quando_reconferencia_ainda_acha_falha(ambiente):
+    """Contraprova: `dry_run()` só limpa o erro velho quando a
+    reconferência genuinamente não encontra mais FALHA em nenhum campo —
+    um valor que continua invalidado tem que manter o item com erro."""
+    factory, executor, origem_dir, plan_id = ambiente
+    alvo = origem_dir / "limpa.jpg"
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem).where(
+            ExifWriteItem.plan_id == plan_id, ExifWriteItem.origem == str(alvo)))
+        item.erro = "GPS fora de faixa"
+        item.valor_gps_lat = 999.0  # `validar_campos` reprova isto de novo
+        session.commit()
+
+    executor.dry_run(plan_id)
+
+    with factory() as session:
+        item = session.scalar(select(ExifWriteItem).where(
+            ExifWriteItem.plan_id == plan_id, ExifWriteItem.origem == str(alvo)))
+        assert item.status_gps == CampoStatus.FALHA
+        assert item.erro == "GPS fora de faixa"  # continua reprovando, erro não é apagado
+
+
+@tem_exiftool
 def test_dry_run_pula_gps_que_mora_so_em_xmp_no_caminho_direto(ambiente):
     """Ponta a ponta com exiftool real, A2 da auditoria: uma foto cujo
     GPS foi gravado só em XMP-exif (por um editor externo, antes de

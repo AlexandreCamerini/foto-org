@@ -4761,3 +4761,25 @@ inteiro passa a ser contado numa passada só
   reais do acervo e com teste de mutante), revisado com olhos frescos.
   Plano 3 ainda não retomado — próximo passo é `dry_run(3)` seguido de
   `executar(3)`.
+- **Addendum** (mesma sessão, ao rodar o `dry_run(3)` de retomada de
+  verdade): confirmado no acervo real que a reconferência ao vivo
+  reclassificou 314/329 itens de FALHA para PULADO (o valor já estava
+  correto no arquivo, exatamente como previsto) — mas `item.erro`
+  (mensagem de topo, distinta do motivo por campo) nunca era limpo por
+  `dry_run()`, só por `executar()`, e esses 314 itens não entram mais em
+  `pendentes` (nada PRONTO neles) — nunca reentrariam em `_executar_item`
+  para ganhar essa limpeza. Sem correção, o catálogo diria "329 com erro"
+  para sempre, mesmo com os campos já corrigidos. Não é risco de
+  segurança (nenhum arquivo é tocado por essa mensagem), só honestidade
+  do relatório. Corrigido: `dry_run()` limpa `item.erro` quando a
+  reconferência ao vivo não encontra mais FALHA em nenhum dos 3 campos;
+  mantém o erro quando a reconferência confirma que o valor continua
+  inválido (2 testes novos, incluindo a contraprova). Fora desta fatia,
+  registrado sem correção: os `_original` que o exiftool deixou ao lado
+  desses 314 arquivos (das falsas reprovações) não têm caminho de
+  limpeza automática — eles nunca reentram no branch que apaga o backup
+  (`todos_gravados` em `_executar_item`), porque não há mais nada PRONTO
+  a escrever. Seguro (invariante 8: quem decide apagar backup é o dono),
+  só deixa ~314 arquivos `_original` acumulados na árvore que o scanner
+  trata como somente-leitura — decisão de limpeza automática fica para
+  outra fatia.

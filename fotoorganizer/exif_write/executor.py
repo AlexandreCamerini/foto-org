@@ -235,6 +235,21 @@ class ExifWriteExecutor:
                     setattr(item, f"status_{campo}", status)
                     setattr(item, f"motivo_{campo}", motivo)
 
+                # `item.erro` (mensagem de topo, distinta do motivo por
+                # campo) só é escrito por `executar()`/`_executar_item` —
+                # `dry_run()` nunca o tocava, então um item que reprovou
+                # numa execução anterior por um motivo hoje sabidamente
+                # falso (D-097: aviso de terceiro reclassificado) ficava
+                # com essa mensagem velha para sempre — a reconferência ao
+                # vivo já provou os campos, mas o texto de erro no topo do
+                # item continuava mentindo. Sem FALHA em nenhum campo
+                # depois desta reconferência, o item não tem mais erro
+                # nenhum a relatar.
+                if item.erro is not None and CampoStatus.FALHA not in (
+                    item.status_gps, item.status_cidade, item.status_pais,
+                ):
+                    item.erro = None
+
                 if item.incluido and campos_prontos_item:
                     prontos += 1
                     campos_a_gravar += campos_prontos_item
